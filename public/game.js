@@ -289,7 +289,7 @@ scene.add(boardGroup, buildGroup, robberGroup, markerGroup);
 let _introDone = false;
 const tileBobPhases = new Map(); // hexId → float phase offset
 const waterRings    = [];        // { mesh, t, duration }
-const tileIntro = { active: false, t: 0, duration: 7.0, hexOffsets: new Map(), hexes: [] };
+const tileIntro = { active: false, t: 0, duration: 4.0, hexOffsets: new Map(), hexes: [], hexCollOff: new Map(), shakeTriggered: false };
 
 // Drop animations: pieces falling from sky onto the board
 const dropAnims = []; // { mesh, targetY, t, onLand }
@@ -1749,20 +1749,21 @@ function renderBoard(state) {
 function startTileIntro(hexes) {
   tileIntro.active = true;
   tileIntro.t = 0;
+  tileIntro.duration = 4.0;
   tileIntro.hexes = hexes;
   tileIntro.hexOffsets.clear();
+  tileIntro.hexCollOff = new Map(); // additive XZ collision displacements
+  tileIntro.shakeTriggered = false;
 
-  // Each hex scatters outward from its final position with a bit of angle randomness
+  // Each hex starts exactly 1 tile width away in a random direction
   hexes.forEach(hex => {
-    const angle = Math.atan2(hex.z, hex.x) + (Math.random() - 0.5) * 1.8;
-    const radius = 20 + Math.random() * 9;
-    tileIntro.hexOffsets.set(hex.id, {
-      x0: Math.cos(angle) * radius - hex.x,
-      z0: Math.sin(angle) * radius - hex.z,
-    });
+    const angle = Math.random() * Math.PI * 2;
+    const scatter = HEX_R * 2.0 + Math.random() * HEX_R * 0.5;
+    tileIntro.hexOffsets.set(hex.id, { x0: Math.cos(angle) * scatter, z0: Math.sin(angle) * scatter });
+    tileIntro.hexCollOff.set(hex.id, { x: 0, z: 0 });
   });
 
-  // Immediately scatter all hex/token children to their start positions (below water)
+  // Move all hex/token children to scatter start positions
   boardGroup.children.forEach(child => {
     const hid = child.userData.hexId ?? child.userData.tokenHexId;
     if (hid === undefined) return;
@@ -1770,7 +1771,7 @@ function startTileIntro(hexes) {
     if (!off) return;
     child.position.x = child.userData.baseX + off.x0;
     child.position.z = child.userData.baseZ + off.z0;
-    child.position.y = child.userData.baseY - 1.8; // start below waterline
+    child.position.y = child.userData.baseY - 1.2;
   });
 
   _waterIntroSound.currentTime = 0;
@@ -4827,44 +4828,72 @@ function animate() {
     const rawP = Math.min(1, tileIntro.t / tileIntro.duration);
     // Ease-in-out cubic
     const eP = rawP < 0.5 ? 4*rawP*rawP*rawP : 1 - Math.pow(-2*rawP+2,3)/2;
-    // Overshoot spring in final 18%: tiles nudge past target then settle
+    // Overshoot spring in final 22%: tiles nudge past target then settle
     let finalP = eP;
-    if (rawP > 0.82 && rawP < 1) {
-      const sp = (rawP - 0.82) / 0.18;
-      finalP = eP + Math.sin(sp * Math.PI * 2.8) * 0.06 * (1 - sp);
+    if (rawP > 0.78 && rawP < 1) {
+      const sp = (rawP - 0.78) / 0.22;
+      finalP = eP + Math.sin(sp * Math.PI * 2.5) * 0.12 * (1 - sp);
     }
-    // Y rise: tiles emerge from below water over the first 30% of the anim
-    const yRise = rawP < 0.30 ? (rawP / 0.30) - 1 : 0;
+    // Y rise: tiles emerge from below water over the first 25% of the anim
+    const yRise = rawP < 0.25 ? (rawP / 0.25) - 1 : 0;
 
+    // -- COLLISION RESPONSE: build current XZ for each hex --
+    const hexPositions = new Map();
+    tileIntro.hexes.forEach(hex => {
+      const off = tileIntro.hexOffsets.get(hex.id);
+      const coff = tileIntro.hexCollOff.get(hex.id) ?? { x: 0, z: 0 };
+      if (!off) return;
+      hexPositions.set(hex.id, {
+        x: hex.x + off.x0 * (1 - finalP) + coff.x,
+        z: hex.z + off.z0 * (1 - finalP) + coff.z,
+      });
+    });
+
+    // Check all pairs for proximity, apply push impulse
+    const TOUCH_DIST = HEX_R * 1.92;
+    const hexIds = tileIntro.hexes.map(h => h.id);
+    for (let i = 0; i < hexIds.length; i++) {
+      for (let j = i + 1; j < hexIds.length; j++) {
+        const posA = hexPositions.get(hexIds[i]);
+        const posB = hexPositions.get(hexIds[j]);
+        if (!posA || !posB) continue;
+        const dx = posB.x - posA.x;
+        const dz = posB.z - posA.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < TOUCH_DIST * TOUCH_DIST && d2 > 0.001) {
+          const d = Math.sqrt(d2);
+          const nx = dx / d, nz = dz / d;
+          const impulse = (TOUCH_DIST - d) * 0.025;
+          const coffA = tileIntro.hexCollOff.get(hexIds[i]);
+          const coffB = tileIntro.hexCollOff.get(hexIds[j]);
+          if (coffA) { coffA.x -= nx * impulse; coffA.z -= nz * impulse; }
+          if (coffB) { coffB.x += nx * impulse; coffB.z += nz * impulse; }
+          // Water splash at collision midpoint (throttled)
+          if (Math.random() < delta * 4) {
+            spawnWaterRing((posA.x + posB.x) * 0.5, (posA.z + posB.z) * 0.5);
+          }
+        }
+      }
+    }
+
+    // Decay collision offsets toward zero
+    tileIntro.hexCollOff.forEach(coff => { coff.x *= 0.78; coff.z *= 0.78; });
+
+    // Apply final positions to all board children
     boardGroup.children.forEach(child => {
       const hid = child.userData.hexId ?? child.userData.tokenHexId;
       if (hid === undefined || child.userData.baseX === undefined) return;
       const off = tileIntro.hexOffsets.get(hid);
       if (!off) return;
-      child.position.x = child.userData.baseX + off.x0 * (1 - finalP);
-      child.position.z = child.userData.baseZ + off.z0 * (1 - finalP);
-      child.position.y = child.userData.baseY + yRise * 1.8;
+      const coff = tileIntro.hexCollOff.get(hid) ?? { x: 0, z: 0 };
+      child.position.x = child.userData.baseX + off.x0 * (1 - finalP) + coff.x;
+      child.position.z = child.userData.baseZ + off.z0 * (1 - finalP) + coff.z;
+      child.position.y = child.userData.baseY + yRise * 1.2;
     });
 
-    // Spawn water splash rings as tiles move in
-    if (rawP < 0.88 && Math.random() < delta * 10) {
-      const keys = [...tileIntro.hexOffsets.keys()];
-      const hid = keys[Math.floor(Math.random() * keys.length)];
-      // Find any child for that hex
-      const child = boardGroup.children.find(c => (c.userData.hexId ?? c.userData.tokenHexId) === hid);
-      if (child) spawnWaterRing(child.position.x, child.position.z);
-    }
-
-    if (tileIntro.t >= tileIntro.duration) {
-      tileIntro.active = false;
-      // Snap all tiles to exact resting positions
-      boardGroup.children.forEach(child => {
-        if (child.userData.baseX !== undefined) {
-          child.position.set(child.userData.baseX, child.userData.baseY, child.userData.baseZ);
-        }
-      });
-      // Wiggle each hex tile to simulate settling collision
-      const hexIds = tileIntro.hexes.map(h => h.id);
+    // Trigger shake at the START of overshoot (when tiles first arrive at target)
+    if (!tileIntro.shakeTriggered && rawP >= 0.78) {
+      tileIntro.shakeTriggered = true;
       hexIds.forEach(hid => {
         const meshes = boardGroup.children.filter(c => (c.userData.hexId ?? c.userData.tokenHexId) === hid);
         meshes.forEach(m => {
@@ -4874,7 +4903,22 @@ function animate() {
           m.userData._shakeNX = (Math.random() - 0.5);
           m.userData._shakeNZ = (Math.random() - 0.5);
         });
-        if (meshes.length) hexShakes.push({ meshes, t: 0, duration: 0.55, amp: 0.04, rotAmp: 0.10 });
+        if (meshes.length) hexShakes.push({ meshes, t: 0, duration: 0.65, amp: 0.06, rotAmp: 0.14 });
+      });
+    }
+
+    // Random ambient splashes while tiles are in motion
+    if (rawP < 0.80 && Math.random() < delta * 8) {
+      const pos = hexPositions.get(hexIds[Math.floor(Math.random() * hexIds.length)]);
+      if (pos) spawnWaterRing(pos.x, pos.z);
+    }
+
+    if (tileIntro.t >= tileIntro.duration) {
+      tileIntro.active = false;
+      boardGroup.children.forEach(child => {
+        if (child.userData.baseX !== undefined) {
+          child.position.set(child.userData.baseX, child.userData.baseY, child.userData.baseZ);
+        }
       });
     }
   }
