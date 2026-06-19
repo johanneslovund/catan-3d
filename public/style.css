@@ -1514,9 +1514,12 @@ img.piece-icon {
     z-index: 30 !important;
   }
 
-  /* ── 2D/3D toggle: shift down below mobileTopBar ── */
+  /* ── 2D/3D toggle: top-right corner of canvas, left of sidebar ── */
   .btn-2d-toggle {
-    top: 48px;
+    top: 134px;
+    left: auto;
+    right: 48px;
+    transform: none;
     font-size: .75rem;
     padding: 5px 13px;
   }
@@ -1642,8 +1645,8 @@ img.piece-icon {
   .res-bar-chip .rbc-icon { font-size: 1rem; }
   #myResourceBar { gap: 2px; padding: 4px 6px; }
 
-  /* 2D/3D toggle: a bit smaller */
-  .btn-2d-toggle { font-size: .7rem; padding: 4px 10px; top: 46px; }
+  /* 2D/3D toggle: a bit smaller, keep position from 768px rule */
+  .btn-2d-toggle { font-size: .7rem; padding: 4px 10px; }
 
   /* Exit button: smallest */
   #btnExitGame { font-size: .65rem !important; padding: 4px 8px !important; }
