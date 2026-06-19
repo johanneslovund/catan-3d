@@ -553,7 +553,10 @@ function botShouldAcceptTrade(game, bot, trade) {
 function resolveBotTradeIfComplete(game, roomId, trade) {
   const excluded = trade.excludedIds || [];
   const nonProposers = game.players.filter(p => p.id !== trade.fromId && !excluded.includes(p.id));
-  if (!nonProposers.every(p => trade.responses[p.id])) return; // still waiting on someone
+  // For bot-proposed trades: resolve immediately if anyone accepted, or if all rejected
+  const anyAccepted = nonProposers.some(p => trade.responses[p.id]?.status === 'accept');
+  const allReplied = nonProposers.every(p => trade.responses[p.id]);
+  if (!anyAccepted && !allReplied) return; // still waiting
   const proposer = game.players.find(p => p.id === trade.fromId);
   const acceptor = nonProposers.find(p => trade.responses[p.id]?.status === 'accept');
   if (acceptor && proposer) {
@@ -1528,6 +1531,10 @@ io.on('connection', socket => {
     if (!accept) {
       trade.responses[socket.id] = { name: responder.name, status: 'reject' };
       broadcastState(info.roomId);
+      if (isBotId(trade.fromId)) {
+        resolveBotTradeIfComplete(game, info.roomId, trade);
+        return;
+      }
       const excluded = trade.excludedIds || [];
       const nonProposers = game.players.filter(p => p.id !== trade.fromId && !excluded.includes(p.id));
       const allRejected = nonProposers.every(p => trade.responses[p.id]?.status === 'reject');
