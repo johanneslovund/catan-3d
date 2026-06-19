@@ -29,6 +29,7 @@ let passiveVertexMarkers = false; // vertex markers shown passively when settlem
 const WATER_PARAMS = {
   waveSpeed: 1.30, waveAmp: 1.30, waveScale: 3.00, foamStr: 0.75, opacity: 0.80,
 };
+const BOB_PARAMS = { enabled: true, amp: 0.04, speed: 0.70 };
 const LIGHT_PARAMS = {
   timeOfDay: 0.76, sunIntensity: 2.60, ambIntensity: 0.80,
   fillIntensity: 0.50, exposure: 1.00, fogDensity: 0.018, bloomStr: 0.30, bloomRadius: 0.0,
@@ -284,6 +285,12 @@ robberGroup.renderOrder = 1;  // always render robber after transparent ocean
 const markerGroup = new THREE.Group();
 scene.add(boardGroup, buildGroup, robberGroup, markerGroup);
 
+// Tile intro fly-in + independent bobbing
+let _introDone = false;
+const tileBobPhases = new Map(); // hexId → float phase offset
+const waterRings    = [];        // { mesh, t, duration }
+const tileIntro = { active: false, t: 0, duration: 7.0, hexOffsets: new Map(), hexes: [] };
+
 // Drop animations: pieces falling from sky onto the board
 const dropAnims = []; // { mesh, targetY, t, onLand }
 const sheepList  = []; // { mesh, cx, cz, tx, tz, angle, speed, bobT, bobSpeed }
@@ -504,6 +511,7 @@ function showDiceResult(d1, d2) {
   overlay._hideTimer = setTimeout(() => { overlay.style.display = 'none'; }, 3500);
 }
 
+const _waterIntroSound = new Audio('sound effects/water.mp3');
 const _diceSound       = new Audio('sound effects/Dice.aac');
 const _vikingHorn      = new Audio('sound effects/Viking Horn.aac');
 const _laughingSound   = new Audio('sound effects/laughing.aac');
@@ -1203,8 +1211,37 @@ function renderBoard(state) {
   // Island: cone-top cylinder so it looks like a natural sand rise
   const islandGeoTop = new THREE.CylinderGeometry(bankIslR * 0.5, bankIslR, bankIslH, 32, 1);
   const islandGeoBot = new THREE.CylinderGeometry(bankIslR, bankIslR * 1.6, bankIslH * 0.6, 32, 1);
-  const islandMatTop = new THREE.MeshStandardMaterial({
-    map: sandTex, color: new THREE.Color(0xd4b87a), roughness: 0.97, metalness: 0.0,
+  const islandMatTop = new THREE.ShaderMaterial({
+    uniforms: {
+      uMap:   { value: sandTex },
+      uColor: { value: new THREE.Color(0xd4b87a) },
+      uCx:    { value: bankIslX },
+      uCz:    { value: bankIslZ },
+      uR0:    { value: bankIslR * 0.55 },
+      uR1:    { value: bankIslR * 1.05 },
+    },
+    vertexShader: `
+      varying vec3 vWPos;
+      void main() {
+        vWPos = (modelMatrix * vec4(position,1.0)).xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+      }`,
+    fragmentShader: `
+      uniform sampler2D uMap;
+      uniform vec3 uColor;
+      uniform float uCx, uCz, uR0, uR1;
+      varying vec3 vWPos;
+      void main() {
+        vec4 tex = texture2D(uMap, vWPos.xz * 0.18);
+        vec3 col = tex.rgb * uColor;
+        float d = length(vec2(vWPos.x - uCx, vWPos.z - uCz));
+        float a = 1.0 - smoothstep(uR0, uR1, d);
+        if (a < 0.01) discard;
+        gl_FragColor = vec4(col, a);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
   });
   const islandMatBot = new THREE.ShaderMaterial({
     uniforms: {
@@ -1327,6 +1364,7 @@ function renderBoard(state) {
       top.rotation.x = -Math.PI/2;
       top.position.set(hex.x, HEX_H/2 + 0.001 + cylYOff, hex.z);
       top.receiveShadow = true;
+      top.userData = { type:'hex', hexId: hex.id };
       boardGroup.add(top);
 
     }
@@ -1419,6 +1457,7 @@ function renderBoard(state) {
       const discGeo = new THREE.CylinderGeometry(HEX_R*0.27, HEX_R*0.265, 0.09, 28);
       const discMat = new THREE.MeshStandardMaterial({
         color: 0xd4aa30,
+        roughnessMap: tokenScratchTex(),
         roughness: SCENE_PARAMS.tokenRoughness ?? 0.18,
         metalness: SCENE_PARAMS.tokenMetalness ?? 0.92,
         envMapIntensity: 2.5,
@@ -1687,6 +1726,68 @@ function renderBoard(state) {
       };
     };
   }
+
+  // Tag all hex/token children with their resting base position for bobbing + intro
+  tileBobPhases.clear();
+  boardGroup.children.forEach(child => {
+    const hid = child.userData.hexId ?? child.userData.tokenHexId;
+    if (hid === undefined) return;
+    child.userData.baseX = child.position.x;
+    child.userData.baseY = child.position.y;
+    child.userData.baseZ = child.position.z;
+    if (!tileBobPhases.has(hid)) tileBobPhases.set(hid, Math.random() * Math.PI * 2);
+  });
+
+  // First-time intro animation
+  if (!_introDone) {
+    _introDone = true;
+    startTileIntro(state.board.hexes);
+  }
+}
+
+// ─── Tile intro fly-in animation ──────────────────────────────────────────────
+function startTileIntro(hexes) {
+  tileIntro.active = true;
+  tileIntro.t = 0;
+  tileIntro.hexes = hexes;
+  tileIntro.hexOffsets.clear();
+
+  // Each hex scatters outward from its final position with a bit of angle randomness
+  hexes.forEach(hex => {
+    const angle = Math.atan2(hex.z, hex.x) + (Math.random() - 0.5) * 1.8;
+    const radius = 20 + Math.random() * 9;
+    tileIntro.hexOffsets.set(hex.id, {
+      x0: Math.cos(angle) * radius - hex.x,
+      z0: Math.sin(angle) * radius - hex.z,
+    });
+  });
+
+  // Immediately scatter all hex/token children to their start positions (below water)
+  boardGroup.children.forEach(child => {
+    const hid = child.userData.hexId ?? child.userData.tokenHexId;
+    if (hid === undefined) return;
+    const off = tileIntro.hexOffsets.get(hid);
+    if (!off) return;
+    child.position.x = child.userData.baseX + off.x0;
+    child.position.z = child.userData.baseZ + off.z0;
+    child.position.y = child.userData.baseY - 1.8; // start below waterline
+  });
+
+  _waterIntroSound.currentTime = 0;
+  _waterIntroSound.volume = 0.55;
+  _waterIntroSound.play().catch(() => {});
+}
+
+function spawnWaterRing(x, z) {
+  const geo = new THREE.RingGeometry(0.05, 0.25, 28);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x90ecff, transparent: true, opacity: 0.65, depthWrite: false, side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(x, SCENE_PARAMS.oceanY + 0.03, z);
+  scene.add(mesh);
+  waterRings.push({ mesh, t: 0, duration: 0.9 });
 }
 
 // ─── Apply bank params live ───────────────────────────────────────────────────
@@ -3162,6 +3263,7 @@ socket.on('gameUpdate', state => {
   if (wasNull) {
     // Skip toasts for existing log entries on initial load
     lastLogLength = (state.log || []).length;
+    _introDone = false; // allow intro on fresh game load
     renderBoard(state);
     document.getElementById('lobby').style.display='none';
     document.getElementById('waiting').style.display='none';
@@ -3545,6 +3647,9 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         if (type === 'colorTint') SCENE_PARAMS.buildingColorTint = v;
         else if (type === 'colorSaturation') SCENE_PARAMS.buildingColorSaturation = v;
         if (gameState) renderBuildings(gameState);
+        return;
+      } else if (param === 'bob') {
+        BOB_PARAMS[type] = v;
         return;
       } else if (param === 'token') {
         if (type === 'token3dDepth') SCENE_PARAMS.token3dDepth = v;
@@ -4639,6 +4744,89 @@ function animate() {
       dp.mesh.position.z += dp.vz * delta;
       dp.mesh.material.opacity = 0.85 * (1 - progress);
     }
+  }
+
+  // Water ring particles (from tile intro splashes)
+  for (let i = waterRings.length - 1; i >= 0; i--) {
+    const wr = waterRings[i];
+    wr.t += delta;
+    const p = wr.t / wr.duration;
+    if (p >= 1) {
+      scene.remove(wr.mesh);
+      wr.mesh.geometry.dispose(); wr.mesh.material.dispose();
+      waterRings.splice(i, 1);
+    } else {
+      wr.mesh.scale.setScalar(1 + p * 5);
+      wr.mesh.material.opacity = 0.65 * (1 - p);
+    }
+  }
+
+  // Tile intro fly-in animation
+  if (tileIntro.active) {
+    tileIntro.t += delta;
+    const rawP = Math.min(1, tileIntro.t / tileIntro.duration);
+    // Ease-in-out cubic
+    const eP = rawP < 0.5 ? 4*rawP*rawP*rawP : 1 - Math.pow(-2*rawP+2,3)/2;
+    // Overshoot spring in final 18%: tiles nudge past target then settle
+    let finalP = eP;
+    if (rawP > 0.82 && rawP < 1) {
+      const sp = (rawP - 0.82) / 0.18;
+      finalP = eP + Math.sin(sp * Math.PI * 2.8) * 0.06 * (1 - sp);
+    }
+    // Y rise: tiles emerge from below water over the first 30% of the anim
+    const yRise = rawP < 0.30 ? (rawP / 0.30) - 1 : 0;
+
+    boardGroup.children.forEach(child => {
+      const hid = child.userData.hexId ?? child.userData.tokenHexId;
+      if (hid === undefined || child.userData.baseX === undefined) return;
+      const off = tileIntro.hexOffsets.get(hid);
+      if (!off) return;
+      child.position.x = child.userData.baseX + off.x0 * (1 - finalP);
+      child.position.z = child.userData.baseZ + off.z0 * (1 - finalP);
+      child.position.y = child.userData.baseY + yRise * 1.8;
+    });
+
+    // Spawn water splash rings as tiles move in
+    if (rawP < 0.88 && Math.random() < delta * 10) {
+      const keys = [...tileIntro.hexOffsets.keys()];
+      const hid = keys[Math.floor(Math.random() * keys.length)];
+      // Find any child for that hex
+      const child = boardGroup.children.find(c => (c.userData.hexId ?? c.userData.tokenHexId) === hid);
+      if (child) spawnWaterRing(child.position.x, child.position.z);
+    }
+
+    if (tileIntro.t >= tileIntro.duration) {
+      tileIntro.active = false;
+      // Snap all tiles to exact resting positions
+      boardGroup.children.forEach(child => {
+        if (child.userData.baseX !== undefined) {
+          child.position.set(child.userData.baseX, child.userData.baseY, child.userData.baseZ);
+        }
+      });
+      // Wiggle each hex tile to simulate settling collision
+      const hexIds = tileIntro.hexes.map(h => h.id);
+      hexIds.forEach(hid => {
+        const meshes = boardGroup.children.filter(c => (c.userData.hexId ?? c.userData.tokenHexId) === hid);
+        meshes.forEach(m => {
+          m.userData._shakeBaseY  = m.position.y;
+          m.userData._shakeBaseRX = m.rotation.x;
+          m.userData._shakeBaseRZ = m.rotation.z;
+          m.userData._shakeNX = (Math.random() - 0.5);
+          m.userData._shakeNZ = (Math.random() - 0.5);
+        });
+        if (meshes.length) hexShakes.push({ meshes, t: 0, duration: 0.55, amp: 0.04, rotAmp: 0.10 });
+      });
+    }
+  }
+
+  // Tile bobbing — independent per-hex sine wave (skip during intro)
+  if (BOB_PARAMS.enabled && !tileIntro.active) {
+    boardGroup.children.forEach(child => {
+      const hid = child.userData.hexId ?? child.userData.tokenHexId;
+      if (hid === undefined || child.userData.baseY === undefined) return;
+      const phase = tileBobPhases.get(hid) ?? 0;
+      child.position.y = child.userData.baseY + Math.sin(t * BOB_PARAMS.speed + phase) * BOB_PARAMS.amp;
+    });
   }
 
   // Hex shake update

@@ -883,11 +883,12 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 /* ── Build confirmation popup ───────────────────────────────────────────────── */
 #buildConfirm {
   position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 72px;
   pointer-events: none; z-index: 30;
 }
 #buildConfirmCard {
-  background: rgba(10,14,26,0.75);
+  background: rgba(10,14,26,0.38);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--glass-border-hi);
