@@ -4,8 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Tantrum Island</title>
-  <link rel="icon" type="image/png" href="images/App icon.png"/>
-  <link rel="apple-touch-icon" href="images/App icon.png"/>
+  <link rel="icon" type="image/png" href="images/App%20icon.png"/>
+  <link rel="apple-touch-icon" href="images/App%20icon.png"/>
   <link rel="stylesheet" href="style.css"/>
   <script src="/socket.io/socket.io.js"></script>
   <script type="importmap">
@@ -28,15 +28,46 @@
       <label>Your Name</label>
       <input id="playerName" type="text" maxlength="16" placeholder="Enter name…"/>
     </div>
+    <div class="form-group">
+      <label>Avatar</label>
+      <div class="avatar-picker-row">
+        <div class="avatar-preview" id="avatarPreview"><span id="avatarPreviewInner">?</span></div>
+        <div class="avatar-btns">
+          <button type="button" class="avatar-opt-btn" id="btnAvatarCamera" title="Take photo">📷</button>
+          <button type="button" class="avatar-opt-btn" id="btnAvatarUpload" title="Upload photo">📁</button>
+          <button type="button" class="avatar-opt-btn" id="btnAvatarEmoji" title="Choose emoji">😊</button>
+          <button type="button" class="avatar-opt-btn avatar-opt-clear" id="btnAvatarClear" title="Clear">✕</button>
+        </div>
+      </div>
+      <input type="file" id="avatarFileInput" accept="image/*" style="display:none"/>
+    </div>
+
+    <!-- Camera modal -->
+    <div id="cameraModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+      <video id="cameraVideo" autoplay playsinline style="width:260px;height:260px;object-fit:cover;border-radius:50%;border:3px solid rgba(255,255,255,0.3)"></video>
+      <div style="display:flex;gap:12px">
+        <button id="btnCameraCapture" class="btn btn-primary" style="padding:10px 28px">📸 Capture</button>
+        <button id="btnCameraCancel" class="btn btn-secondary" style="padding:10px 20px">Cancel</button>
+      </div>
+      <canvas id="cameraCanvas" style="display:none"></canvas>
+    </div>
+
+    <!-- Emoji picker modal -->
+    <div id="emojiModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;align-items:center;justify-content:center">
+      <div class="emoji-modal-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <span style="color:#fff;font-weight:700;font-size:1rem">Choose Emoji</span>
+          <button id="btnEmojiClose" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:1.3rem;cursor:pointer;line-height:1">✕</button>
+        </div>
+        <div id="emojiGrid"></div>
+      </div>
+    </div>
+
     <div id="rejoinBanner" style="display:none;background:rgba(39,174,96,0.15);border:1px solid rgba(39,174,96,0.4);border-radius:12px;padding:10px 14px;text-align:center;font-size:.85rem">
       <div style="font-weight:600;margin-bottom:6px">You were disconnected from a game</div>
       <button id="btnRejoin" class="btn btn-primary" style="width:auto;padding:6px 20px">Rejoin Game</button>
     </div>
     <div class="divider">Create</div>
-    <label class="private-toggle">
-      <input type="checkbox" id="chkPrivate"/>
-      <span>Private lobby</span>
-    </label>
     <button id="btnCreate" class="btn btn-primary">Create Room</button>
     <div class="divider">Join by Code</div>
     <div class="join-row">
@@ -71,6 +102,10 @@
         <input type="checkbox" id="chkHideBankCards" style="width:16px;height:16px;cursor:pointer">
         <span>Hide bank card counts</span>
       </label>
+      <label class="private-toggle" style="margin-top:8px">
+        <input type="checkbox" id="chkPrivate"/>
+        <span>Private lobby</span>
+      </label>
     </div>
     <button id="btnStart" class="btn btn-primary" style="display:none">Start Game</button>
     <p id="waitingHint" class="hint">Waiting for host to start…</p>
@@ -87,11 +122,36 @@
       <div id="mobBankLabel">BANK</div>
       <div id="mobileBankBar"></div>
     </div>
-    <div class="mob-top-right">
-      <button class="icon-btn" id="mBtnLog">📋</button>
-      <button class="icon-btn" id="mBtnChat">💬</button>
-      <button class="icon-btn" id="mBtnVol">🔊</button>
+  </div>
+
+  <!-- Right side bar: visible on mobile/iPad, 4 icon buttons -->
+  <div id="rightSideBar">
+    <button class="icon-btn rsb-btn" id="mBtnLog" title="Activity Log">📋</button>
+    <button class="icon-btn rsb-btn" id="mBtnChat" title="Chat">💬</button>
+    <button class="icon-btn rsb-btn" id="mBtnMic" title="Voice">🎤</button>
+    <button class="icon-btn rsb-btn" id="mBtnCamera" title="Camera">🎥</button>
+  </div>
+
+  <!-- Mic / voice overlay -->
+  <div id="micVoiceOverlay" style="display:none">
+    <div id="micVoiceInner">
+      <div class="mob-chat-header">
+        <span>🎤 Voice</span>
+        <button id="mBtnMicClose">✕</button>
+      </div>
+      <div class="mob-vol-body">
+        <div class="mob-vol-row">
+          <span class="mob-vol-label">My mic</span>
+          <button id="micToggleBtn" class="mic-btn on">🎤</button>
+        </div>
+        <div id="voicePlayerList" class="voice-player-list"></div>
+      </div>
     </div>
+  </div>
+
+  <!-- Camera preset popup -->
+  <div id="cameraPresetPopup" style="display:none">
+    <div id="cameraPresetInner"></div>
   </div>
 
   <!-- Mobile player cards row (hidden on desktop) -->
@@ -159,7 +219,7 @@
     </div>
   </div>
 
-  <!-- Left icon bar (desktop only — single gear, password protected) -->
+  <!-- Left icon bar (desktop only) -->
   <div id="leftBar">
     <button class="icon-btn" id="btnSettings" title="Settings">⚙</button>
     <button class="icon-btn" id="btnGetAllRes" title="Get all resources (debug)" style="font-size:.65rem;padding:4px 6px;display:none">+Res</button>
@@ -325,7 +385,7 @@
       </div>
       <div class="tile-slider" data-param="scene" data-type="camelY">
         <label><span class="tile-icon">🐪</span> Camel Y</label>
-        <div class="slider-row"><input type="range" min="-0.5" max="1.0" step="0.01" value="-0.06"/><span class="slider-val">-0.06</span></div>
+        <div class="slider-row"><input type="range" min="-0.5" max="1.0" step="0.01" value="-0.33"/><span class="slider-val">-0.33</span></div>
       </div>
       <div class="tile-slider" data-param="scene" data-type="tokenWiggleAmp">
         <label><span class="tile-icon">🎲</span> Token wiggle amplitude</label>
@@ -671,6 +731,10 @@
             <option>Corner</option>
           </select>
         </div>
+        <div class="tile-slider" data-param="cameraZoom" data-type="camera">
+          <label><span class="tile-icon">🔍</span> Zoom</label>
+          <div class="slider-row"><input type="range" min="0.3" max="3.0" step="0.05" value="1"/><span class="slider-val">1.00</span></div>
+        </div>
       </div><!-- /settings-cat-body CAMERA -->
 
       <div class="settings-section-label collapsible" style="margin-top:10px">TILE BOBBING</div>
@@ -737,6 +801,78 @@
         </div>
       </div><!-- /settings-cat-body TOKEN -->
 
+      <div class="settings-section-label collapsible" style="margin-top:10px">LAVA</div>
+      <div class="settings-cat-body">
+        <div class="tile-slider" data-param="lava" data-type="riverEnabled">
+          <label>🌋 River on/off</label>
+          <div class="slider-row"><input type="range" min="0" max="1" step="1" value="1"/><span class="slider-val">1.00</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="riverRotation">
+          <label>🔄 River rotation</label>
+          <div class="slider-row"><input type="range" min="-3.14" max="3.14" step="0.01" value="1.24"/><span class="slider-val">1.24</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="riverTilt">
+          <label>📐 River vertical tilt</label>
+          <div class="slider-row"><input type="range" min="-1.5" max="1.5" step="0.01" value="0.23"/><span class="slider-val">0.23</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="riverScale">
+          <label>💧 River flow width</label>
+          <div class="slider-row"><input type="range" min="0.1" max="5.0" step="0.05" value="1.05"/><span class="slider-val">1.05</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="riverX">
+          <label>↔️ River X</label>
+          <div class="slider-row"><input type="range" min="-1.0" max="1.0" step="0.01" value="-0.08"/><span class="slider-val">-0.08</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="riverY">
+          <label>↕️ River Y</label>
+          <div class="slider-row"><input type="range" min="-1.0" max="1.0" step="0.01" value="-0.34"/><span class="slider-val">-0.34</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="riverZ">
+          <label>🔃 River Z</label>
+          <div class="slider-row"><input type="range" min="-1.0" max="1.0" step="0.01" value="0.24"/><span class="slider-val">0.24</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="ballEnabled">
+          <label>🔥 Ball on/off</label>
+          <div class="slider-row"><input type="range" min="0" max="1" step="1" value="1"/><span class="slider-val">1.00</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="ballScale">
+          <label>⚽ Ball size</label>
+          <div class="slider-row"><input type="range" min="0.1" max="5.0" step="0.05" value="2.95"/><span class="slider-val">2.95</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="ballScaleY">
+          <label>📏 Ball scale Y</label>
+          <div class="slider-row"><input type="range" min="0.1" max="5.0" step="0.05" value="0.30"/><span class="slider-val">0.30</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="ballX">
+          <label>↔️ Ball X</label>
+          <div class="slider-row"><input type="range" min="-1.0" max="1.0" step="0.01" value="-0.14"/><span class="slider-val">-0.14</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="ballY">
+          <label>↕️ Ball Y</label>
+          <div class="slider-row"><input type="range" min="-1.0" max="1.0" step="0.01" value="-0.31"/><span class="slider-val">-0.31</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="ballZ">
+          <label>🔃 Ball Z</label>
+          <div class="slider-row"><input type="range" min="-1.0" max="1.0" step="0.01" value="0.05"/><span class="slider-val">0.05</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="steamAmount">
+          <label>💨 Steam amount</label>
+          <div class="slider-row"><input type="range" min="0" max="20" step="0.5" value="6"/><span class="slider-val">6.00</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="steamSize">
+          <label>🫧 Steam size</label>
+          <div class="slider-row"><input type="range" min="0.1" max="5.0" step="0.05" value="0.25"/><span class="slider-val">0.25</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="steamGravity">
+          <label>⬆️ Steam rise speed</label>
+          <div class="slider-row"><input type="range" min="-5.0" max="-0.1" step="0.05" value="-0.65"/><span class="slider-val">-0.65</span></div>
+        </div>
+        <div class="tile-slider" data-param="lava" data-type="steamOpacity">
+          <label>👻 Steam opacity</label>
+          <div class="slider-row"><input type="range" min="0" max="1.0" step="0.01" value="0.40"/><span class="slider-val">0.40</span></div>
+        </div>
+      </div><!-- /settings-cat-body LAVA -->
+
     </div>
   </div>
 
@@ -776,14 +912,14 @@
         <div class="trade-incoming-card">
           <div class="ti-header">🤝 <span id="tiProposerName"></span> offers a trade</div>
           <div class="ti-body">
-            <div class="ti-side">
-              <div class="ti-label">They give</div>
-              <div id="tiOfferRow" class="ti-res-row"></div>
+            <div class="ti-side ti-side-you">
+              <div class="ti-label ti-label-you">You give</div>
+              <div id="tiWantRow" class="ti-res-row"></div>
             </div>
             <div class="ti-arrow">⟺</div>
-            <div class="ti-side">
-              <div class="ti-label">You give</div>
-              <div id="tiWantRow" class="ti-res-row"></div>
+            <div class="ti-side ti-side-them">
+              <div class="ti-label ti-label-them">They give</div>
+              <div id="tiOfferRow" class="ti-res-row"></div>
             </div>
           </div>
           <div id="tiOtherResponses" style="display:none;margin:6px 0;font-size:.78rem;color:rgba(255,255,255,0.55);"></div>
@@ -841,9 +977,21 @@
       </div>
 
       <div id="gameOverBanner" style="display:none">
-        <div class="modal-card">
-          <h2 id="gameOverTitle"></h2>
-          <p id="gameOverMsg"></p>
+        <div class="modal-card" style="max-width:480px;width:90%">
+          <h2 id="gameOverTitle" style="margin-bottom:4px"></h2>
+          <p id="gameOverMsg" style="opacity:.7;margin-bottom:16px;font-size:.9em"></p>
+          <table id="gameOverStats" style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:.9em">
+            <thead>
+              <tr style="opacity:.6;text-align:left">
+                <th style="padding:4px 8px">Player</th>
+                <th style="padding:4px 8px;text-align:center">VP</th>
+                <th style="padding:4px 8px;text-align:center">Knights</th>
+                <th style="padding:4px 8px;text-align:center">Roads</th>
+                <th style="padding:4px 8px;text-align:center">Badges</th>
+              </tr>
+            </thead>
+            <tbody id="gameOverStatsBody"></tbody>
+          </table>
           <button id="btnReload" class="btn btn-primary">Back to Lobby</button>
         </div>
       </div>
@@ -942,6 +1090,11 @@
 
   <!-- Right sidebar -->
   <div id="rightPanel">
+
+    <!-- Camera preset button (desktop) -->
+    <div style="display:flex;justify-content:flex-end;padding:6px 8px 0;border-bottom:1px solid var(--glass-border)">
+      <button class="icon-btn" id="btnCameraDesktop" title="Camera Presets">🎥</button>
+    </div>
 
     <!-- Chat messages (top, scrollable) -->
     <div id="chatSection">

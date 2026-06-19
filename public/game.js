@@ -12,10 +12,157 @@ import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
+// ─── Intro fade-in: background shows for 4s, then lobby-card fades in over 3s ─
+setTimeout(() => {
+  document.querySelectorAll('.lobby-card').forEach(el => el.classList.add('visible'));
+}, 4000);
+
 // ─── Socket ────────────────────────────────────────────────────────────────────
 console.log('[TantrumIsland] game.js loaded v' + Date.now());
 const socket = window.io();
 window._gameSocket = socket;
+
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+let _playerAvatar = null; // emoji string or base64 data URL
+
+const AVATAR_EMOJIS = [
+  '😀','😎','🤓','😈','👻','🤖','👽','🦄','🐉','🦊','🐺','🦁','🐯','🐻','🐼','🐸',
+  '🦋','🦅','🦉','🦜','🐬','🦈','🐙','🦀','🌊','🔥','⚡','🌈','🌙','☀️','🎭','🏴‍☠️',
+  '🧙','🧝','🧛','🧟','👹','👺','🎃','💀','🤡','👾','🎮','🏆','💎','🔮','🎯','🎲',
+];
+
+function avatarHtml(avatar, name, isBot, color) {
+  if (isBot) return '🤖';
+  if (!avatar) return escapeHtml((name || '?')[0].toUpperCase());
+  if (avatar.startsWith('data:')) return `<img src="${avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">`;
+  return avatar; // emoji
+}
+
+function renderAvatarPreview() {
+  const el = document.getElementById('avatarPreview');
+  if (!el) return;
+  if (!_playerAvatar) {
+    el.innerHTML = '<span id="avatarPreviewInner">?</span>';
+    return;
+  }
+  if (_playerAvatar.startsWith('data:')) {
+    el.innerHTML = `<img src="${_playerAvatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block">`;
+  } else {
+    el.innerHTML = `<span id="avatarPreviewInner" style="font-size:1.65rem">${_playerAvatar}</span>`;
+  }
+}
+
+function resizeImageToDataURL(file, size, cb) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = size;
+      const ctx = cv.getContext('2d');
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2, sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+      cb(cv.toDataURL('image/jpeg', 0.72));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// Load saved avatar + name on page load
+try {
+  const saved = localStorage.getItem('ti_avatar');
+  if (saved) { _playerAvatar = saved; }
+  const savedName = localStorage.getItem('ti_playerName');
+  if (savedName && document.getElementById('playerName')) {
+    document.getElementById('playerName').value = savedName;
+  }
+} catch(e) {}
+// Defer preview render until DOM is ready
+window.addEventListener('DOMContentLoaded', () => { renderAvatarPreview(); setupAvatarPicker(); });
+
+function setupAvatarPicker() {
+  // ── Upload ─────────────────────────────────────────────────────────────────
+  const fileInput = document.getElementById('avatarFileInput');
+  document.getElementById('btnAvatarUpload')?.addEventListener('click', () => fileInput?.click());
+  fileInput?.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    resizeImageToDataURL(file, 128, url => {
+      _playerAvatar = url;
+      try { localStorage.setItem('ti_avatar', url); } catch(e) {}
+      renderAvatarPreview();
+    });
+    fileInput.value = '';
+  });
+
+  // ── Camera ─────────────────────────────────────────────────────────────────
+  let _cameraStream = null;
+  const cameraModal = document.getElementById('cameraModal');
+  document.getElementById('btnAvatarCamera')?.addEventListener('click', async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert('Camera not available on this device/browser'); return;
+    }
+    try {
+      _cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      document.getElementById('cameraVideo').srcObject = _cameraStream;
+      cameraModal.style.display = 'flex';
+    } catch(e) { alert('Could not access camera: ' + e.message); }
+  });
+  document.getElementById('btnCameraCapture')?.addEventListener('click', () => {
+    const video = document.getElementById('cameraVideo');
+    const canvas = document.getElementById('cameraCanvas');
+    const size = 128;
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const min = Math.min(video.videoWidth, video.videoHeight);
+    const sx = (video.videoWidth - min) / 2, sy = (video.videoHeight - min) / 2;
+    ctx.drawImage(video, sx, sy, min, min, 0, 0, size, size);
+    _playerAvatar = canvas.toDataURL('image/jpeg', 0.72);
+    try { localStorage.setItem('ti_avatar', _playerAvatar); } catch(e) {}
+    renderAvatarPreview();
+    _cameraStream?.getTracks().forEach(t => t.stop());
+    _cameraStream = null;
+    cameraModal.style.display = 'none';
+  });
+  document.getElementById('btnCameraCancel')?.addEventListener('click', () => {
+    _cameraStream?.getTracks().forEach(t => t.stop());
+    _cameraStream = null;
+    cameraModal.style.display = 'none';
+  });
+
+  // ── Emoji ──────────────────────────────────────────────────────────────────
+  const emojiModal = document.getElementById('emojiModal');
+  const emojiGrid = document.getElementById('emojiGrid');
+  if (emojiGrid) {
+    AVATAR_EMOJIS.forEach(em => {
+      const btn = document.createElement('button');
+      btn.className = 'emoji-btn'; btn.textContent = em;
+      btn.addEventListener('click', () => {
+        _playerAvatar = em;
+        try { localStorage.setItem('ti_avatar', em); } catch(e) {}
+        renderAvatarPreview();
+        emojiModal.style.display = 'none';
+      });
+      emojiGrid.appendChild(btn);
+    });
+  }
+  document.getElementById('btnAvatarEmoji')?.addEventListener('click', () => {
+    emojiModal.style.display = 'flex';
+  });
+  document.getElementById('btnEmojiClose')?.addEventListener('click', () => {
+    emojiModal.style.display = 'none';
+  });
+  emojiModal?.addEventListener('click', e => { if (e.target === emojiModal) emojiModal.style.display = 'none'; });
+
+  // ── Clear ──────────────────────────────────────────────────────────────────
+  document.getElementById('btnAvatarClear')?.addEventListener('click', () => {
+    _playerAvatar = null;
+    try { localStorage.removeItem('ti_avatar'); } catch(e) {}
+    renderAvatarPreview();
+  });
+}
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let myId = null;
@@ -76,6 +223,80 @@ const BANK_PARAMS = {
 };
 
 // Robber anim/material params
+const LAVA_PARAMS = {
+  riverEnabled:   1.0,
+  riverRotation:  1.24,
+  riverTilt:      0.23,
+  riverX:        -0.08,
+  riverY:        -0.34,
+  riverZ:         0.24,
+  riverScale:     1.05,
+  ballEnabled:    1.0,
+  ballX:         -0.14,
+  ballY:         -0.31,
+  ballZ:          0.05,
+  ballScale:      2.95,
+  ballScaleY:     0.30,
+  steamAmount:    6.0,
+  steamGravity:  -0.65,
+  steamOpacity:   0.40,
+  steamSize:      0.25,
+};
+
+// Eruption state — lava appears on one random mountain tile for 2 min, every ~10 min
+const _lavaEruption = {
+  activeTileId: null,   // hex.id currently erupting (null = none)
+  elapsed:      0,      // seconds since eruption started
+  duration:     120,    // seconds eruption lasts
+  nextIn:       Math.random() * 120 + 480, // first eruption 8-10 min in
+};
+
+function _startLavaEruption(hexes) {
+  const mtns = (hexes ?? gameState?.board?.hexes ?? []).filter(h => h.type === 'mountains');
+  if (!mtns.length) return;
+  const hex = mtns[Math.floor(Math.random() * mtns.length)];
+  _lavaEruption.activeTileId = hex.id;
+  _lavaEruption.elapsed = 0;
+  buildLava(hexes ?? gameState?.board?.hexes);
+}
+
+function _stopLavaEruption(hexes) {
+  _lavaEruption.activeTileId = null;
+  // Clear lava meshes
+  if (boardGroup?.userData?.lavaMeshes) {
+    boardGroup.userData.lavaMeshes.forEach(m => {
+      boardGroup.remove(m);
+      m.geometry?.dispose();
+      if (Array.isArray(m.material)) m.material.forEach(x => x.dispose());
+      else m.material?.dispose();
+    });
+    boardGroup.userData.lavaMeshes = [];
+    boardGroup.userData.lavaSteamOrigins = [];
+  }
+  // Clear in-flight steam
+  for (let i = LAVA_STEAM.length - 1; i >= 0; i--) {
+    scene.remove(LAVA_STEAM[i].sprite);
+    LAVA_STEAM[i].sprite.material.dispose();
+  }
+  LAVA_STEAM.length = 0;
+  // Schedule next eruption: 8–12 minutes
+  _lavaEruption.nextIn = Math.random() * 240 + 480;
+}
+
+const LAVA_STEAM = [];   // { pos:{x,y,z}, vel:{x,y,z}, t, life, mat }
+
+// Soft circle texture for round steam particles
+const _steamCircleTex = (() => {
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+  const ctx = cv.getContext('2d');
+  const grd = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.6, 'rgba(255,255,255,0.6)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(cv);
+})();
+
 const ROBBER_PARAMS = {
   animSpeed:  0.75,
   scale:      0.50,
@@ -325,6 +546,29 @@ const tileBobPhases = new Map(); // hexId → float phase offset
 const waterRings    = [];        // { mesh, t, duration }
 const tileIntro = { active: false, t: 0, duration: 4.0, hexOffsets: new Map(), hexes: [], hexCollOff: new Map(), shakeTriggered: false };
 
+// Spiral QR coordinates for token fall order (matches server placement)
+const SPIRAL_QR_OUTER = [[0,-2],[1,-2],[2,-2],[2,-1],[2,0],[1,1],[0,2],[-1,2],[-2,2],[-2,1],[-2,0],[-1,-1]];
+const SPIRAL_QR_INNER = [[0,-1],[1,-1],[1,0],[0,1],[-1,1],[-1,0]];
+
+const tokenIntro = {
+  active: false, t: 0,
+  scheduled: [],  // { hexId, startT, tokenMeshes, baseYs, tileMeshes, landed }
+  landings: [],   // { tileMeshes, baseYs, t }
+  done: false,
+};
+const robberDropIntro = { active: false, t: 0, duration: 0.7, targetY: 0 };
+const debrisParticles = []; // { mesh, vx, vy, vz, t, lifetime }
+let _robberVoEnabled = false;
+let _robberVoPlaying = false;
+let _robberVoTimer = null;
+let _robberVoAudio = null; // current playing Audio element for live volume updates
+const VO_FILES = [
+  'Ej hekje leire.mp3','e det mulig.mp3','ej hekje kønn.mp3','ej vil ha leire.mp3',
+  'live ville aldri lagt røvern der.mp3','sett han der du.mp3','kor dum gjeng det an å bli.mp3',
+  'du kan ikkje meine ditta.mp3','ej flira.mp3','no begynne du å bli farlig.mp3',
+  'jaujau.mp3','jaja gg\'s.mp3','hallo gjeng an å bruke haude.mp3','embargo.mp3',
+];
+
 // Drop animations: pieces falling from sky onto the board
 const dropAnims = []; // { mesh, targetY, t, onLand }
 const sheepList  = []; // { mesh, cx, cz, tx, tz, angle, speed, bobT, bobSpeed }
@@ -402,11 +646,14 @@ function wiggleSheepNear(ix, iz, radius) {
     if (Math.sqrt(dx*dx + dz*dz) <= radius) {
       // Fall direction: away from impact
       const fallAngle = Math.atan2(s.mesh.position.z - iz, s.mesh.position.x - ix);
+      // Remove any existing wiggle on this sheep so baseRX/baseRZ are always 0 (upright)
+      const existingIdx = sheepWiggles.findIndex(w => w.sheep === s);
+      if (existingIdx !== -1) sheepWiggles.splice(existingIdx, 1);
       sheepWiggles.push({
         sheep: s,
-        baseY: s.mesh.position.y,
-        baseRX: s.mesh.rotation.x,
-        baseRZ: s.mesh.rotation.z,
+        baseY: s.surfaceY + SCENE_PARAMS.sheepY,
+        baseRX: 0,
+        baseRZ: 0,
         fallAngle,
         t: 0,
         duration: 3.5, // total: fall + lie + get up
@@ -558,13 +805,16 @@ _tickSound.loop = true;
 let _autoRollTimeout = null;
 let _autoRollRafId   = null;
 let _autoRollStart   = null;
+let _rollPending     = false; // true after emitting rollDice, until server confirms
 const AUTO_ROLL_SEC  = 5;
 
 function startAutoRoll() {
   stopAutoRoll();
-  _tickSound.currentTime = 0;
-  _tickSound.volume = sfxVol();
-  _tickSound.play().catch(() => {});
+  if (_tickSound.paused) {
+    _tickSound.currentTime = 0;
+    _tickSound.volume = sfxVol();
+    _tickSound.play().catch(() => {});
+  }
   _autoRollStart = performance.now();
   const bar  = document.getElementById('autoRollBar');
   const fill = document.getElementById('autoRollFill');
@@ -578,6 +828,7 @@ function startAutoRoll() {
   _autoRollRafId = requestAnimationFrame(tick);
   _autoRollTimeout = setTimeout(() => {
     stopAutoRoll();
+    _rollPending = true;
     socket.emit('rollDice'); addTimerBonus(15);
   }, AUTO_ROLL_SEC * 1000);
 }
@@ -863,7 +1114,7 @@ const SCENE_PARAMS = {
   sheepScale:      0.14,
   sheepY:         -0.06,
   camelScale:      0.18,
-  camelY:         -0.06,
+  camelY:         -0.33,
   tokenWiggleAmp:  0.45,
   tokenWiggleDur:  1.2,
   tokenWiggleSpd:  14.0,
@@ -899,8 +1150,11 @@ function applyCameraPreset(name) {
   camera.position.set(...p.pos);
   controls.target.set(...p.target);
   controls.update();
-  // Top-down view: suppress bloom so coins don't over-glow
   bloom.strength = name === 'Top-Down' ? 0.0 : LIGHT_PARAMS.bloomStr;
+  // Reset zoom slider and camera zoom so preset distances are accurate
+  const zoomInput = document.querySelector('[data-param="cameraZoom"] input[type=range]');
+  if (zoomInput) { zoomInput.value = 1; zoomInput.dispatchEvent(new Event('input')); }
+  camera.zoom = 1; camera.updateProjectionMatrix();
 }
 
 // Per-tile-type number token Y offset (defaults match dialled-in screenshot values)
@@ -1216,19 +1470,36 @@ function renderBoard(state) {
       uniform float uWaveScale;
       varying float vHeight;
       varying vec2  vWPos;
+      varying vec3  vNormal;
+      varying vec3  vViewDir;
       void main() {
         vec3 pos = position;
         vWPos = pos.xz;
         float t = uTime * uWaveSpeed;
         float s = uWaveScale;
         float a = uWaveAmp;
-        pos.y = sin(pos.x * 0.9*s + t * 0.8)  * 0.018*a
-              + sin(pos.z * 1.1*s + t * 0.6)  * 0.015*a
-              + sin(pos.x * 2.3*s - t * 1.1)  * 0.009*a
-              + sin(pos.z * 1.9*s + t * 1.3)  * 0.008*a
-              + sin((pos.x-pos.z)*1.4*s+t*0.9)* 0.012*a
-              + sin(length(pos.xz)*0.6*s-t*0.7)* 0.014*a;
+        float x = pos.x, z = pos.z;
+        float r = max(length(vec2(x, z)), 0.001);
+        // Wave displacement
+        pos.y = sin(x*0.9*s + t*0.8)   * 0.018*a
+              + sin(z*1.1*s + t*0.6)   * 0.015*a
+              + sin(x*2.3*s - t*1.1)   * 0.009*a
+              + sin(z*1.9*s + t*1.3)   * 0.008*a
+              + sin((x-z)*1.4*s+t*0.9) * 0.012*a
+              + sin(r*0.6*s - t*0.7)   * 0.014*a;
         vHeight = pos.y;
+        // Analytic surface normal via wave partial derivatives
+        float dydx = cos(x*0.9*s+t*0.8)*0.9*s*0.018*a
+                   + cos(x*2.3*s-t*1.1)*2.3*s*0.009*a
+                   + cos((x-z)*1.4*s+t*0.9)*1.4*s*0.012*a
+                   + cos(r*0.6*s-t*0.7)*0.6*s*0.014*a*(x/r);
+        float dydz = cos(z*1.1*s+t*0.6)*1.1*s*0.015*a
+                   + cos(z*1.9*s+t*1.3)*1.9*s*0.008*a
+                   + cos((x-z)*1.4*s+t*0.9)*(-1.4*s)*0.012*a
+                   + cos(r*0.6*s-t*0.7)*0.6*s*0.014*a*(z/r);
+        vNormal = normalize(vec3(-dydx, 1.0, -dydz));
+        vec4 worldPos = modelMatrix * vec4(pos, 1.0);
+        vViewDir = normalize(cameraPosition - worldPos.xyz);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
       }
     `,
@@ -1241,38 +1512,84 @@ function renderBoard(state) {
       uniform float uOpacity;
       varying float vHeight;
       varying vec2  vWPos;
+      varying vec3  vNormal;
+      varying vec3  vViewDir;
+
+      // Cheap 2D hash — no texture needed
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+      }
+
       void main() {
-        // Shallow/deep gradient: bright turquoise near shore → deep teal far out
         float distFromIsland = length(vWPos);
-        // Shore band: SAND_INNER_R (3.6) to 3.6+2.8 = 6.4 world units from centre
         float shoreStart = 3.6;
-        float shoreEnd   = 6.4;
-        float depth = clamp((distFromIsland - shoreStart) / (shoreEnd - shoreStart + 8.0), 0.0, 1.0);
-        vec3 shallow = vec3(0.30, 0.85, 0.82);
-        vec3 deep    = vec3(0.02, 0.32, 0.52);
+        float dist = length(vWPos) / 22.0;
+
+        // ── Depth colour ────────────────────────────────────────────────────────
+        float depth = clamp((distFromIsland - shoreStart) / 14.0, 0.0, 1.0);
+        vec3 shallow = vec3(0.28, 0.82, 0.78);
+        vec3 deep    = vec3(0.02, 0.26, 0.46);
         vec3 col = mix(shallow, deep, depth * depth);
-        // Gradual foam band right at the sand edge — no hard line
+
+        // ── Detail normal (micro-ripple, two layers, fragment-only) ─────────────
+        float nx = sin(vWPos.x*13.0 + vWPos.y*9.0  + uTime*1.9) * 0.11
+                 + sin(vWPos.x*23.0 - vWPos.y*19.0 - uTime*2.3) * 0.05;
+        float nz = sin(vWPos.x*10.0 - vWPos.y*12.0 + uTime*1.5) * 0.11
+                 + sin(vWPos.x*20.0 + vWPos.y*24.0 - uTime*2.0) * 0.05;
+        vec3 detailN = normalize(vNormal + vec3(nx, 0.0, nz));
+
+        // ── Caustics shimmer (shallow zone) ────────────────────────────────────
+        float caus = (sin(vWPos.x*8.0+uTime*1.2)*sin(vWPos.y*7.0+uTime*0.9)+1.0)*0.5
+                   * (sin(vWPos.x*5.0-uTime*0.7)*sin(vWPos.y*6.0+uTime*1.1)+1.0)*0.5;
+        float shallowMask = 1.0 - smoothstep(shoreStart - 0.3, shoreStart + 2.2, distFromIsland);
+        col += vec3(0.06, 0.20, 0.16) * caus * shallowMask * 0.5;
+
+        // ── Subsurface scattering hint (wave peaks glow teal) ──────────────────
+        float sss = smoothstep(0.01, 0.038, vHeight);
+        col += vec3(0.0, 0.18, 0.14) * sss * 0.35;
+
+        // ── Textured foam band ──────────────────────────────────────────────────
         float foamInner = shoreStart - 0.3;
         float foamOuter = shoreStart + 1.8;
         float foam = smoothstep(foamInner, foamInner + 0.8, distFromIsland)
                    * (1.0 - smoothstep(foamOuter - 0.6, foamOuter, distFromIsland));
-        col = mix(col, vec3(0.92, 0.98, 1.0), foam * uFoamStr);
-        // Wave crests
-        float crest = smoothstep(0.025, 0.04, vHeight);
-        col = mix(col, uCrest, crest * 0.35);
-        // Subtle highlight streaks
-        float streak = sin(vWPos.x * 3.0 + vWPos.y * 2.0 + uTime * 0.5) * 0.5 + 0.5;
-        col += vec3(streak * 0.012);
-        // Fade to sky haze at far horizon
-        float dist = length(vWPos) / 22.0;
-        float horizonFade = smoothstep(0.5, 1.0, dist);
-        vec3 horizonCol = vec3(0.72, 0.92, 0.96);
-        col = mix(col, horizonCol, horizonFade);
-        // Smooth ocean-to-sand fade: wide soft gradient instead of hard edge
+        float foamTex = (sin(vWPos.x*14.0+uTime*0.8)*sin(vWPos.y*12.0-uTime*0.6)+1.0)*0.5;
+        foamTex = mix(0.65, 1.0, foamTex);
+        col = mix(col, vec3(0.94, 0.99, 1.0) * foamTex, foam * uFoamStr);
+
+        // ── Wave crests ─────────────────────────────────────────────────────────
+        float crest = smoothstep(0.022, 0.038, vHeight);
+        col = mix(col, uCrest, crest * 0.4);
+
+        // ── Fresnel (uses detail normal for fine-grain sky reflection) ──────────
+        float NdotV = max(dot(detailN, vViewDir), 0.0);
+        float fresnel = pow(1.0 - NdotV, 3.5);
+        col = mix(col, vec3(0.48, 0.76, 1.0), fresnel * 0.50);
+
+        // ── Specular sun glint (detail normal gives many small glints) ──────────
+        vec3 sunDir = normalize(vec3(2.0, 3.5, 1.5));
+        vec3 reflDir = reflect(-vViewDir, detailN);
+        float spec = pow(max(dot(reflDir, sunDir), 0.0), 140.0);
+        col += vec3(1.0, 0.97, 0.88) * spec * 0.85;
+
+        // ── Sparkle glints (tiny dot per cell, not square) ──────────────────────
+        vec2 sgUV = vWPos * 11.0 + vec2(uTime * 0.22, uTime * 0.16);
+        vec2 sgCell = floor(sgUV);
+        vec2 sgFrac = fract(sgUV) - 0.5; // offset from cell centre
+        float h  = hash(sgCell);
+        float st = fract(uTime * (0.25 + h * 0.35) + h);
+        float twinkle = pow(max(0.0, 1.0 - abs(st - 0.5) * 10.0), 3.0);
+        float dotMask = 1.0 - smoothstep(0.04, 0.16, length(sgFrac));
+        float sparkle = twinkle * h * dotMask;
+        col += vec3(0.88, 0.95, 1.0) * sparkle * 0.65 * (1.0 - foam);
+
+        // ── Horizon haze ────────────────────────────────────────────────────────
+        col = mix(col, vec3(0.72, 0.92, 0.96), smoothstep(0.5, 1.0, dist));
+
+        // ── Alpha ───────────────────────────────────────────────────────────────
         float shallowAlpha = smoothstep(shoreStart - 2.5, shoreStart + 3.5, distFromIsland);
         float horizonAlpha = mix(0.96, 0.0, smoothstep(0.78, 1.0, dist));
-        float alpha = min(shallowAlpha, horizonAlpha) * uOpacity;
-        gl_FragColor = vec4(col, alpha);
+        gl_FragColor = vec4(col, min(shallowAlpha, horizonAlpha) * uOpacity);
       }
     `,
     transparent: true,
@@ -1416,8 +1733,14 @@ function renderBoard(state) {
       // Sink tile into sand by TILE_SINK to hide the white flat base
       const yOff = TILE_Y_OFFSET[hex.type] ?? 0;
       hexModel.position.set(hex.x, -HEX_H / 2 - hb2.min.y - TILE_SINK + yOff, hex.z);
-      // Wood hex GLB may need rotation correction
-      if (hexModelKey === 'hex_forest') hexModel.rotation.y = Math.PI / 2;
+      // Random 60° rotation so tiles look varied; forest GLB has an extra 90° correction
+      // Mountains are NOT randomised so lava always flows from the same face
+      const baseRot = hexModelKey === 'hex_forest' ? Math.PI / 2 : 0;
+      const tileRotY = hex.type === 'mountains'
+        ? baseRot
+        : baseRot + (Math.floor(Math.random() * 6) * Math.PI / 3);
+      hexModel.rotation.y = tileRotY;
+      hex._tileRotY = tileRotY;
       hexModel.receiveShadow = true;
       hexModel.userData = { type:'hex', hexId: hex.id };
       boardGroup.add(hexModel);
@@ -1524,6 +1847,7 @@ function renderBoard(state) {
         camel.position.set(cx, surfaceY + SCENE_PARAMS.camelY, cz);
         camel.rotation.y = Math.random() * Math.PI * 2;
         camel.userData.hexId = hex.id;
+        camel.userData.isCamel = true;
         boardGroup.add(camel);
         const ta = Math.random() * Math.PI * 2;
         const tr = (0.1 + Math.random() * 0.5) * HEX_R;
@@ -1672,6 +1996,9 @@ function renderBoard(state) {
       }
     });
   }
+
+  // ── Lava flows on mountain tiles ──────────────────────────────────────────────
+  buildLava(hexes);
 
   // Port markers — dock + two roads to hex edge vertices + sign
   const PORT_LABELS = { wood:'🪵 2:1', sheep:'🐑 2:1', wheat:'🌾 2:1', brick:'🧱 2:1', ore:'🪨 2:1', any:'? 3:1' };
@@ -1881,9 +2208,13 @@ function startTileIntro(hexes) {
     tileIntro.hexCollOff.set(hex.id, { x: 0, z: 0 });
   });
 
-  // Move all hex/token children to scatter start positions
+  // Move all hex children to scatter start positions; hide tokens until they fall from sky
   boardGroup.children.forEach(child => {
-    const hid = child.userData.hexId ?? child.userData.tokenHexId;
+    if (child.userData.tokenHexId !== undefined) {
+      child.visible = false;
+      return;
+    }
+    const hid = child.userData.hexId;
     if (hid === undefined) return;
     const off = tileIntro.hexOffsets.get(hid);
     if (!off) return;
@@ -1918,19 +2249,216 @@ function startTileIntro(hexes) {
     });
   }
 
-  // Set camera to Long Angle; animation to top-down starts after tiles settle
-  camera.position.set(0, 8, 19);
+  // Hide robber during intro; it drops from sky after tokens
+  if (robberAnim.mesh) robberAnim.mesh.visible = false;
+
+  // Set camera to Long Angle; it stays here through token + robber animations
+  camera.position.set(0, 5.5, 13);
   controls.target.set(0, 0, 0);
   controls.update();
   controls.enabled = false;
   cameraIntro.active = false;
   cameraIntro.t = 0;
   cameraIntro.waitT = 0;
-  cameraIntro.waiting = true; // will start animating after 7s post-intro
+  cameraIntro.waiting = false; // triggered manually after robber voice-over
 
   _waterIntroSound.currentTime = 0;
   _waterIntroSound.volume = 0.55;
   _waterIntroSound.play().catch(() => {});
+}
+
+function startTokenIntro() {
+  if (!gameState) return;
+  const SPIRAL = [...SPIRAL_QR_OUTER, ...SPIRAL_QR_INNER, [0, 0]];
+
+  // Index token meshes and tile meshes by hexId
+  const tokenMeshMap = new Map();
+  const tileMeshMap  = new Map();
+  boardGroup.children.forEach(c => {
+    const tid = c.userData.tokenHexId;
+    if (tid !== undefined) {
+      if (!tokenMeshMap.has(tid)) tokenMeshMap.set(tid, []);
+      tokenMeshMap.get(tid).push(c);
+    }
+    const hid = c.userData.hexId;
+    if (hid !== undefined) {
+      if (!tileMeshMap.has(hid)) tileMeshMap.set(hid, []);
+      tileMeshMap.get(hid).push(c);
+    }
+  });
+
+  tokenIntro.active = true;
+  tokenIntro.t = 0;
+  tokenIntro.done = false;
+  tokenIntro.scheduled = [];
+  tokenIntro.landings = [];
+
+  let slot = 0;
+  for (const [q, r] of SPIRAL) {
+    const hex = gameState.board.hexes.find(h => h.q === q && h.r === r);
+    if (!hex || hex.type === 'desert' || !hex.number) continue;
+    const meshes = tokenMeshMap.get(hex.id) ?? [];
+    if (!meshes.length) continue;
+    const baseYs = meshes.map(m => m.userData.baseY ?? m.position.y);
+    meshes.forEach(m => { m.position.y = 15; m.visible = false; }); // raised to sky, hidden until fall begins
+    tokenIntro.scheduled.push({
+      hexId: hex.id,
+      startT: slot * 0.3,
+      tokenMeshes: meshes,
+      baseYs,
+      tileMeshes: tileMeshMap.get(hex.id) ?? [],
+      landed: false,
+    });
+    slot++;
+  }
+}
+
+function startRobberDrop() {
+  if (!robberAnim.mesh || !gameState) return;
+  const desertHex = gameState.board.hexes.find(h => h.type === 'desert');
+  if (!desertHex) return;
+  robberDropIntro.active = true;
+  robberDropIntro.t = 0;
+  robberDropIntro.targetY = robberAnim.baseY ?? robberAnim.mesh.position.y;
+  robberAnim.mesh.position.y = 15;
+  robberAnim.mesh.visible = true;
+}
+
+function robberVoVolume() {
+  if (!robberAnim.mesh) return 0;
+  const dist = camera.position.distanceTo(robberAnim.mesh.position);
+  const MIN_DIST = 2;   // at or closer than this → full 5%
+  const MAX_DIST = 12;  // at or farther than this → silent
+  const t = Math.max(0, Math.min(1, (dist - MIN_DIST) / (MAX_DIST - MIN_DIST)));
+  return 0.05 * (1 - t * t); // quadratic falloff
+}
+
+function playRobberVoLoop() {
+  if (!_robberVoEnabled || _robberVoPlaying) return;
+  _robberVoPlaying = true;
+  const voFile = VO_FILES[Math.floor(Math.random() * VO_FILES.length)];
+  const vo = new Audio('voice over/' + encodeURIComponent(voFile));
+  vo.volume = robberVoVolume();
+  _robberVoAudio = vo;
+  const onDone = () => {
+    _robberVoPlaying = false;
+    _robberVoAudio = null;
+    if (_robberVoEnabled) {
+      const gap = 3000 + Math.random() * 5000;
+      _robberVoTimer = setTimeout(playRobberVoLoop, gap);
+    }
+  };
+  vo.addEventListener('ended', onDone, { once: true });
+  vo.addEventListener('error', onDone, { once: true });
+  vo.play().catch(onDone);
+}
+
+function spawnTokenDebris(x, baseY, z) {
+  const colors = [0xf5c842, 0xfde68a, 0xd4a000, 0xffffff, 0xe0c060];
+  for (let i = 0; i < 14; i++) {
+    const geo = new THREE.BoxGeometry(0.05 + Math.random() * 0.05, 0.04, 0.05 + Math.random() * 0.05);
+    const mat = new THREE.MeshBasicMaterial({ color: colors[Math.floor(Math.random() * colors.length)] });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x + (Math.random() - 0.5) * 0.3, baseY + 0.15, z + (Math.random() - 0.5) * 0.3);
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    scene.add(mesh);
+    const angle = (i / 14) * Math.PI * 2 + Math.random() * 0.5;
+    const speed = 1.8 + Math.random() * 2.5;
+    debrisParticles.push({
+      mesh,
+      vx: Math.cos(angle) * speed * 0.6,
+      vy: 2.5 + Math.random() * 2.5,
+      vz: Math.sin(angle) * speed * 0.6,
+      rx: (Math.random() - 0.5) * 8,
+      rz: (Math.random() - 0.5) * 8,
+      t: 0,
+      lifetime: 0.45 + Math.random() * 0.3,
+    });
+  }
+}
+
+// ─── Lava builder (called from renderBoard + whenever LAVA_PARAMS change) ────
+function buildLava(hexes) {
+  hexes = hexes ?? (gameState?.board?.hexes ?? []);
+  // Clear old meshes
+  if (boardGroup.userData.lavaMeshes) {
+    boardGroup.userData.lavaMeshes.forEach(m => {
+      boardGroup.remove(m);
+      m.geometry?.dispose();
+      if (Array.isArray(m.material)) m.material.forEach(x => x.dispose());
+      else m.material?.dispose();
+    });
+  }
+  boardGroup.userData.lavaMeshes = [];
+  boardGroup.userData.lavaSteamOrigins = [];
+
+  const peakY = tileTopY('mountains');
+
+  // Gradient alphaMap: opaque at start of tube (U=0), transparent at end (U=1)
+  const fadeCv = document.createElement('canvas'); fadeCv.width = 128; fadeCv.height = 4;
+  const fCtx = fadeCv.getContext('2d');
+  const fGrd = fCtx.createLinearGradient(0, 0, 128, 0);
+  fGrd.addColorStop(0.0, 'white');
+  fGrd.addColorStop(0.55, 'white');
+  fGrd.addColorStop(1.0, 'black');
+  fCtx.fillStyle = fGrd; fCtx.fillRect(0, 0, 128, 4);
+  const fadeTex = new THREE.CanvasTexture(fadeCv);
+
+  const lavaMat = () => new THREE.MeshStandardMaterial({
+    color: 0xff4400, emissive: 0xff2200, emissiveIntensity: 1.8,
+    roughness: 0.55, metalness: 0.1,
+    transparent: true, alphaMap: fadeTex, depthWrite: false,
+  });
+
+  // Single global direction so all mountain tiles look identical
+  const angle = LAVA_PARAMS.riverRotation;
+  const ca = Math.cos(angle), sa = Math.sin(angle);
+
+  // Tilt rotation (pitch) in the vertical plane of flow
+  const cosT = Math.cos(LAVA_PARAMS.riverTilt), sinT = Math.sin(LAVA_PARAMS.riverTilt);
+  // Base path: [xzDist, yDist] pairs — tilt rotates these in the (xz, y) plane
+  const basePts = [[0.08, 0.02], [0.22, -0.12], [0.40, -0.28], [0.60, -0.44], [0.78, -0.58]];
+  function tiltPt(xzD, yD) {
+    return { xz: xzD * cosT - yD * sinT, y: xzD * sinT + yD * cosT };
+  }
+
+  // Only the currently erupting tile gets lava
+  hexes.filter(h => h.type === 'mountains' && h.id === _lavaEruption.activeTileId).forEach(hex => {
+    // ── River ──────────────────────────────────────────────────────────────────
+    if (LAVA_PARAMS.riverEnabled > 0.5) {
+      const rx = LAVA_PARAMS.riverX, ry = LAVA_PARAMS.riverY, rz = LAVA_PARAMS.riverZ;
+      const pts = basePts.map(([xzD, yD]) => {
+        const tp = tiltPt(xzD, yD);
+        return new THREE.Vector3(hex.x + ca * tp.xz + rx, peakY + tp.y + ry, hex.z + sa * tp.xz + rz);
+      });
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const radius = 0.052 * LAVA_PARAMS.riverScale;
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, radius, 7, false), lavaMat());
+      tube.userData = { hexId: hex.id, isLava: true, lavaKind: 'river',
+        lavaPhase: (hex.id * 1.618) % (Math.PI * 2), _lavaBaseY: 0 };
+      boardGroup.add(tube);
+      boardGroup.userData.lavaMeshes.push(tube);
+
+      // Steam origin = tip of river (where lava hits the tile edge / "ocean")
+      const tip = pts[pts.length - 1];
+      boardGroup.userData.lavaSteamOrigins.push({ x: tip.x, y: tip.y, z: tip.z });
+    }
+
+    // ── Ball ───────────────────────────────────────────────────────────────────
+    if (LAVA_PARAMS.ballEnabled > 0.5) {
+      const bx = hex.x + ca * 0.08 + LAVA_PARAMS.ballX;
+      const by = peakY + LAVA_PARAMS.ballY;
+      const bz = hex.z + sa * 0.08 + LAVA_PARAMS.ballZ;
+      const bRadius = 0.09 * LAVA_PARAMS.ballScale;
+      const blob = new THREE.Mesh(new THREE.SphereGeometry(bRadius, 9, 7), lavaMat());
+      blob.scale.y = LAVA_PARAMS.ballScaleY;
+      blob.position.set(bx, by, bz);
+      blob.userData = { hexId: hex.id, isLava: true, lavaKind: 'ball',
+        lavaPhase: ((hex.id * 3.14) % (Math.PI * 2)) + 1.2, _lavaBaseY: by };
+      boardGroup.add(blob);
+      boardGroup.userData.lavaMeshes.push(blob);
+    }
+  });
 }
 
 function spawnWaterRing(x, z, color = 0x90ecff) {
@@ -2159,13 +2687,21 @@ function renderBuildings(state) {
         robberGroup.add(ring);
       }
       robberGroup.add(robberMesh);
+      // Keep hidden if intro hasn't started the drop yet
+      if (tileIntro.active || tokenIntro.active || (!robberDropIntro.active && !tokenIntro.done)) {
+        robberMesh.visible = false;
+      }
     }
   }
 
   // Detect hex change → start arc movement animation
   if (hexChanged && robberAnim.mesh && robberHex) {
     const startPos = robberAnim.mesh.position;
-    const endGroundY = tileTopY(robberHex.type === 'desert' ? 'fields' : robberHex.type) + 0.065;
+    const _rRefType = robberHex.type === 'desert' ? 'desert' : robberHex.type;
+    const _rNumYOff = NUMBER_Y_OFFSET[_rRefType] ?? 0;
+    const endGroundY = robberHex.number
+      ? tileTopY(_rRefType) + 0.025 + _rNumYOff + 0.02 - (robberAnim.mesh ? new THREE.Box3().setFromObject(robberAnim.mesh).min.y : 0)
+      : tileTopY(_rRefType) - (robberAnim.mesh ? new THREE.Box3().setFromObject(robberAnim.mesh).min.y : 0);
     robberMove.startX = startPos.x; robberMove.startZ = startPos.z;
     robberMove.endX = robberHex.x; robberMove.endZ = robberHex.z; robberMove.endY = endGroundY;
     robberMove.t = 0; robberMove.active = true;
@@ -2472,11 +3008,12 @@ renderer.domElement.addEventListener('click', e => {
       }, hitMesh);
       return;
     }
-    const label = buildMode==='settlement' ? 'Place tower here?' : 'Upgrade to castle?';
+    const capturedMode = buildMode;
+    const label = capturedMode==='settlement' ? 'Place tower here?' : 'Upgrade to castle?';
     const vid = ud.vertexId;
     showBuildConfirm(label, () => {
-      if (buildMode==='settlement') { socket.emit('placeSettlement',{vertexId:vid}); addTimerBonus(15); }
-      else if (buildMode==='city')  { socket.emit('buildCity',{vertexId:vid}); addTimerBonus(15); }
+      if (capturedMode==='settlement') { socket.emit('placeSettlement',{vertexId:vid}); addTimerBonus(15); }
+      else if (capturedMode==='city')  { socket.emit('buildCity',{vertexId:vid}); addTimerBonus(15); }
     }, hitMesh);
   } else if (ud.type==='edgeMarker') {
     const eid = ud.edgeId;
@@ -2636,7 +3173,9 @@ function updateTimerDisplay() {
       const curr = gameState.players[gameState.currentPlayerIndex];
       const isMyTurn = curr?.id === myId;
       const robberIsMe = gameState.status === 'robber' && gameState.robbingPlayer === myId;
-      if (isMyTurn || robberIsMe) socket.emit('forceEndTurn');
+      // Also emit when it's a bot's turn so the server can unstick it
+      const isBotTurn = curr && curr.id !== myId && curr.id?.startsWith('bot_');
+      if (isMyTurn || robberIsMe || isBotTurn) socket.emit('forceEndTurn');
     }
   }
 }
@@ -2654,7 +3193,8 @@ function updateUI(state) {
 
   // Auto-roll countdown: start when it becomes our turn to roll, stop otherwise
   const needsRoll = isMyTurn && isPlaying && !state.diceRolled;
-  if (needsRoll && _autoRollStart === null) {
+  if (!needsRoll) _rollPending = false; // server confirmed roll (or turn changed)
+  if (needsRoll && _autoRollStart === null && !_rollPending) {
     startAutoRoll();
   } else if (!needsRoll && _autoRollStart !== null) {
     stopAutoRoll();
@@ -2756,7 +3296,7 @@ function updateMainAction(state, isMyTurn, isSetup, isRobber, isPlaying, me) {
     btn.style.background = '#e74c3c';
     btn.style.fontSize = '2.2rem';
     btn.style.letterSpacing = '0';
-    btn.onclick = () => { stopAutoRoll(); socket.emit('rollDice'); addTimerBonus(15); };
+    btn.onclick = () => { stopAutoRoll(); _rollPending = true; socket.emit('rollDice'); addTimerBonus(15); };
   } else if (isPlaying && state.diceRolled) {
     const fr = me?.freeRoads||0;
     if (fr > 0) {
@@ -2766,7 +3306,12 @@ function updateMainAction(state, isMyTurn, isSetup, isRobber, isPlaying, me) {
     } else {
       btn.textContent = 'End Turn';
       btn.style.background = '#2980b9';
-      btn.onclick = () => { exitBuildMode(); socket.emit('endTurn'); };
+      btn.onclick = () => {
+        exitBuildMode();
+        const s = new Audio('sound effects/Marcello Del Monaco - Sci Craft Game - Menu Button.aac');
+        s.volume = sfxVol(); s.play().catch(() => {});
+        socket.emit('endTurn');
+      };
     }
   } else {
     btn.textContent = '—';
@@ -2810,7 +3355,7 @@ function updateMobilePlayerCards(state) {
     const isSelf = p.id === myId;
     const totalRes = Object.values(p.resources||{}).reduce((a,b)=>a+b,0);
     const devCount = (p.devCards||[]).filter(c=>!c.played&&c.type!=='vp').length;
-    const avatarChar = p.isBot ? '🤖' : p.name[0].toUpperCase();
+    const avatarChar = avatarHtml(p.avatar, p.name, p.isBot, p.color);
     const card = document.createElement('div');
     card.className = 'mob-player-card' + (isActive?' active-turn':'') + (isSelf?' mob-self-card':'');
     const tc = colorTextClass(p.color);
@@ -2885,7 +3430,7 @@ function updatePlayersList(state) {
     const totalRes = Object.values(p.resources||{}).reduce((a,b)=>a+b,0);
     const devCount = (p.devCards||[]).filter(c=>!c.played&&c.type!=='vp').length;
     const isActive = i === state.currentPlayerIndex;
-    const avatarContent = p.isBot ? '🤖' : p.name[0].toUpperCase();
+    const avatarContent = avatarHtml(p.avatar, p.name, p.isBot, p.color);
     const resChips = Array(Math.min(totalRes,12)).fill(0).map(()=>`<div class="card-chip res">?</div>`).join('')
                    + (totalRes>12 ? `<div class="card-chip-more">+${totalRes-12}</div>` : '');
     const devChips = Array(devCount).fill(0).map(()=>`<div class="card-chip dev">D</div>`).join('');
@@ -2975,7 +3520,7 @@ function showPlayerMenu(p, anchorEl) {
 function updateSelfPlayer(state, me) {
   const el = document.getElementById('selfPlayerSection');
   if (!el || !me) return;
-  const initial = me.name[0].toUpperCase();
+  const initial = avatarHtml(me.avatar, me.name, false, me.color);
   const curr = state.players[state.currentPlayerIndex];
   const isActive = curr?.id === myId;
   const resHtml = Object.entries(RES_INFO).map(([r,{icon}]) =>
@@ -3004,9 +3549,13 @@ function updateSelfPlayer(state, me) {
 function updatePieces(state, me) {
   const el = document.getElementById('piecesRemaining');
   if (!el || !me) return;
-  const roadsLeft = 15 - (me.roads||0);
-  const settlesLeft = 5 - (me.settlements||0) - (me.cities||0);
-  const citiesLeft = 4 - (me.cities||0);
+  const pid = me.id;
+  const roadsUsed = state.board ? state.board.edges.filter(e => e.road?.playerId === pid).length : 0;
+  const settlesUsed = state.board ? state.board.vertices.filter(v => v.building?.playerId === pid && v.building.type === 'settlement').length : 0;
+  const citiesUsed = state.board ? state.board.vertices.filter(v => v.building?.playerId === pid && v.building.type === 'city').length : 0;
+  const roadsLeft = 15 - roadsUsed;
+  const settlesLeft = 5 - settlesUsed - citiesUsed;
+  const citiesLeft = 4 - citiesUsed;
   el.innerHTML = `
     <div class="piece-chip">🛣 <span>${roadsLeft}</span></div>
     <div class="piece-chip">🏠 <span>${settlesLeft}</span></div>
@@ -3353,6 +3902,8 @@ socket.on('lobbyUpdate', data => {
   // Sync settings checkboxes
   const chk = document.getElementById('chkHideBankCards');
   if (chk) chk.checked = !!(data.settings?.hideBankCards);
+  const chkPrv = document.getElementById('chkPrivate');
+  if (chkPrv) chkPrv.checked = !!data.isPrivate;
 });
 
 document.getElementById('btnAddBot').addEventListener('click', () => {
@@ -3484,8 +4035,11 @@ socket.on('gameUpdate', state => {
       // Pre-render board silently in the background while players wait in lobby.
       // _introDone stays true so renderBoard builds the scene without scheduling intro.
       _introDone = true;
+    } else if (state.status === 'playing' || state.status === 'game_over' || state.status === 'robber' || state.status === 'discarding') {
+      _introDone = true; // rejoining a game already in progress — skip intro
+      controls.enabled = true;
     } else {
-      _introDone = false; // allow intro on fresh game load / rejoin running game
+      _introDone = false; // fresh game start — play intro
     }
     renderBoard(state);
     fadeOutLobbyScreens(() => {
@@ -3561,10 +4115,34 @@ socket.on('gameUpdate', state => {
   if (state.status==='game_over'&&state.winner&&gameState?.status!=='game_over') {
     try { localStorage.removeItem('ti_roomId'); localStorage.removeItem('ti_name'); } catch(e) {}
     const w = state.players.find(p=>p.id===state.winner);
-    document.getElementById('gameOverTitle').textContent = state.winner===myId ? '🏆 You Win!' : `${w?.name} Wins!`;
-    document.getElementById('gameOverMsg').textContent = `Final VP: ${state.players.map(p=>`${p.name} ${p.vp}`).join(', ')}`;
+    const isWinner = state.winner === myId;
+    document.getElementById('gameOverTitle').textContent = isWinner ? '🏆 You Win!' : `${w?.name} Wins!`;
+    document.getElementById('gameOverMsg').textContent = isWinner ? 'Congratulations!' : 'Better luck next time!';
+    // Build stats table
+    const tbody = document.getElementById('gameOverStatsBody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      const sorted = [...state.players].sort((a, b) => (b.vp ?? 0) - (a.vp ?? 0));
+      for (const p of sorted) {
+        const isW = p.id === state.winner;
+        const badges = [
+          p.largestArmy ? '<span title="Largest Army">⚔️</span>' : '',
+          p.longestRoad ? '<span title="Longest Road">🛣️</span>' : '',
+        ].filter(Boolean).join(' ');
+        const tr = document.createElement('tr');
+        tr.style.cssText = isW ? 'background:rgba(255,215,0,.12);font-weight:700' : '';
+        tr.innerHTML = `
+          <td style="padding:6px 8px">${isW ? '🏆 ' : ''}${p.name}</td>
+          <td style="padding:6px 8px;text-align:center">${p.vp ?? 0}</td>
+          <td style="padding:6px 8px;text-align:center">${p.knightsPlayed ?? 0}</td>
+          <td style="padding:6px 8px;text-align:center">${p.longestRoadLength ?? 0}</td>
+          <td style="padding:6px 8px;text-align:center">${badges || '—'}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
     document.getElementById('gameOverBanner').style.display='flex';
-    if (state.winner === myId) {
+    if (isWinner) {
       const win = new Audio('sound effects/Game Win Short Chime Sweep.aac');
       win.volume = sfxVol(); win.play().catch(() => {});
     } else {
@@ -3715,7 +4293,7 @@ socket.on('lobbyList', list => {
       document.getElementById('lobbyError').textContent = 'Joining…';
       document.getElementById('btnJoin').disabled = true;
       _joiningRoom = true;
-      socket.emit('joinRoom', { roomId: l.roomId, name });
+      socket.emit('joinRoom', { roomId: l.roomId, name, avatar: _playerAvatar });
     });
     container.appendChild(div);
   });
@@ -3729,18 +4307,23 @@ document.getElementById('btnRejoin').addEventListener('click', () => {
   document.getElementById('playerName').value = _rejoinData.name;
   document.getElementById('lobbyError').textContent = 'Rejoining…';
   _joiningRoom = true;
-  socket.emit('joinRoom', { roomId: _rejoinData.roomId, name: _rejoinData.name });
+  socket.emit('joinRoom', { roomId: _rejoinData.roomId, name: _rejoinData.name, avatar: _playerAvatar });
 });
 
 // Lobby
 document.getElementById('btnCreate').addEventListener('click', () => {
   const name = document.getElementById('playerName').value.trim();
   if (!name) { document.getElementById('lobbyError').textContent='Enter your name first'; return; }
-  const isPrivate = document.getElementById('chkPrivate')?.checked ?? false;
   document.getElementById('lobbyError').textContent='';
-  socket.emit('createRoom', { name, isPrivate });
+  try { localStorage.setItem('ti_playerName', name); } catch(e) {}
+  socket.emit('createRoom', { name, isPrivate: false, avatar: _playerAvatar });
   document.getElementById('lobby').style.display='none';
   document.getElementById('waiting').style.display='flex';
+});
+
+// Private toggle in waiting room
+document.getElementById('chkPrivate')?.addEventListener('change', function () {
+  socket.emit('setPrivate', { isPrivate: this.checked });
 });
 let _joiningRoom = false;
 document.getElementById('btnJoin').addEventListener('click', () => {
@@ -3751,7 +4334,8 @@ document.getElementById('btnJoin').addEventListener('click', () => {
   document.getElementById('lobbyError').textContent='Joining…';
   document.getElementById('btnJoin').disabled = true;
   _joiningRoom = true;
-  socket.emit('joinRoom',{roomId:code, name});
+  try { localStorage.setItem('ti_playerName', name); } catch(e) {}
+  socket.emit('joinRoom', { roomId: code, name, avatar: _playerAvatar });
 });
 document.getElementById('btnStart').addEventListener('click', () => socket.emit('startGame'));
 document.getElementById('btnLeaveWaiting').addEventListener('click', () => {
@@ -3827,11 +4411,8 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
   logOverlay?.addEventListener('click', e => {
     if (e.target === logOverlay) logOverlay.classList.remove('open');
   });
-  // Volume overlay
+  // Volume overlay (still accessible via settings; mBtnVol removed from top bar)
   const volOverlay = document.getElementById('mobileVolOverlay');
-  document.getElementById('mBtnVol')?.addEventListener('click', () => {
-    volOverlay?.classList.toggle('open');
-  });
   document.getElementById('mBtnVolClose')?.addEventListener('click', () => {
     volOverlay?.classList.remove('open');
   });
@@ -3889,6 +4470,106 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
     () => AUDIO.voVolume, v => { AUDIO.voVolume = v; },
     () => {}
   );
+
+  // ── Camera preset popup (mobile button + desktop left-bar button) ──────────
+  const cameraPopup = document.getElementById('cameraPresetPopup');
+  const cameraInner = document.getElementById('cameraPresetInner');
+
+  function buildCameraPopup(anchorEl) {
+    if (!cameraPopup || !cameraInner) return;
+    // Populate buttons once
+    if (!cameraInner.hasChildNodes()) {
+      Object.keys(CAMERA_PRESETS).forEach(name => {
+        const btn = document.createElement('button');
+        btn.className = 'cam-preset-btn';
+        btn.textContent = name;
+        btn.addEventListener('click', () => {
+          applyCameraPreset(name);
+          cameraPopup.style.display = 'none';
+        });
+        cameraInner.appendChild(btn);
+      });
+    }
+    // Position near anchor
+    if (anchorEl) {
+      const rect = anchorEl.getBoundingClientRect();
+      cameraPopup.style.right = (window.innerWidth - rect.left + 6) + 'px';
+      cameraPopup.style.top = rect.top + 'px';
+      cameraPopup.style.left = '';
+    } else {
+      cameraPopup.style.right = '60px';
+      cameraPopup.style.top = '50%';
+      cameraPopup.style.left = '';
+    }
+    cameraPopup.style.display = cameraPopup.style.display === 'block' ? 'none' : 'block';
+  }
+
+  document.getElementById('mBtnCamera')?.addEventListener('click', e => {
+    buildCameraPopup(e.currentTarget);
+  });
+  document.getElementById('btnCameraDesktop')?.addEventListener('click', e => {
+    buildCameraPopup(e.currentTarget);
+  });
+  document.addEventListener('click', e => {
+    if (!cameraPopup || cameraPopup.style.display !== 'block') return;
+    if (!cameraPopup.contains(e.target) &&
+        e.target.id !== 'mBtnCamera' && e.target.id !== 'btnCameraDesktop') {
+      cameraPopup.style.display = 'none';
+    }
+  });
+
+  // ── Mic / voice overlay ────────────────────────────────────────────────────
+  const micOverlay = document.getElementById('micVoiceOverlay');
+
+  function openMicOverlay() {
+    if (!micOverlay) return;
+    // Populate player list
+    const list = document.getElementById('voicePlayerList');
+    if (list && gameState) {
+      list.innerHTML = '';
+      gameState.players.forEach(p => {
+        if (p.id === myId) return;
+        const row = document.createElement('div');
+        row.className = 'voice-player-row';
+        const muted = voiceChat?.peers?.[p.id]?.muted ?? false;
+        row.innerHTML = `<span class="voice-player-name">${p.name}</span>
+          <button class="voice-mute-btn ${muted ? 'off' : 'on'}" data-pid="${p.id}">${muted ? '🔇' : '🔊'}</button>`;
+        list.appendChild(row);
+      });
+      list.querySelectorAll('.voice-mute-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const pid = btn.dataset.pid;
+          const nowMuted = !(btn.classList.contains('off'));
+          voiceChat.mutePeer(pid, nowMuted);
+          btn.classList.toggle('off', nowMuted);
+          btn.classList.toggle('on', !nowMuted);
+          btn.textContent = nowMuted ? '🔇' : '🔊';
+        });
+      });
+    }
+    micOverlay.style.display = 'flex';
+  }
+
+  document.getElementById('mBtnMic')?.addEventListener('click', openMicOverlay);
+  document.getElementById('mBtnMicClose')?.addEventListener('click', () => {
+    if (micOverlay) micOverlay.style.display = 'none';
+  });
+  micOverlay?.addEventListener('click', e => {
+    if (e.target === micOverlay) micOverlay.style.display = 'none';
+  });
+
+  // Mic toggle button inside overlay
+  document.getElementById('micToggleBtn')?.addEventListener('click', async function () {
+    if (!voiceChat.micOn) {
+      this.textContent = '⏳';
+      await voiceChat.enableMic();
+      if (voiceChat.micOn) { this.textContent = '🎤'; this.className = 'mic-btn on'; }
+      else { this.textContent = '🚫'; this.className = 'mic-btn off'; }
+    } else {
+      voiceChat.disableMic();
+      this.textContent = '🎤 Off'; this.className = 'mic-btn off';
+    }
+  });
 })();
 
 // Settings panel — password protected, desktop only
@@ -3982,6 +4663,12 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
       } else if (param === 'sky') {
         SKY_PARAMS[type] = v;
         return; // synced every frame in animate loop
+      } else if (param === 'lava') {
+        LAVA_PARAMS[type] = v;
+        // steamAmount/steamGravity/steamOpacity are live; geometry params need rebuild
+        if (type === 'steamAmount' || type === 'steamGravity' || type === 'steamOpacity') return;
+        if (gameState) buildLava(gameState.board.hexes);
+        return;
       } else if (param === 'cloud') {
         CLOUD_PARAMS[type] = v;
         // brightness/opacity/speed are live; amount/height/spread/scale/enabled need re-render
@@ -4010,6 +4697,10 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         else if (type === 'token3dSilver') SCENE_PARAMS.token3dSilver = v;
         else if (type === 'token3dRingColor') SCENE_PARAMS.token3dRingColor = v;
         if (gameState) renderBoard(gameState);
+        return;
+      } else if (param === 'cameraZoom') {
+        camera.zoom = v;
+        camera.updateProjectionMatrix();
         return;
       } else if (param === 'bank') {
         BANK_PARAMS[type] = v;
@@ -4044,6 +4735,7 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         camelList.forEach(s => {
           if (type === 'camelScale') s.mesh.scale.setScalar(SCENE_PARAMS.camelScale / s.modelMaxDim);
           s.mesh.position.y = s.surfaceY + SCENE_PARAMS.camelY;
+          s.mesh.userData.baseY = s.surfaceY + SCENE_PARAMS.camelY;
         });
         return;
       } else if (param === 'scene' && (type === 'settlementY' || type === 'castleY' || type === 'castleSize' || type === 'roadY')) {
@@ -4243,8 +4935,10 @@ function updateResourceBar(me, state) {
   }
   bar.style.display = 'flex';
   bar.innerHTML = '';
+  let total = 0;
   ['wood','brick','sheep','wheat','ore'].forEach(r => {
     const n = me.resources[r] || 0;
+    total += n;
     const chip = document.createElement('div');
     chip.className = 'res-bar-chip';
     chip.title = `Click to give ${RES_EMOJI[r]} in trade`;
@@ -4269,6 +4963,11 @@ function updateResourceBar(me, state) {
     });
     bar.appendChild(chip);
   });
+  const totalBadge = document.createElement('div');
+  totalBadge.className = 'res-bar-total';
+  totalBadge.title = 'Total cards in hand';
+  totalBadge.textContent = total;
+  bar.appendChild(totalBadge);
 }
 
 function updateMyResourcesHand(state, me) {
@@ -4748,7 +5447,7 @@ document.getElementById('btnMicToggle').addEventListener('click', async () => {
 });
 
 // ─── Music player ────────────────────────────────────────────────────────────
-AUDIO.musicVolume = 0.08;
+AUDIO.musicVolume = 0.03;
 AUDIO.musicMuted  = false;
 {
   const TRACKS = [
@@ -4945,7 +5644,7 @@ resize();
 let t = 0;
 // ─── Animal wander helpers (module-level constants, reused every frame) ───────
 const _HEX_WANDER_MAX   = 0.48 * HEX_R;
-const _HEX_WANDER_MIN   = HEX_R * 0.27;
+const _HEX_WANDER_MIN   = HEX_R * 0.27 * 1.20;
 const _HEX_WANDER_RANGE = _HEX_WANDER_MAX - _HEX_WANDER_MIN;
 const _ARRIVE_SQ        = 0.0025; // (0.05)^2 — squared arrival threshold
 
@@ -5112,19 +5811,136 @@ function animate() {
     }
   }
 
-  // Camera intro: start when tiles collide (shakeTriggered at ~85% of tile intro), 5s ease-in-out to zoomed top-down
-  if (cameraIntro.waiting && tileIntro.shakeTriggered) {
-    cameraIntro.waiting = false;
-    cameraIntro.active = true;
-    cameraIntro.t = 0;
+  // ── Token intro: tokens fall from sky in spiral order ────────────────────────
+  if (tokenIntro.active) {
+    tokenIntro.t += delta;
+    const FALL_DUR = 0.4;
+    for (const entry of tokenIntro.scheduled) {
+      if (entry.landed) continue;
+      const ft = tokenIntro.t - entry.startT;
+      if (ft < 0) continue;
+      // Make visible the moment the fall starts
+      if (!entry.shown) { entry.shown = true; entry.tokenMeshes.forEach(m => { m.visible = true; }); }
+      const fp = Math.min(1, ft / FALL_DUR);
+      const ease = fp * fp; // accelerate downward
+      entry.tokenMeshes.forEach((m, i) => {
+        m.position.y = 15 + (entry.baseYs[i] - 15) * ease;
+      });
+      if (fp >= 1) {
+        entry.landed = true;
+        entry.tokenMeshes.forEach((m, i) => { m.position.y = entry.baseYs[i]; });
+        // First landing plays sound effect
+        if (!tokenIntro._soundPlayed) {
+          tokenIntro._soundPlayed = true;
+          const snd = new Audio('sound effects/falling tokens.mp3');
+          snd.volume = 0.7;
+          snd.play().catch(() => {});
+        }
+        // Debris particles from impact point
+        if (entry.tokenMeshes.length > 0) {
+          const m0 = entry.tokenMeshes[0];
+          spawnTokenDebris(m0.position.x, entry.baseYs[0], m0.position.z);
+        }
+        // Tile wiggle on landing
+        tokenIntro.landings.push({
+          tileMeshes: entry.tileMeshes,
+          baseYs: entry.tileMeshes.map(m => m.userData.baseY ?? m.position.y),
+          t: 0,
+        });
+      }
+    }
+    // Animate tile wiggles
+    tokenIntro.landings = tokenIntro.landings.filter(land => {
+      land.t += delta;
+      const wiggle = Math.sin(land.t * 28) * 0.1 * Math.exp(-land.t * 11);
+      land.tileMeshes.forEach((m, i) => { m.position.y = land.baseYs[i] + wiggle; });
+      return land.t < 0.6;
+    });
+    if (tokenIntro.scheduled.length > 0 && tokenIntro.scheduled.every(e => e.landed)) {
+      tokenIntro.active = false;
+      tokenIntro.done = true;
+      // Snap all tile wiggles
+      for (const land of tokenIntro.landings) {
+        land.tileMeshes.forEach((m, i) => { m.position.y = land.baseYs[i]; });
+      }
+      tokenIntro.landings = [];
+      startRobberDrop();
+    }
   }
+
+  // ── Robber drop from sky ──────────────────────────────────────────────────────
+  if (robberDropIntro.active && robberAnim.mesh) {
+    robberDropIntro.t += delta;
+    const fp = Math.min(1, robberDropIntro.t / robberDropIntro.duration);
+    const ease = fp * fp;
+    robberAnim.mesh.position.y = 15 + (robberDropIntro.targetY - 15) * ease;
+    if (fp >= 1) {
+      robberDropIntro.active = false;
+      robberAnim.mesh.position.y = robberDropIntro.targetY;
+      // Play random voice-over then start ports + camera
+      const voFile = VO_FILES[Math.floor(Math.random() * VO_FILES.length)];
+      const vo = new Audio('voice over/' + encodeURIComponent(voFile));
+      vo.volume = 0.85;
+      const afterVO = () => {
+        boardGroup.userData.portRise = { t: 0, duration: 1.8 };
+        cameraIntro.active = true;
+        cameraIntro.t = 0;
+        setTimeout(() => {
+          const whoosh = new Audio('sound effects/' + encodeURIComponent('Unrealsfx - Candy Game Vol 1 - Bubbly Water Whoosh.aac'));
+          whoosh.volume = Math.max(sfxVol(), 0.5);
+          whoosh.play().catch(e => console.warn('whoosh failed:', e));
+        }, 50);
+      };
+      vo.addEventListener('ended', afterVO, { once: true });
+      vo.play().catch(afterVO); // fallback if autoplay blocked
+    }
+  }
+  // ── Debris particles ─────────────────────────────────────────────────────────
+  for (let i = debrisParticles.length - 1; i >= 0; i--) {
+    const p = debrisParticles[i];
+    p.t += delta;
+    if (p.t >= p.lifetime) {
+      scene.remove(p.mesh);
+      p.mesh.geometry.dispose();
+      p.mesh.material.dispose();
+      debrisParticles.splice(i, 1);
+      continue;
+    }
+    const gravity = 9.8;
+    p.mesh.position.x += p.vx * delta;
+    p.mesh.position.y += (p.vy - gravity * p.t) * delta;
+    p.mesh.position.z += p.vz * delta;
+    p.mesh.rotation.x += p.rx * delta;
+    p.mesh.rotation.z += p.rz * delta;
+    const fade = 1 - p.t / p.lifetime;
+    p.mesh.material.opacity = fade;
+    p.mesh.material.transparent = true;
+  }
+
+  // ── Robber ambient VO loop ────────────────────────────────────────────────────
+  if (robberAnim.mesh && tokenIntro.done && !robberDropIntro.active) {
+    const dist = camera.position.distanceTo(robberAnim.mesh.position);
+    const closeEnough = dist < 12;
+    if (closeEnough && !_robberVoEnabled) {
+      _robberVoEnabled = true;
+      playRobberVoLoop();
+    } else if (!closeEnough && _robberVoEnabled) {
+      _robberVoEnabled = false;
+      if (_robberVoTimer) { clearTimeout(_robberVoTimer); _robberVoTimer = null; }
+      _robberVoPlaying = false;
+      if (_robberVoAudio) { _robberVoAudio.pause(); _robberVoAudio = null; }
+    }
+    // Live volume update for the currently playing clip
+    if (_robberVoAudio) _robberVoAudio.volume = robberVoVolume();
+  }
+
   if (cameraIntro.active) {
     cameraIntro.t += delta;
     const cp = Math.min(1, cameraIntro.t / cameraIntro.duration);
     const ce = cp * cp * (3 - 2 * cp); // smooth step (ease-in-out)
     camera.position.x = 0;
-    camera.position.y = 8 + ce * (16 - 8);
-    camera.position.z = 19 + ce * (0.1 - 19);
+    camera.position.y = 5.5 + ce * (16 - 5.5);
+    camera.position.z = 13 + ce * (0.1 - 13);
     camera.lookAt(0, 0, 0);
     if (cp >= 1) {
       cameraIntro.active = false;
@@ -5133,6 +5949,10 @@ function animate() {
       controls.target.set(0, 0, 0);
       controls.update();
       bloom.strength = 0.0;
+      const startUpSnd = new Audio('sound effects/Bjorn Lynne - Multimedia - Game Console Start Up.aac');
+      startUpSnd.volume = sfxVol();
+      startUpSnd.play().catch(() => {});
+      socket.emit('introFinished');
     }
   }
 
@@ -5252,8 +6072,8 @@ function animate() {
           child.position.set(child.userData.baseX, child.userData.baseY, child.userData.baseZ);
         }
       });
-      // Begin port + boat + vertex marker rise from below water
-      boardGroup.userData.portRise = { t: 0, duration: 1.8 };
+      // Begin token fall sequence (ports + robber + camera follow after)
+      startTokenIntro();
     }
   }
 
@@ -5319,12 +6139,14 @@ function animate() {
     }
   }
 
-  // Tile bobbing — independent per-hex sine wave (skip during intro)
-  if (BOB_PARAMS.enabled && !tileIntro.active) {
+  // Tile bobbing — independent per-hex sine wave (skip during intro sequences)
+  if (BOB_PARAMS.enabled && !tileIntro.active && !tokenIntro.active && !robberDropIntro.active) {
     const seenHids = new Set();
     boardGroup.children.forEach(child => {
       const hid = child.userData.hexId ?? child.userData.tokenHexId;
       if (hid === undefined || child.userData.baseY === undefined) return;
+      if (child.userData.isCamel) return; // camels have their own Y animation in wanderAnimal
+      if (child.userData.isLava) return;  // lava meshes handle their own bobbing
       const phase = tileBobPhases.get(hid) ?? 0;
       child.position.y = child.userData.baseY + Math.sin(t * BOB_PARAMS.speed + phase) * BOB_PARAMS.amp;
       // Spawn water ring when tile kisses the water surface (downstroke near minimum)
@@ -5615,6 +6437,94 @@ function animate() {
   }
 
   // Mountain hex clouds — gentle bob, sticky to tile Y
+  // ── Lava pulse animation ─────────────────────────────────────────────────────
+  // ── Lava pulse + steam ───────────────────────────────────────────────────────
+  if (boardGroup.userData.lavaMeshes) {
+    boardGroup.userData.lavaMeshes.forEach(m => {
+      const phase = m.userData.lavaPhase ?? 0;
+      const pulse = Math.sin(t * 3.1 + phase);
+      const intensity = 1.4 + 0.7 * pulse;
+      m.material.emissiveIntensity = intensity;
+      const g = 0.18 + 0.18 * Math.max(0, pulse);
+      m.material.color.setRGB(1.0, g, 0);
+      m.material.emissive.setRGB(0.9, g * 0.4, 0);
+      if (BOB_PARAMS.enabled && !tileIntro.active && m.userData.hexId !== undefined && m.userData._lavaBaseY !== undefined) {
+        const bobPhase = tileBobPhases.get(m.userData.hexId) ?? 0;
+        m.position.y = m.userData._lavaBaseY + Math.sin(t * BOB_PARAMS.speed + bobPhase) * BOB_PARAMS.amp;
+      }
+    });
+
+    // ── Eruption timer ────────────────────────────────────────────────────────
+    if (_lavaEruption.activeTileId !== null) {
+      _lavaEruption.elapsed += delta;
+      if (_lavaEruption.elapsed >= _lavaEruption.duration) {
+        _stopLavaEruption();
+      }
+    } else if (gameState?.board?.hexes) {
+      _lavaEruption.nextIn -= delta;
+      if (_lavaEruption.nextIn <= 0) {
+        _startLavaEruption(gameState.board.hexes);
+      }
+    }
+
+    // Steam spawning from lava-meets-edge origins
+    const origins = boardGroup.userData.lavaSteamOrigins ?? [];
+    if (origins.length && LAVA_PARAMS.steamAmount > 0) {
+      for (const o of origins) {
+        if (Math.random() < LAVA_PARAMS.steamAmount * delta) {
+          const spriteMat = new THREE.SpriteMaterial({
+            map: _steamCircleTex,
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+          });
+          const sprite = new THREE.Sprite(spriteMat);
+          const spread = 0.15;
+          sprite.position.set(
+            o.x + (Math.random() - 0.5) * spread,
+            o.y,
+            o.z + (Math.random() - 0.5) * spread
+          );
+          sprite.scale.setScalar((0.18 + Math.random() * 0.14) * LAVA_PARAMS.steamSize);
+          scene.add(sprite);
+          LAVA_STEAM.push({
+            sprite,
+            vy: 0.3 + Math.random() * 0.25,
+            vx: (Math.random() - 0.5) * 0.04,
+            vz: (Math.random() - 0.5) * 0.04,
+            t: 0,
+            life: 1.8 + Math.random() * 1.4,
+          });
+        }
+      }
+    }
+  }
+
+  // Steam particle update
+  for (let i = LAVA_STEAM.length - 1; i >= 0; i--) {
+    const p = LAVA_STEAM[i];
+    p.t += delta;
+    if (p.t >= p.life) {
+      scene.remove(p.sprite);
+      p.sprite.material.dispose();
+      LAVA_STEAM.splice(i, 1);
+      continue;
+    }
+    const prog = p.t / p.life;
+    // Rise with configurable upward gravity
+    p.vy += LAVA_PARAMS.steamGravity * delta; // negative gravity → accelerates up
+    p.sprite.position.x += p.vx * delta;
+    p.sprite.position.y -= p.vy * delta;      // subtract because gravity is negative (up)
+    p.sprite.position.z += p.vz * delta;
+    // Expand + fade: appear quickly, hold, then fade out
+    const fadeIn  = Math.min(1, prog / 0.15);
+    const fadeOut = Math.max(0, 1 - (prog - 0.6) / 0.4);
+    p.sprite.material.opacity = LAVA_PARAMS.steamOpacity * fadeIn * fadeOut;
+    p.sprite.scale.setScalar((0.18 + prog * 0.35));
+    p.sprite.material.needsUpdate = true;
+  }
+
   if (boardGroup.userData.mountainClouds) {
     boardGroup.userData.mountainClouds.forEach(cg => {
       const s = cg.userData.cloudSeed ?? 0;

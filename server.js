@@ -90,6 +90,18 @@ function hexWorldPos(q, r) {
 
 const HEX_NEIGHBORS = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
 
+// Clockwise spiral order for number placement (viewed from default camera angle)
+// Outer ring 12 tiles, clockwise starting from northernmost tile
+const OUTER_RING_CW = [
+  [0,-2],[1,-2],[2,-2],[2,-1],[2,0],[1,1],[0,2],[-1,2],[-2,2],[-2,1],[-2,0],[-1,-1]
+];
+// Inner ring 6 tiles, clockwise
+const INNER_RING_CW = [
+  [0,-1],[1,-1],[1,0],[0,1],[-1,1],[-1,0]
+];
+// Standard Catan number sequence (18 numbers for 18 non-desert tiles)
+const CATAN_NUMBER_SEQUENCE = [5,2,6,3,8,10,9,12,11,4,8,10,9,4,5,6,3,11];
+
 function hexesAdjacent(a, b) {
   return HEX_NEIGHBORS.some(([dq, dr]) => a.q + dq === b.q && a.r + dr === b.r);
 }
@@ -100,12 +112,8 @@ function numberPlacementValid(hexes) {
     for (let j = i + 1; j < numbered.length; j++) {
       if (!hexesAdjacent(numbered[i], numbered[j])) continue;
       const a = numbered[i].number, b = numbered[j].number;
-      // No two identical numbers adjacent
       if (a === b) return false;
-      // No 6 adjacent to 8 (or vice versa)
       if ((a === 6 || a === 8) && (b === 6 || b === 8)) return false;
-      // No 11 adjacent to 12 (or vice versa)
-      if ((a === 11 || a === 12) && (b === 11 || b === 12)) return false;
     }
   }
   return true;
@@ -121,16 +129,37 @@ function generateBoard() {
     return { id: i, q, r, type, x, z, number: null, hasRobber: type === 'desert' };
   });
 
-  // Shuffle numbers until placement rules are satisfied
-  let attempts = 0;
-  do {
-    const nums = shuffle([...NUMBER_TOKENS]);
+  // Spiral number placement: try all 12 clockwise starts (random order) until adjacency rules pass
+  const baseStart = Math.floor(Math.random() * 12);
+  let placed = false;
+  for (let attempt = 0; attempt < 12 && !placed; attempt++) {
+    const startOffset = (baseStart + attempt) % 12;
+    // Inner ring entry tile is geometrically adjacent to the outer ring start tile
+    const innerStart = Math.ceil(startOffset / 2) % 6;
+    const outerRotated = [...OUTER_RING_CW.slice(startOffset), ...OUTER_RING_CW.slice(0, startOffset)];
+    const innerRotated = [...INNER_RING_CW.slice(innerStart), ...INNER_RING_CW.slice(0, innerStart)];
+    const spiralOrder = [...outerRotated, ...innerRotated, [0, 0]];
+
+    baseHexes.forEach(h => { h.number = null; });
     let ni = 0;
-    baseHexes.forEach(h => { h.number = h.type === 'desert' ? null : nums[ni++]; });
-    attempts++;
-  } while (!numberPlacementValid(baseHexes) && attempts < 10000);
-  // Safety: if still invalid after exhausting attempts, log a warning
-  if (!numberPlacementValid(baseHexes)) console.warn('[board] numberPlacementValid failed after 10000 attempts');
+    for (const [q, r] of spiralOrder) {
+      const hex = baseHexes.find(h => h.q === q && h.r === r);
+      if (!hex || hex.type === 'desert') continue;
+      hex.number = CATAN_NUMBER_SEQUENCE[ni++];
+    }
+    placed = numberPlacementValid(baseHexes);
+  }
+
+  // Fallback: random shuffle if spiral couldn't satisfy rules (rare desert edge case)
+  if (!placed) {
+    let attempts = 0;
+    do {
+      const nums = shuffle([...NUMBER_TOKENS]);
+      let ni = 0;
+      baseHexes.forEach(h => { h.number = h.type === 'desert' ? null : nums[ni++]; });
+      attempts++;
+    } while (!numberPlacementValid(baseHexes) && attempts < 1000);
+  }
 
   const hexes = baseHexes;
 
@@ -228,6 +257,8 @@ function createGame(roomId) {
     largestArmyHolder: null,
     largestArmyCount: 2,       // must beat this to claim
     winner: null,
+    introFinished: false,
+    _pendingBotTimeout: null,
     log: [],
     settings: { hideBankCards: true },
     bankStock: { wood:19, brick:19, sheep:19, wheat:19, ore:19 },
@@ -519,6 +550,32 @@ function botShouldAcceptTrade(game, bot, trade) {
   return after > before;
 }
 
+function resolveBotTradeIfComplete(game, roomId, trade) {
+  const excluded = trade.excludedIds || [];
+  const nonProposers = game.players.filter(p => p.id !== trade.fromId && !excluded.includes(p.id));
+  if (!nonProposers.every(p => trade.responses[p.id])) return; // still waiting on someone
+  const proposer = game.players.find(p => p.id === trade.fromId);
+  const acceptor = nonProposers.find(p => trade.responses[p.id]?.status === 'accept');
+  if (acceptor && proposer) {
+    RESOURCES.forEach(r => {
+      proposer.resources[r] = (proposer.resources[r]||0) - (trade.offer[r]||0) + (trade.want[r]||0);
+      acceptor.resources[r]  = (acceptor.resources[r]||0)  - (trade.want[r]||0)  + (trade.offer[r]||0);
+    });
+    addLog(game, `${proposer.name} traded with ${acceptor.name}`);
+    game.pendingTrade = null;
+    broadcastState(roomId);
+    setTimeout(() => runBotTurn(roomId, 0), 600);
+  } else {
+    if (proposer) {
+      proposer.failedTrades = proposer.failedTrades || [];
+      proposer.failedTrades.push(`${JSON.stringify(trade.offer)}->${JSON.stringify(trade.want)}`);
+    }
+    game.pendingTrade = null;
+    broadcastState(roomId);
+    setTimeout(() => runBotTurn(roomId, 0), 400);
+  }
+}
+
 function scheduleBotTradeResponses(game, roomId, trade) {
   game.players.forEach(bot => {
     if (!isBotId(bot.id) || bot.id === trade.fromId) return;
@@ -531,6 +588,8 @@ function scheduleBotTradeResponses(game, roomId, trade) {
         trade.responses[bot.id] = { name: bot.name, status: 'reject' };
       }
       broadcastState(roomId);
+      // If the proposer is a bot, check if everyone has now responded and resolve
+      if (isBotId(trade.fromId)) resolveBotTradeIfComplete(g, roomId, trade);
     }, 700 + Math.random() * 500);
   });
 }
@@ -596,6 +655,16 @@ function validSetupVertices(game) {
 function maybeScheduleBot(roomId, delay = 1300) {
   const game = rooms[roomId];
   if (!game || game.winner) return;
+  // During setup phase, hold bots until all clients signal introFinished
+  if (!game.introFinished && (game.status === 'setup_forward' || game.status === 'setup_backward')) {
+    if (game._pendingBotTimeout) clearTimeout(game._pendingBotTimeout);
+    game._pendingBotTimeout = setTimeout(() => {
+      // Fallback: run bot after 30s even without introFinished signal
+      game.introFinished = true;
+      maybeScheduleBot(roomId, 500);
+    }, 30000);
+    return;
+  }
   const cur = cp(game);
   if (cur && isBotId(cur.id)) setTimeout(() => runBotTurn(roomId, 0), delay);
   else if (game.status === 'robber' && isBotId(game.robbingPlayer))
@@ -927,15 +996,17 @@ function runBotTurn(roomId, buildCount) {
 const rooms = {};
 const playerInfo = new Map(); // socketId → { roomId, isHost }
 
-function joinRoom(socket, roomId, playerName, isHost) {
+function joinRoom(socket, roomId, playerName, isHost, avatar) {
   socket.join(roomId);
   const game = rooms[roomId];
   const colorIdx = game.players.length;
   const _usedColors = new Set(game.players.map(p => p.color));
   const _availColors = PLAYER_COLORS.filter(c => !_usedColors.has(c));
   const _color = _availColors.length ? _availColors[Math.floor(Math.random() * _availColors.length)] : PLAYER_COLORS[colorIdx % PLAYER_COLORS.length];
+  // Sanitise avatar: allow emoji (≤8 chars) or data URL (cap at 80KB)
+  const _avatar = (typeof avatar === 'string' && avatar.length <= 81920) ? avatar : null;
   game.players.push({
-    id: socket.id, name: playerName,
+    id: socket.id, name: playerName, avatar: _avatar,
     color: _color, colorIndex: colorIdx,
     resources: { wood:0, sheep:0, wheat:0, brick:0, ore:0 },
     devCards: [], knightsPlayed: 0, vp: 0, freeRoads: 0
@@ -948,7 +1019,7 @@ function joinRoom(socket, roomId, playerName, isHost) {
 function broadcastLobby(roomId) {
   const game = rooms[roomId];
   io.to(roomId).emit('lobbyUpdate', {
-    players: game.players.map(p => ({ id: p.id, name: p.name, color: p.color, isBot: !!p.isBot, difficulty: p.difficulty || null })),
+    players: game.players.map(p => ({ id: p.id, name: p.name, color: p.color, isBot: !!p.isBot, difficulty: p.difficulty || null, avatar: p.avatar || null })),
     hostId: game.players[0] && game.players[0].id,
     settings: game.settings,
     isPrivate: !!game.isPrivate,
@@ -1039,24 +1110,24 @@ io.on('connection', socket => {
     broadcastLobby(info.roomId);
   });
 
-  socket.on('createRoom', ({ name, isPrivate }) => {
+  socket.on('createRoom', ({ name, isPrivate, avatar }) => {
     const roomId = Math.random().toString(36).slice(2, 8).toUpperCase();
     rooms[roomId] = createGame(roomId);
     rooms[roomId].isPrivate = !!isPrivate;
-    joinRoom(socket, roomId, name, true);
+    joinRoom(socket, roomId, name, true, avatar);
   });
 
-  socket.on('joinRoom', ({ roomId, name }) => {
+  socket.on('joinRoom', ({ roomId, name, avatar }) => {
     const game = rooms[roomId];
     if (!game) return socket.emit('gameError', 'Room not found');
     if (game.status !== 'lobby') {
-      // Allow reconnect if a disconnected slot matches the name
       const dc = game.disconnectedBots?.[name];
       if (dc) {
         const player = game.players.find(p => p.id === dc.botId);
         if (player) {
           player.id = socket.id;
           player.isBot = false;
+          if (avatar) player.avatar = avatar;
           delete player.difficulty;
           delete game.disconnectedBots[name];
           socket.join(roomId);
@@ -1071,7 +1142,7 @@ io.on('connection', socket => {
       return socket.emit('gameError', 'Game already started');
     }
     if (game.players.length >= 4) return socket.emit('gameError', 'Room is full');
-    joinRoom(socket, roomId, name, false);
+    joinRoom(socket, roomId, name, false, avatar);
   });
 
   socket.on('leaveRoom', () => {
@@ -1226,6 +1297,16 @@ io.on('connection', socket => {
   });
 
   // ── dice ──
+
+  socket.on('introFinished', () => {
+    const info = playerInfo.get(socket.id);
+    if (!info) return;
+    const game = rooms[info.roomId];
+    if (!game || game.introFinished) return;
+    game.introFinished = true;
+    if (game._pendingBotTimeout) { clearTimeout(game._pendingBotTimeout); game._pendingBotTimeout = null; }
+    maybeScheduleBot(info.roomId, 800);
+  });
 
   socket.on('rollDice', () => {
     const info = playerInfo.get(socket.id);
@@ -1401,27 +1482,34 @@ io.on('connection', socket => {
     if (!info) return;
     const game = rooms[info.roomId];
     if (!game || game.status !== 'playing') return;
-    const player = cp(game);
-    if (player.id !== socket.id) return socket.emit('gameError', 'Not your turn');
-    if (!game.diceRolled) return socket.emit('gameError', 'Roll dice first');
+
+    // Allow counteroffers from any player (they were notifyCountering on the old trade)
+    const isCounteroffer = game.pendingTrade?.counteringId === socket.id;
+    const proposer = isCounteroffer
+      ? game.players.find(p => p.id === socket.id)
+      : cp(game);
+
+    if (!proposer) return;
+    if (!isCounteroffer && proposer.id !== socket.id) return socket.emit('gameError', 'Not your turn');
+    if (!isCounteroffer && !game.diceRolled) return socket.emit('gameError', 'Roll dice first');
 
     const RESOURCES = ['wood','brick','sheep','wheat','ore'];
     const totalOffer = RESOURCES.reduce((s,r) => s + (offer[r]||0), 0);
     const totalWant  = RESOURCES.reduce((s,r) => s + (want[r]||0),  0);
     if (totalOffer < 1 || totalWant < 1) return socket.emit('gameError', 'Must offer and want at least 1 resource');
     for (const r of RESOURCES) {
-      if ((offer[r]||0) > (player.resources[r]||0)) return socket.emit('gameError', `Not enough ${r}`);
+      if ((offer[r]||0) > (proposer.resources[r]||0)) return socket.emit('gameError', `Not enough ${r}`);
     }
 
     const excluded = Array.isArray(excludedIds) ? excludedIds : [];
     const responses = {};
-    // Auto-reject excluded players immediately
     game.players.forEach(p => {
       if (p.id !== socket.id && excluded.includes(p.id))
         responses[p.id] = { name: p.name, status: 'reject' };
     });
-    game.pendingTrade = { fromId: socket.id, fromName: player.name, offer, want, responses, excludedIds: excluded };
-    addLog(game, `${player.name} proposes a trade`);
+    game.pendingTrade = { fromId: socket.id, fromName: proposer.name, offer, want, responses, excludedIds: excluded };
+    if (isCounteroffer) addLog(game, `${proposer.name} sends a counteroffer`);
+    else addLog(game, `${proposer.name} proposes a trade`);
     broadcastState(info.roomId);
     scheduleBotTradeResponses(game, info.roomId, game.pendingTrade);
   });
@@ -1449,7 +1537,7 @@ io.on('connection', socket => {
             game.pendingTrade = null;
             broadcastState(info.roomId);
           }
-        }, 10000);
+        }, 2000);
       }
       return;
     }
@@ -1464,35 +1552,8 @@ io.on('connection', socket => {
     trade.responses[socket.id] = { name: responder.name, status: 'accept' };
     broadcastState(info.roomId);
 
-    // If proposer is a bot, wait for everyone to respond then pick first acceptor
-    if (isBotId(trade.fromId)) {
-      const excluded = trade.excludedIds || [];
-      const nonProposers = game.players.filter(p => p.id !== trade.fromId && !excluded.includes(p.id));
-      const allResponded = nonProposers.every(p => trade.responses[p.id]);
-      if (allResponded) {
-        const acceptor = nonProposers.find(p => trade.responses[p.id]?.status === 'accept');
-        const proposer = game.players.find(p => p.id === trade.fromId);
-        if (acceptor && proposer) {
-          RESOURCES.forEach(r => {
-            proposer.resources[r] = (proposer.resources[r]||0) - (trade.offer[r]||0) + (trade.want[r]||0);
-            acceptor.resources[r] = (acceptor.resources[r]||0) - (trade.want[r]||0)  + (trade.offer[r]||0);
-          });
-          addLog(game, `${proposer.name} traded with ${acceptor.name}`);
-          game.pendingTrade = null;
-          broadcastState(info.roomId);
-          setTimeout(() => runBotTurn(info.roomId, 0), 600);
-        } else {
-          // All rejected — record the failed trade and move on
-          if (proposer) {
-            proposer.failedTrades = proposer.failedTrades || [];
-            proposer.failedTrades.push(`${JSON.stringify(trade.offer)}->${JSON.stringify(trade.want)}`);
-          }
-          game.pendingTrade = null;
-          broadcastState(info.roomId);
-          setTimeout(() => runBotTurn(info.roomId, 0), 400);
-        }
-      }
-    }
+    // If proposer is a bot, check if everyone has now responded and resolve
+    if (isBotId(trade.fromId)) resolveBotTradeIfComplete(game, info.roomId, trade);
   });
 
   socket.on('notifyCountering', () => {
@@ -1547,6 +1608,7 @@ io.on('connection', socket => {
     const game = rooms[info.roomId];
     if (!game || !game.pendingTrade) return;
     if (game.pendingTrade.fromId !== socket.id) return;
+    if (game.pendingTrade.allRejectedTimer) clearTimeout(game.pendingTrade.allRejectedTimer);
     game.pendingTrade = null;
     broadcastState(info.roomId);
   });
@@ -1734,7 +1796,10 @@ io.on('connection', socket => {
 
     if (game.status !== 'playing') return;
     const player = cp(game);
-    if (player.id !== socket.id) return;
+    // Allow any human to unstick a bot's turn when the timer expires
+    if (player.id !== socket.id && !isBotId(player.id)) return;
+    // Cancel any pending trade before force-ending
+    if (game.pendingTrade) { game.pendingTrade = null; broadcastState(info.roomId); }
     if (!game.diceRolled) {
       // Auto-roll
       const d1 = Math.ceil(Math.random() * 6), d2 = Math.ceil(Math.random() * 6);
