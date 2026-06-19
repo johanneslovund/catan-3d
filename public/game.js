@@ -288,7 +288,9 @@ scene.add(boardGroup, buildGroup, robberGroup, markerGroup);
 
 // Tile intro fly-in + independent bobbing
 let _introDone = false;
-const cameraIntro = { active: false, t: 0, duration: 12.0 };
+let _modelsReady = false;
+let _pendingIntroHexes = null;
+const cameraIntro = { active: false, t: 0, duration: 5.0 };
 let _markerGlowTex = null;
 function markerGlowTex() {
   if (_markerGlowTex) return _markerGlowTex;
@@ -750,8 +752,18 @@ async function preloadModels() {
   const loaded = MODEL_NAMES.filter(n => MODELS[n]);
   if (loaded.length) console.log('[Models] Loaded:', loaded.join(', '));
   else console.log('[Models] No .glb files found in public/models/ — using procedural meshes');
+  _modelsReady = true;
   // Re-render board so models that weren't ready on first render (e.g. sheep) now appear
-  if (gameState) { renderBoard(gameState); renderBuildings(gameState); }
+  if (gameState) {
+    renderBoard(gameState);
+    renderBuildings(gameState);
+    // Start deferred intro now that models are loaded
+    if (_pendingIntroHexes) {
+      const hexes = _pendingIntroHexes;
+      _pendingIntroHexes = null;
+      startTileIntro(hexes);
+    }
+  }
 }
 
 // Clone a model. Pass colorHexVal to tint all meshes (for player pieces); omit to keep original materials.
@@ -1032,18 +1044,18 @@ function tokenScratchTex() {
   radGrad.addColorStop(1, 'rgba(220,180,60,0.4)');  // rough edge
   ctx.fillStyle = radGrad;
   ctx.fillRect(0, 0, sz, sz);
-  // Directional brush scratches on gold surface
+  // A few directional brush scratches on gold surface
   const rng = (n) => Math.random() * n;
-  for (let i = 0; i < 140; i++) {
+  for (let i = 0; i < 22; i++) {
     const x0 = rng(sz), y0 = rng(sz);
-    const angle = rng(Math.PI * 0.25) - Math.PI * 0.125;
-    const len = 6 + rng(sz * 0.6);
-    const w = 0.3 + rng(1.0);
-    const bright = Math.random() > 0.4;
+    const angle = rng(Math.PI * 0.3) - Math.PI * 0.15;
+    const len = 10 + rng(sz * 0.5);
+    const w = 0.4 + rng(0.8);
+    const bright = Math.random() > 0.5;
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     ctx.lineTo(x0 + Math.cos(angle)*len, y0 + Math.sin(angle)*len);
-    ctx.strokeStyle = bright ? `rgba(255,220,80,${0.25+rng(0.45)})` : `rgba(0,0,0,${0.25+rng(0.35)})`;
+    ctx.strokeStyle = bright ? `rgba(255,215,60,${0.18+rng(0.28)})` : `rgba(80,50,0,${0.12+rng(0.20)})`;
     ctx.lineWidth = w;
     ctx.stroke();
   }
@@ -1766,10 +1778,14 @@ function renderBoard(state) {
     if (!tileBobPhases.has(hid)) tileBobPhases.set(hid, Math.random() * Math.PI * 2);
   });
 
-  // First-time intro animation
+  // First-time intro animation — defer until models are ready
   if (!_introDone) {
     _introDone = true;
-    startTileIntro(state.board.hexes);
+    if (_modelsReady) {
+      startTileIntro(state.board.hexes);
+    } else {
+      _pendingIntroHexes = state.board.hexes;
+    }
   }
 }
 
@@ -1818,13 +1834,15 @@ function startTileIntro(hexes) {
   (boardGroup.userData.portGroups ?? []).forEach(pg => { pg.position.y = pg.userData.baseY - 2.5; });
   (boardGroup.userData.boats ?? []).forEach(b => { b.mesh.position.y = SCENE_PARAMS.boatY - 2.5; });
 
-  // Start camera animation from 45° angle to top-down over 12 seconds
+  // Set camera to 45° angle; animation to top-down starts after tiles settle
   camera.position.set(0, 12, 13);
   controls.target.set(0, 0, 0);
   controls.update();
   controls.enabled = false;
-  cameraIntro.active = true;
+  cameraIntro.active = false;
   cameraIntro.t = 0;
+  cameraIntro.waitT = 0;
+  cameraIntro.waiting = true; // will start animating after 7s post-intro
 
   _waterIntroSound.currentTime = 0;
   _waterIntroSound.volume = 0.55;
@@ -2150,7 +2168,8 @@ function showVertexMarkers(ids, append = false) {
     const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18, transparent: hideDuringIntro, opacity: hideDuringIntro ? 0 : 1 });
     const m = new THREE.Mesh(geo, mat);
     m.userData = { type:'vertexMarker', vertexId:vid, markerType:'vertex', baseY: maxTop + 0.17 };
-    m.position.set(v.x, maxTop + 0.17 + SCENE_PARAMS.vertexMarkerY, v.z);
+    const startYOff = hideDuringIntro ? -2.5 : 0;
+    m.position.set(v.x, maxTop + 0.17 + SCENE_PARAMS.vertexMarkerY + startYOff, v.z);
     markerGroup.add(m);
   });
 }
@@ -4893,19 +4912,30 @@ function animate() {
     }
   }
 
-  // Camera intro: animate from 45° to top-down over 12s
+  // Camera intro: 7s wait after tile intro, then 5s ease to zoomed top-down
+  if (cameraIntro.waiting && !tileIntro.active) {
+    cameraIntro.waitT = (cameraIntro.waitT ?? 0) + delta;
+    if (cameraIntro.waitT >= 7.0) {
+      cameraIntro.waiting = false;
+      cameraIntro.active = true;
+      cameraIntro.t = 0;
+    }
+  }
   if (cameraIntro.active) {
     cameraIntro.t += delta;
     const cp = Math.min(1, cameraIntro.t / cameraIntro.duration);
     const ce = 1 - Math.pow(1 - cp, 3); // ease-out cubic
     camera.position.x = 0;
-    camera.position.y = 12 + ce * (22 - 12);
+    camera.position.y = 12 + ce * (17 - 12);  // 17 = zoomed-in top-down height
     camera.position.z = 13 + ce * (0.1 - 13);
     camera.lookAt(0, 0, 0);
     if (cp >= 1) {
       cameraIntro.active = false;
       controls.enabled = true;
-      applyCameraPreset('Top-Down');
+      camera.position.set(0, 17, 0.1);
+      controls.target.set(0, 0, 0);
+      controls.update();
+      bloom.strength = 0.0;
     }
   }
 
@@ -5025,14 +5055,7 @@ function animate() {
           child.position.set(child.userData.baseX, child.userData.baseY, child.userData.baseZ);
         }
       });
-      // Snap vertex markers to fully opaque (remove transparent flag so they never pulse)
-      if (markerGroup.userData.pendingAppear) {
-        markerGroup.userData.pendingAppear = false;
-        markerGroup.children.forEach(m => {
-          if (m.material) { m.material.transparent = false; m.material.opacity = 1; }
-        });
-      }
-      // Begin port + boat rise from below water
+      // Begin port + boat + vertex marker rise from below water
       boardGroup.userData.portRise = { t: 0, duration: 1.8 };
     }
   }
@@ -5044,8 +5067,9 @@ function animate() {
     const rp = Math.min(1, portRise.t / portRise.duration);
     // ease-out cubic
     const re = 1 - Math.pow(1 - rp, 3);
-    boardGroup.userData._portRiseOff = (1 - re) * -2.5;
-    // Spawn water splashes as ports/boats emerge (heaviest near the surface)
+    const riseOff = (1 - re) * -2.5;
+    boardGroup.userData._portRiseOff = riseOff;
+    // Spawn water splashes as ports/boats emerge
     if (rp < 0.85 && Math.random() < delta * 40) {
       const pgs = boardGroup.userData.portGroups ?? [];
       if (pgs.length) {
@@ -5053,7 +5077,28 @@ function animate() {
         spawnWaterRing(pg.position.x, pg.position.z, 0xffffff);
       }
     }
-    if (rp >= 1) { boardGroup.userData._portRiseOff = 0; boardGroup.userData.portRise = null; }
+    // Animate vertex markers up with ports
+    if (markerGroup.userData.pendingAppear) {
+      markerGroup.children.forEach(m => {
+        if (m.userData.markerType === 'vertex') {
+          m.position.y = m.userData.baseY + SCENE_PARAMS.vertexMarkerY + riseOff;
+        }
+      });
+    }
+    if (rp >= 1) {
+      boardGroup.userData._portRiseOff = 0;
+      boardGroup.userData.portRise = null;
+      // Snap vertex markers fully opaque at rise end
+      if (markerGroup.userData.pendingAppear) {
+        markerGroup.userData.pendingAppear = false;
+        markerGroup.children.forEach(m => {
+          if (m.material) { m.material.transparent = false; m.material.opacity = 1; }
+          if (m.userData.markerType === 'vertex') {
+            m.position.y = m.userData.baseY + SCENE_PARAMS.vertexMarkerY;
+          }
+        });
+      }
+    }
   }
 
   // Tile bobbing — independent per-hex sine wave (skip during intro)
