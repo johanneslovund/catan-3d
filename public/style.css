@@ -1158,6 +1158,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 
   /* ── Lobby ── */
   .lobby-card { width: 92vw; padding: 28px 20px; }
+  .lobby-card .btn-primary { width: 50%; align-self: center; }
 
   /* ── Prevent canvas overflow ── */
   #canvasWrapper { overflow: hidden; }

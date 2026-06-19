@@ -817,10 +817,11 @@ const SCENE_PARAMS = {
   hexMarkerY:      0.04,
   buildingColorTint: 1.0,
   buildingColorSaturation: 1.0,
-  token3dDepth: 0.06,
-  token3dScale: 1.0,
-  token3dRed: 0xcc2020,
-  token3dSilver: 0xd8e8f0,
+  token3dDepth: 0.01,
+  token3dScale: 1.30,
+  token3dRed: 0x791010,
+  token3dSilver: 0x000000,
+  token3dRingColor: 0xc8a820,
   tokenRoughness: 0.18,
 };
 
@@ -837,6 +838,8 @@ function applyCameraPreset(name) {
   camera.position.set(...p.pos);
   controls.target.set(...p.target);
   controls.update();
+  // Top-down view: suppress bloom so coins don't over-glow
+  bloom.strength = name === 'Top-Down' ? 0.0 : LIGHT_PARAMS.bloomStr;
 }
 
 // Per-tile-type number token Y offset (defaults match dialled-in screenshot values)
@@ -1416,8 +1419,6 @@ function renderBoard(state) {
       const discGeo = new THREE.CylinderGeometry(HEX_R*0.27, HEX_R*0.265, 0.09, 28);
       const discMat = new THREE.MeshStandardMaterial({
         color: 0xd4aa30,
-        map: numberTokenTex(hex.number),
-        roughnessMap: tokenScratchTex(),
         roughness: SCENE_PARAMS.tokenRoughness ?? 0.18,
         metalness: SCENE_PARAMS.tokenMetalness ?? 0.92,
         envMapIntensity: 2.5,
@@ -1452,12 +1453,46 @@ function renderBoard(state) {
           roughness: isRed ? 0.22 : 0.10,
           envMapIntensity: 3.0,
         });
+        // For red tokens, center the number+pips group on the coin
+        const pipR = HEX_R * 0.022;
+        const pipGap = HEX_R * 0.02;
+        const groupShift = isRed ? (cz + pipGap + pipR) / 2 : 0;
+
         const numMesh = new THREE.Mesh(textGeo, numMat);
         numMesh.rotation.x = -Math.PI / 2;
-        numMesh.position.set(hex.x - cx, discBaseY + 0.048, hex.z + cz);
+        numMesh.position.set(hex.x - cx, discBaseY + 0.048, hex.z + cz - groupShift);
         numMesh.castShadow = false;
         numMesh.userData.tokenHexId = hex.id;
         boardGroup.add(numMesh);
+
+        // Beveled ring around coin edge
+        const ringGeo = new THREE.TorusGeometry(HEX_R * 0.268, 0.018, 8, 36);
+        const ringMat = new THREE.MeshStandardMaterial({
+          color: SCENE_PARAMS.token3dRingColor,
+          metalness: 0.95,
+          roughness: 0.10,
+          envMapIntensity: 3.0,
+        });
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+        ringMesh.rotation.x = Math.PI / 2;
+        ringMesh.position.set(hex.x, discBaseY + 0.052, hex.z);
+        ringMesh.userData.tokenHexId = hex.id;
+        boardGroup.add(ringMesh);
+
+        // Probability pips for 6 and 8
+        if (isRed) {
+          const pipCount = 5;
+          const pipGeo = new THREE.CylinderGeometry(pipR, pipR, 0.012, 8);
+          const spacing = HEX_R * 0.055;
+          const totalW = (pipCount - 1) * spacing;
+          const pipZ = hex.z + groupShift; // symmetric with number shift
+          for (let p = 0; p < pipCount; p++) {
+            const pipMesh = new THREE.Mesh(pipGeo, numMat);
+            pipMesh.position.set(hex.x - totalW / 2 + p * spacing, discBaseY + 0.048, pipZ);
+            pipMesh.userData.tokenHexId = hex.id;
+            boardGroup.add(pipMesh);
+          }
+        }
       }
     }
   });
@@ -3516,6 +3551,9 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         else if (type === 'token3dScale') SCENE_PARAMS.token3dScale = v;
         else if (type === 'tokenMetalness') SCENE_PARAMS.tokenMetalness = v;
         else if (type === 'tokenRoughness') SCENE_PARAMS.tokenRoughness = v;
+        else if (type === 'token3dRed') SCENE_PARAMS.token3dRed = v;
+        else if (type === 'token3dSilver') SCENE_PARAMS.token3dSilver = v;
+        else if (type === 'token3dRingColor') SCENE_PARAMS.token3dRingColor = v;
         if (gameState) renderBoard(gameState);
         return;
       } else if (param === 'bank') {
@@ -3561,6 +3599,21 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
       } else {
         renderBoard(gameState);
         renderBuildings(gameState);
+      }
+    });
+  });
+
+  // Color inputs for token colours
+  document.querySelectorAll('.token-color-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const param = input.dataset.param;
+      const type  = input.dataset.type;
+      const v = parseInt(input.value.slice(1), 16);
+      if (param === 'token') {
+        if (type === 'token3dRed') SCENE_PARAMS.token3dRed = v;
+        else if (type === 'token3dSilver') SCENE_PARAMS.token3dSilver = v;
+        else if (type === 'token3dRingColor') SCENE_PARAMS.token3dRingColor = v;
+        if (gameState) renderBoard(gameState);
       }
     });
   });
@@ -4240,7 +4293,7 @@ document.getElementById('btnMicToggle').addEventListener('click', async () => {
 });
 
 // ─── Music player ────────────────────────────────────────────────────────────
-AUDIO.musicVolume = 0.05;
+AUDIO.musicVolume = 0.08;
 AUDIO.musicMuted  = false;
 {
   const TRACKS = [

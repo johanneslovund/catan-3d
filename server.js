@@ -88,18 +88,43 @@ function hexWorldPos(q, r) {
   };
 }
 
+const HEX_NEIGHBORS = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1]];
+
+function hexesAdjacent(a, b) {
+  return HEX_NEIGHBORS.some(([dq, dr]) => a.q + dq === b.q && a.r + dr === b.r);
+}
+
+function numberPlacementValid(hexes) {
+  const redHexes = hexes.filter(h => h.number === 6 || h.number === 8);
+  for (let i = 0; i < redHexes.length; i++) {
+    for (let j = i + 1; j < redHexes.length; j++) {
+      if (hexesAdjacent(redHexes[i], redHexes[j])) return false;
+    }
+  }
+  return true;
+}
+
 function generateBoard() {
   const types = shuffle([...TILE_DIST]);
-  const nums  = shuffle([...NUMBER_TOKENS]);
-  let ni = 0;
 
-  const hexes = HEX_COORDS.map(([q, r], i) => {
+  // Build hex positions first so we can check adjacency during number assignment
+  const baseHexes = HEX_COORDS.map(([q, r], i) => {
     const type = types[i];
     const { x, z } = hexWorldPos(q, r);
-    return { id: i, q, r, type, x, z,
-      number: type === 'desert' ? null : nums[ni++],
-      hasRobber: type === 'desert' };
+    return { id: i, q, r, type, x, z, number: null, hasRobber: type === 'desert' };
   });
+
+  // Shuffle numbers until no two red numbers (6/8) are adjacent — max 200 attempts
+  let nums;
+  let attempts = 0;
+  do {
+    nums = shuffle([...NUMBER_TOKENS]);
+    let ni = 0;
+    baseHexes.forEach(h => { h.number = h.type === 'desert' ? null : nums[ni++]; });
+    attempts++;
+  } while (!numberPlacementValid(baseHexes) && attempts < 200);
+
+  const hexes = baseHexes;
 
   // ── vertices ──
   const vmap = new Map();
