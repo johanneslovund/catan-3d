@@ -44,7 +44,7 @@ const CLOUD_PARAMS = {
   scale:      0.50,
   opacity:    0.10,
   speed:      0.20,
-  amount:     1.40,
+  amount:     1.20,
   brightness: 0.66,
 };
 
@@ -2125,6 +2125,12 @@ function showVertexMarkers(ids, append = false) {
     const m = new THREE.Mesh(geo, mat);
     m.userData = { type:'vertexMarker', vertexId:vid, markerType:'vertex', baseY: maxTop + 0.17 };
     m.position.set(v.x, maxTop + 0.17 + SCENE_PARAMS.vertexMarkerY, v.z);
+    // Golden outer glow — back-face sphere with additive blending
+    const glowGeo = new THREE.SphereGeometry(0.30, 8, 8);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd060, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.userData = { markerGlow: true, glowBase: startOpacity };
+    m.add(glow);
     markerGroup.add(m);
   });
 }
@@ -2145,6 +2151,12 @@ function showEdgeMarkers(ids, append = false) {
     m.userData = { type:'edgeMarker', edgeId:eid, markerType:'edge', baseY: edgeBaseY };
     m.position.set((v1.x+v2.x)/2, edgeBaseY + SCENE_PARAMS.edgeMarkerY, (v1.z+v2.z)/2);
     m.rotation.y = Math.atan2(-dz, dx);
+    // Golden outer glow — slightly larger box with additive blending
+    const glowGeo = new THREE.BoxGeometry(len*0.72, 0.22, 0.38);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd060, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.userData = { markerGlow: true };
+    m.add(glow);
     markerGroup.add(m);
   });
   // Refresh edge marker cache after adding
@@ -5231,6 +5243,16 @@ function animate() {
     boardGroup.userData.portIcons.forEach((ig, i) => {
       ig.rotation.y = t * 0.5 + i * 0.9;
       ig.position.y = SCENE_PARAMS.portIconY + Math.sin(t * 1.1 + i * 1.3) * 0.05;
+    });
+  }
+
+  // Marker glow pulsation
+  if (markerGroup.children.length) {
+    const glowOpacity = 0.22 + Math.sin(t * 2.8) * 0.18; // 0.04–0.40
+    markerGroup.children.forEach(marker => {
+      marker.children.forEach(child => {
+        if (child.userData.markerGlow && child.material) child.material.opacity = glowOpacity;
+      });
     });
   }
 
