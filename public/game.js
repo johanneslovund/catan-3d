@@ -1184,6 +1184,7 @@ function renderBoard(state) {
 
   // Sandy island base (removed — no sand layer under map)
   const COAST_R = 7.2;
+  const sandTopY = SCENE_PARAMS.sandTopY;
   const sandTexLoader = new THREE.TextureLoader();
   const sandTex = sandTexLoader.load('textures/Sand Texture.png');
   sandTex.wrapS = sandTex.wrapT = THREE.RepeatWrapping;
@@ -4295,10 +4296,20 @@ AUDIO.musicMuted  = false;
     const path = TRACKS[trackIdx];
     setTitle(path);
     const audio = new Audio(path);
-    audio.volume = musicVol();
+    // Start silent and fade up over 10 seconds
+    audio.volume = 0;
     audio.play().catch(() => {});
     audio.addEventListener('ended', playNext);
     activeAudio = audio;
+    const target = musicVol();
+    const FADE_IN = 10; // seconds
+    const steps = 80;
+    let step = 0;
+    const fadeInInterval = setInterval(() => {
+      step++;
+      audio.volume = Math.min(target, (step / steps) * target);
+      if (step >= steps) clearInterval(fadeInInterval);
+    }, (FADE_IN * 1000) / steps);
     audio.addEventListener('timeupdate', () => {
       if (audio.duration && audio.currentTime >= audio.duration - FADE_DURATION && !fadingAudio) playNext();
     });
