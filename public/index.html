@@ -135,6 +135,8 @@
 
   <!-- 2D/3D toggle button -->
   <button id="btn2dToggle" class="btn-2d-toggle" title="Switch to 2D view" style="display:none">2D</button>
+  <!-- Overlay for 2D-only elements (robber image). pointer-events:none so clicks pass through to Three.js -->
+  <canvas id="overlay2d" style="display:none;position:absolute;inset:0;pointer-events:none;z-index:16;"></canvas>
 
   <!-- Mobile-only top bar (hidden on desktop) -->
   <div id="mobileTopBar">

@@ -2893,9 +2893,9 @@ function enterBuildMode(mode) {
   else if (mode==='robber')    showHexMarkers(validRobberHexes(s));
 
   document.getElementById('buildMode').style.display='block';
-  document.getElementById('buildMode').textContent =
-    mode==='settlement' ? '🏠 Click a yellow spot to place tower' :
-    mode==='city'       ? '🏰 Click a yellow spot to upgrade to castle' :
+  document.getElementById('buildMode').innerHTML =
+    mode==='settlement' ? '<img src="Icons/Tower Icon.png" class="piece-icon" alt="tower"> Click a yellow spot to place tower' :
+    mode==='city'       ? '<img src="Icons/Castle Icon.png" class="piece-icon" alt="castle"> Click a yellow spot to upgrade to castle' :
     mode==='road'       ? '🛣 Click a yellow edge to place road' :
                           '💀 Click a tile to move the robber';
   document.getElementById('btnCancel').style.display='block';
@@ -3001,7 +3001,7 @@ renderer.domElement.addEventListener('click', e => {
       passiveRoadMarkers   = false;
       buildMode = 'settlement';
       document.getElementById('buildMode').style.display = 'block';
-      document.getElementById('buildMode').textContent = '🏠 Click a yellow spot to place tower';
+      document.getElementById('buildMode').innerHTML = '<img src="Icons/Tower Icon.png" class="piece-icon" alt="tower"> Click a yellow spot to place tower';
       document.getElementById('btnCancel').style.display = 'block';
       showBuildConfirm('Place tower here?', () => {
         socket.emit('placeSettlement', { vertexId: vid }); addTimerBonus(15);
@@ -3367,12 +3367,12 @@ function updateMobilePlayerCards(state) {
         ${p.id===state.largestArmyPlayer?'<span title="Largest Army" style="font-size:.6rem">⚔</span>':''}
       </div>
       <div class="mob-card-res">
-        <span class="mob-card-res-count">${totalRes}</span>🃏
+        <span class="mob-card-res-count">${totalRes}</span><img src="Icons/Dev card icon.png" class="piece-icon" alt="card">
         ${devCount>0?`<span style="margin-left:3px">${devCount}</span>📜`:''}
       </div>
       <div class="mob-card-bld">
-        <span>🏠${p.settlements||0}</span>
-        <span>🏰${p.cities||0}</span>
+        <span><img src="Icons/Tower Icon.png" class="piece-icon" alt="tower">${p.settlements||0}</span>
+        <span><img src="Icons/Castle Icon.png" class="piece-icon" alt="castle">${p.cities||0}</span>
         <span>🛣${p.roads||0}</span>
       </div>`;
     el.appendChild(card);
@@ -3396,7 +3396,7 @@ function updateBank(state) {
     // Hidden mode — show stack icons (🂠 = card back representation)
     el.innerHTML = Object.entries(RES_INFO).map(([r,{icon}]) => {
       const tier = state.bankStockTiers[r] ?? 0;
-      const stacks = '🃏'.repeat(tier) || '✕';
+      const stacks = '🂠'.repeat(tier) || '✕';
       const label = tier === 0 ? 'empty' : tier === 1 ? '1–8' : tier === 2 ? '9–14' : '15+';
       return `<div class="bank-chip${tier<=1?' bank-chip-low':''}"><span class="bc-icon">${icon}</span><span class="bc-count" title="${label}">${stacks}</span></div>`;
     }).join('');
@@ -3448,9 +3448,9 @@ function updatePlayersList(state) {
         <div class="cpr-cards">${resChips}${devChips}</div>
       </div>
       <div class="cpr-bld">
-        <div class="cpr-hand-count" title="${totalRes} resource cards">${totalRes}<span class="cpr-hand-icon">🃏</span></div>
-        <div class="bld-item">🏠 ${p.settlements||0}</div>
-        <div class="bld-item">🏰 ${p.cities||0}</div>
+        <div class="cpr-hand-count" title="${totalRes} resource cards">${totalRes}<span class="cpr-hand-icon"><img src="Icons/Dev card icon.png" class="piece-icon" alt="card"></span></div>
+        <div class="bld-item"><img src="Icons/Tower Icon.png" class="piece-icon" alt="tower"> ${p.settlements||0}</div>
+        <div class="bld-item"><img src="Icons/Castle Icon.png" class="piece-icon" alt="castle"> ${p.cities||0}</div>
         <div class="bld-item">🛣 ${p.roads||0}</div>
       </div>`;
     r.querySelector('.cpr-avatar').addEventListener('click', e => {
@@ -3477,7 +3477,7 @@ function showStealPicker(victims, onPick, markerMesh) {
     const devCount = (p.devCards||[]).filter(c=>!c.played&&c.type!=='vp'&&c.type!=='hidden').length;
     const stats = `<span style="margin-left:auto;display:flex;gap:10px;font-size:.78rem;color:rgba(255,255,255,0.55);">
       <span title="Victory Points">⭐ ${p.vp}</span>
-      <span title="Resource cards">🃏 ${totalRes}</span>
+      <span title="Resource cards"><img src="Icons/Dev card icon.png" class="piece-icon" alt="card"> ${totalRes}</span>
       <span title="Dev cards">📜 ${devCount}</span>
     </span>`;
     btn.innerHTML = `${dot}<span>${escapeHtml(p.name)}</span>${stats}`;
@@ -3558,8 +3558,8 @@ function updatePieces(state, me) {
   const citiesLeft = 4 - citiesUsed;
   el.innerHTML = `
     <div class="piece-chip">🛣 <span>${roadsLeft}</span></div>
-    <div class="piece-chip">🏠 <span>${settlesLeft}</span></div>
-    <div class="piece-chip">🏰 <span>${citiesLeft}</span></div>`;
+    <div class="piece-chip"><img src="Icons/Tower Icon.png" class="piece-icon" alt="tower"> <span>${settlesLeft}</span></div>
+    <div class="piece-chip"><img src="Icons/Castle Icon.png" class="piece-icon" alt="castle"> <span>${citiesLeft}</span></div>`;
 }
 
 // ─── Card collection animation ────────────────────────────────────────────────
@@ -6773,17 +6773,59 @@ function animate() {
   updateVoicePlayers();
   _lobbyUpdateVoiceRings();
   composer.render();
+  if (_is2D) _drawRobberOverlay();
 }
 animate();
 
-// ─── 2D Mode: top-down orthographic camera ────────────────────────────────────
+// ─── 2D Mode: top-down camera + robber overlay ────────────────────────────────
 
+const _robberImg2D = new Image();
+_robberImg2D.src = 'images/Robber.png';
 
-// ── 2D / 3D toggle (camera-based) ─────────────────────────────────────────────
+const _overlay2d    = document.getElementById('overlay2d');
+const _overlayCtx   = _overlay2d.getContext('2d');
+
+function _resizeOverlay() {
+  _overlay2d.width  = renderer.domElement.clientWidth  || window.innerWidth;
+  _overlay2d.height = renderer.domElement.clientHeight || window.innerHeight;
+}
+
+function _drawRobberOverlay() {
+  _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
+  if (!_is2D || !gameState?.board) return;
+  const rHex = gameState.board.hexes[gameState.robberHex];
+  if (!rHex) return;
+
+  // Project world pos → NDC → canvas pixels
+  const v = new THREE.Vector3(rHex.x, HEX_H / 2 + 0.05, rHex.z).project(camera);
+  const px = (v.x *  0.5 + 0.5) * _overlay2d.width;
+  const py = (v.y * -0.5 + 0.5) * _overlay2d.height;
+
+  const size = _overlay2d.height * 0.075;
+  if (_robberImg2D.complete && _robberImg2D.naturalWidth > 0) {
+    _overlayCtx.drawImage(_robberImg2D, px - size / 2, py - size * 0.9, size, size * 1.2);
+  }
+}
+
+// Objects to hide when entering 2D mode
+function _set2DVisibility(visible) {
+  // Hide 3D GLB tile models, sheep, camel (all have userData.hexId)
+  boardGroup.children.forEach(child => {
+    if (child.userData.hexId !== undefined) child.visible = visible;
+  });
+  // Hide lava meshes
+  (boardGroup.userData.lavaMeshes || []).forEach(m => { m.visible = visible; });
+  // Hide clouds
+  const clouds = scene.userData.cloudGroup;
+  if (clouds) clouds.visible = visible;
+  // Hide 3D robber (replaced by robber.png overlay in 2D)
+  robberGroup.visible = visible;
+}
+
+// ── 2D / 3D toggle ────────────────────────────────────────────────────────────
 let _is2D = false;
 const _btn2d = document.getElementById('btn2dToggle');
 
-// Saved 3D camera state
 let _3dCamPos    = null;
 let _3dCamTarget = null;
 let _3dMaxPolar  = controls.maxPolarAngle;
@@ -6794,11 +6836,9 @@ function toggle2D() {
   _is2D = !_is2D;
 
   if (_is2D) {
-    // Save current 3D state
     _3dCamPos    = camera.position.clone();
     _3dCamTarget = controls.target.clone();
 
-    // Smoothly go to orthographic top-down view
     camera.up.set(0, 0, -1);
     controls.enableRotate = false;
     controls.maxPolarAngle = 0.001;
@@ -6808,10 +6848,13 @@ function toggle2D() {
     controls.target.set(controls.target.x, 0, controls.target.z);
     controls.update();
 
+    _set2DVisibility(false);
+    _resizeOverlay();
+    _overlay2d.style.display = 'block';
+
     _btn2d.textContent = '3D';
     _btn2d.classList.add('active');
   } else {
-    // Restore 3D camera
     camera.up.set(0, 1, 0);
     controls.enableRotate = true;
     controls.maxPolarAngle = _3dMaxPolar;
@@ -6824,9 +6867,14 @@ function toggle2D() {
     }
     controls.update();
 
+    _set2DVisibility(true);
+    _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
+    _overlay2d.style.display = 'none';
+
     _btn2d.textContent = '2D';
     _btn2d.classList.remove('active');
   }
 }
 
 _btn2d.addEventListener('click', toggle2D);
+window.addEventListener('resize', () => { if (_is2D) _resizeOverlay(); });

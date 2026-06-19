@@ -920,6 +920,20 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 }
 .piece-chip span { font-weight: 700; color: var(--text-mid); }
 
+/* Piece / dev-card icons (replace emoji) */
+img.piece-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  vertical-align: middle;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  flex-shrink: 0;
+}
+.bld-item img.piece-icon  { width: 16px; height: 16px; }
+.cpr-hand-icon img.piece-icon { width: 13px; height: 13px; }
+.mob-card-res-count + img.piece-icon { width: 14px; height: 14px; }
+
 /* ── RIGHT PANEL ──────────────────────────────────────────────────────────── */
 #rightPanel {
   width: 300px; flex-shrink: 0;
