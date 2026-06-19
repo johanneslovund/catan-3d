@@ -30,6 +30,7 @@ const WATER_PARAMS = {
   waveSpeed: 1.30, waveAmp: 1.30, waveScale: 3.00, foamStr: 0.75, opacity: 0.80,
 };
 const BOB_PARAMS = { enabled: true, amp: 0.02, speed: 0.70 };
+const WATER_SPRITE_PARAMS = { amount: 1.0, size: 0.035, opacity: 0.55 };
 const LIGHT_PARAMS = {
   timeOfDay: 0.76, sunIntensity: 2.60, ambIntensity: 0.80,
   fillIntensity: 0.50, exposure: 1.00, fogDensity: 0.018, bloomStr: 0.30, bloomRadius: 0.0,
@@ -1831,9 +1832,10 @@ function startTileIntro(hexes) {
 }
 
 function spawnWaterRing(x, z, color = 0x90ecff) {
-  const geo = new THREE.RingGeometry(0.05, 0.25, 28);
+  const s = WATER_SPRITE_PARAMS.size;
+  const geo = new THREE.RingGeometry(s * 0.25, s, 16);
   const mat = new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity: 0.65, depthWrite: false, side: THREE.DoubleSide,
+    color, transparent: true, opacity: WATER_SPRITE_PARAMS.opacity, depthWrite: false, side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.rotation.x = -Math.PI / 2;
@@ -3777,6 +3779,9 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
       } else if (param === 'bob') {
         BOB_PARAMS[type] = v;
         return;
+      } else if (param === 'waterSprite') {
+        WATER_SPRITE_PARAMS[type] = v;
+        return;
       } else if (param === 'token') {
         if (type === 'token3dDepth') SCENE_PARAMS.token3dDepth = v;
         else if (type === 'token3dScale') SCENE_PARAMS.token3dScale = v;
@@ -4884,7 +4889,7 @@ function animate() {
       waterRings.splice(i, 1);
     } else {
       wr.mesh.scale.setScalar(1 + p * 5);
-      wr.mesh.material.opacity = 0.65 * (1 - p);
+      wr.mesh.material.opacity = WATER_SPRITE_PARAMS.opacity * (1 - p);
     }
   }
 
@@ -5053,11 +5058,21 @@ function animate() {
 
   // Tile bobbing — independent per-hex sine wave (skip during intro)
   if (BOB_PARAMS.enabled && !tileIntro.active) {
+    const seenHids = new Set();
     boardGroup.children.forEach(child => {
       const hid = child.userData.hexId ?? child.userData.tokenHexId;
       if (hid === undefined || child.userData.baseY === undefined) return;
       const phase = tileBobPhases.get(hid) ?? 0;
       child.position.y = child.userData.baseY + Math.sin(t * BOB_PARAMS.speed + phase) * BOB_PARAMS.amp;
+      // Spawn water ring when tile kisses the water surface (downstroke near minimum)
+      if (!seenHids.has(hid) && child.userData.hexId !== undefined) {
+        seenHids.add(hid);
+        const sinVal = Math.sin(t * BOB_PARAMS.speed + phase);
+        const spawnRate = delta * 0.55 * WATER_SPRITE_PARAMS.amount * Math.max(0, -sinVal);
+        if (Math.random() < spawnRate) {
+          spawnWaterRing(child.userData.baseX ?? child.position.x, child.userData.baseZ ?? child.position.z);
+        }
+      }
     });
   }
 
