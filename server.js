@@ -121,15 +121,16 @@ function generateBoard() {
     return { id: i, q, r, type, x, z, number: null, hasRobber: type === 'desert' };
   });
 
-  // Shuffle numbers until no two red numbers (6/8) are adjacent — max 200 attempts
-  let nums;
+  // Shuffle numbers until placement rules are satisfied
   let attempts = 0;
   do {
-    nums = shuffle([...NUMBER_TOKENS]);
+    const nums = shuffle([...NUMBER_TOKENS]);
     let ni = 0;
     baseHexes.forEach(h => { h.number = h.type === 'desert' ? null : nums[ni++]; });
     attempts++;
-  } while (!numberPlacementValid(baseHexes) && attempts < 5000);
+  } while (!numberPlacementValid(baseHexes) && attempts < 10000);
+  // Safety: if still invalid after exhausting attempts, log a warning
+  if (!numberPlacementValid(baseHexes)) console.warn('[board] numberPlacementValid failed after 10000 attempts');
 
   const hexes = baseHexes;
 
@@ -1714,6 +1715,20 @@ io.on('connection', socket => {
           maybeScheduleBot(info.roomId, 500);
         }
       }
+      return;
+    }
+
+    // Handle robber placement timer expiry
+    if (game.status === 'robber' && game.robbingPlayer === socket.id) {
+      const nc = game.board.hexes.filter(h => h.id !== game.robberHex);
+      const rh = nc[Math.floor(Math.random() * nc.length)];
+      game.board.hexes[game.robberHex].hasRobber = false;
+      game.robberHex = rh.id;
+      game.board.hexes[rh.id].hasRobber = true;
+      const player = game.players.find(p => p.id === socket.id);
+      if (player) addLog(game, `${player.name} moved the robber (auto)`);
+      game.status = 'playing';
+      broadcastState(info.roomId);
       return;
     }
 

@@ -41,7 +41,7 @@ const LIGHT_PARAMS = {
 const CLOUD_PARAMS = {
   enabled:    1,
   height:    -0.45,
-  spread:    -0.20,
+  spread:     0.00,
   scale:      0.35,
   opacity:    0.18,
   speed:      0.20,
@@ -908,7 +908,7 @@ const NUMBER_Y_OFFSET = { mountains:-0.04, hills:-0.18, forest:-0.50, pasture:-0
 
 
 const TILE_BASE_COLORS = {
-  forest:    0x2d6e2a, pasture:   0x8bc34a, fields:    0xd4a017,
+  forest:    0x2d6e2a, pasture:   0xc8f06a, fields:    0xd4a017,
   hills:     0xb5451b, mountains: 0x78909c, desert:    0xc9b98a,
 };
 const TILE_ROUGHNESS = { forest:0.92, pasture:0.88, fields:0.82, hills:0.95, mountains:0.90, desert:0.70 };
@@ -2632,12 +2632,11 @@ function updateTimerDisplay() {
   if (remaining === 0) {
     clearInterval(timerInterval);
     timerInterval = null;
-    // Auto-end the current player's turn
     if (gameState) {
       const curr = gameState.players[gameState.currentPlayerIndex];
-      if (curr?.id === myId && gameState.status === 'playing') {
-        socket.emit('forceEndTurn');
-      }
+      const isMyTurn = curr?.id === myId;
+      const robberIsMe = gameState.status === 'robber' && gameState.robbingPlayer === myId;
+      if (isMyTurn || robberIsMe) socket.emit('forceEndTurn');
     }
   }
 }
