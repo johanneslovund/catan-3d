@@ -287,7 +287,6 @@ scene.add(boardGroup, buildGroup, robberGroup, markerGroup);
 
 // Tile intro fly-in + independent bobbing
 let _introDone = false;
-let _vertexFadeIn = null; // { t, duration } — fade-in state for vertex markers after intro
 let _markerGlowTex = null;
 function markerGlowTex() {
   if (_markerGlowTex) return _markerGlowTex;
@@ -1809,6 +1808,12 @@ function startTileIntro(hexes) {
     child.position.y = child.userData.baseY - 1.2;
   });
 
+  // Submerge ports and boats so they rise after intro
+  boardGroup.userData._portRiseOff = -2.5;
+  boardGroup.userData.portRise = null;
+  (boardGroup.userData.portGroups ?? []).forEach(pg => { pg.position.y = pg.userData.baseY - 2.5; });
+  (boardGroup.userData.boats ?? []).forEach(b => { b.mesh.position.y = SCENE_PARAMS.boatY - 2.5; });
+
   _waterIntroSound.currentTime = 0;
   _waterIntroSound.volume = 0.55;
   _waterIntroSound.play().catch(() => {});
@@ -2121,29 +2126,19 @@ function showVertexMarkers(ids, append = false) {
   if (!append) clearGroup(markerGroup);
   if (!gameState) return;
 
-  // Detect first player's first tower placement during the intro animation
-  const isFirstSetupTower = tileIntro.active &&
-    gameState.status === 'setup_forward' &&
-    gameState.setupTurnIndex === 0 &&
-    gameState.setupPhase === 'settlement' &&
-    gameState.players[gameState.currentPlayerIndex]?.id === myId;
-
-  if (isFirstSetupTower) {
-    markerGroup.userData.pendingFadeIn = true;
-    _vertexFadeIn = null;
-  }
+  // Hide all markers during tile intro; they snap to full opacity when intro ends
+  const hideDuringIntro = tileIntro.active;
+  if (hideDuringIntro) markerGroup.userData.pendingAppear = true;
 
   ids.forEach(vid => {
     const v = gameState.board.vertices[vid];
     const maxTop = HEX_H / 2;
     const geo = new THREE.SphereGeometry(0.14, 12, 12);
-    const startOpacity = isFirstSetupTower ? 0 : 1;
-    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18, transparent: true, opacity: startOpacity });
+    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18, transparent: true, opacity: hideDuringIntro ? 0 : 1 });
     const m = new THREE.Mesh(geo, mat);
     m.userData = { type:'vertexMarker', vertexId:vid, markerType:'vertex', baseY: maxTop + 0.17 };
     m.position.set(v.x, maxTop + 0.17 + SCENE_PARAMS.vertexMarkerY, v.z);
-    // Golden bloom — camera-facing sprite with additive blending (works regardless of bloom pass state)
-    const spriteMat = new THREE.SpriteMaterial({ map: markerGlowTex(), color: 0xffd060, transparent: true, opacity: isFirstSetupTower ? 0 : 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
+    const spriteMat = new THREE.SpriteMaterial({ map: markerGlowTex(), color: 0xffd060, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
     const sprite = new THREE.Sprite(spriteMat);
     sprite.scale.set(0.9, 0.9, 0.9);
     sprite.userData = { markerGlow: true };
@@ -4796,11 +4791,12 @@ function animate() {
     }
   }
 
-  // Port bobbing
+  // Port bobbing (includes rise-from-water offset during intro)
   const portGroups = boardGroup.userData.portGroups;
   if (portGroups) {
+    const riseOff = boardGroup.userData._portRiseOff ?? 0;
     portGroups.forEach(pg => {
-      pg.position.y = pg.userData.baseY + Math.sin(t * 0.9 + pg.userData.bobPhase) * 0.011;
+      pg.position.y = pg.userData.baseY + riseOff + Math.sin(t * 0.9 + pg.userData.bobPhase) * 0.011;
     });
   }
 
@@ -4981,22 +4977,25 @@ function animate() {
           child.position.set(child.userData.baseX, child.userData.baseY, child.userData.baseZ);
         }
       });
-      // Start vertex marker fade-in if markers were deferred during intro
-      if (markerGroup.userData.pendingFadeIn) {
-        markerGroup.userData.pendingFadeIn = false;
-        _vertexFadeIn = { t: 0, duration: 3.0 };
+      // Snap vertex markers to full opacity
+      if (markerGroup.userData.pendingAppear) {
+        markerGroup.userData.pendingAppear = false;
+        markerGroup.children.forEach(m => { if (m.material) m.material.opacity = 1; });
       }
+      // Begin port + boat rise from below water
+      boardGroup.userData.portRise = { t: 0, duration: 1.8 };
     }
   }
 
-  // Vertex marker fade-in after intro
-  if (_vertexFadeIn) {
-    _vertexFadeIn.t += delta;
-    const opacity = Math.min(1, _vertexFadeIn.t / _vertexFadeIn.duration);
-    markerGroup.children.forEach(m => {
-      if (m.userData.markerType === 'vertex' && m.material) m.material.opacity = opacity;
-    });
-    if (_vertexFadeIn.t >= _vertexFadeIn.duration) _vertexFadeIn = null;
+  // Port + boat rise after intro ends
+  const portRise = boardGroup.userData.portRise;
+  if (portRise) {
+    portRise.t += delta;
+    const rp = Math.min(1, portRise.t / portRise.duration);
+    // ease-out cubic
+    const re = 1 - Math.pow(1 - rp, 3);
+    boardGroup.userData._portRiseOff = (1 - re) * -2.5;
+    if (rp >= 1) { boardGroup.userData._portRiseOff = 0; boardGroup.userData.portRise = null; }
   }
 
   // Tile bobbing — independent per-hex sine wave (skip during intro)
@@ -5171,12 +5170,13 @@ function animate() {
 
     boardGroup.userData.boats.forEach((boat, bi) => {
       const bob = Math.sin(t * 0.9 + bi * 1.7) * 0.0125;
+      const riseOff = boardGroup.userData._portRiseOff ?? 0;
 
       if (boat.targetDockIdx === -1) {
         // ── Docked ─────────────────────────────────────────────────────────
         const dock = docks[boat.dockIdx];
         const sp = spotPos(dock, boat.spotIdx);
-        boat.mesh.position.set(sp.x, boatBaseY + bob, sp.z);
+        boat.mesh.position.set(sp.x, boatBaseY + bob + riseOff, sp.z);
 
         if (t - boat.dockArrivalT > DOCK_WAIT) {
           // Find a free spot on a different dock
@@ -5233,7 +5233,7 @@ function animate() {
         const angle = boat.fromAngle + boat.toAngleDiff * ease;
         boat.mesh.position.set(
           Math.cos(angle) * TRAVEL_R,
-          boatBaseY + bob,
+          boatBaseY + bob + riseOff,
           Math.sin(angle) * TRAVEL_R
         );
         // Face forward along the arc tangent direction
@@ -5264,12 +5264,9 @@ function animate() {
     });
   }
 
-  // Marker glow pulsation — scale by fade-in progress so glow is hidden during intro
-  if (markerGroup.children.length) {
-    const fadeFactor = _vertexFadeIn
-      ? Math.min(1, _vertexFadeIn.t / _vertexFadeIn.duration)
-      : (markerGroup.userData.pendingFadeIn ? 0 : 1);
-    const glowOpacity = (0.30 + Math.sin(t * 2.8) * 0.20) * fadeFactor; // 0.10–0.50 pulsating
+  // Marker glow pulsation — hidden during intro
+  if (markerGroup.children.length && !markerGroup.userData.pendingAppear) {
+    const glowOpacity = 0.30 + Math.sin(t * 2.8) * 0.20; // 0.10–0.50
     markerGroup.children.forEach(marker => {
       marker.children.forEach(child => {
         if (child.userData.markerGlow && child.material) child.material.opacity = glowOpacity;
