@@ -1,0 +1,10 @@
+node_modules/
+.env
+*.log
+.DS_Store
+
+# Models too large for GitHub (>100MB) — keep locally
+public/models/Bank.glb
+public/models/Wheat object.glb
+public/models/Wheat object/source/A_texture.glb
+public/models/wood hex.glb

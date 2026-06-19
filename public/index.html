@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Catan 3D</title>
+  <link rel="stylesheet" href="style.css"/>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+
+<!-- ── LOBBY ── -->
+<div id="lobby">
+  <div class="lobby-card">
+    <h1>🎲 Catan 3D</h1>
+    <p class="subtitle">Multiplayer · 3D Board · 2–4 Players</p>
+    <div class="form-group">
+      <label>Your Name</label>
+      <input id="playerName" type="text" maxlength="16" placeholder="Enter name…"/>
+    </div>
+    <div class="divider">Create or Join</div>
+    <button id="btnCreate" class="btn btn-primary">Create Room</button>
+    <div class="join-row">
+      <input id="roomCodeInput" type="text" maxlength="6" placeholder="Room code…" style="text-transform:uppercase"/>
+      <button id="btnJoin" class="btn btn-secondary">Join</button>
+    </div>
+    <p id="lobbyError" class="error-msg"></p>
+  </div>
+</div>
+
+<!-- ── WAITING ── -->
+<div id="waiting" style="display:none">
+  <div class="lobby-card">
+    <h2>Waiting Room</h2>
+    <p>Share this code: <span id="roomCodeDisplay" class="room-code"></span></p>
+    <ul id="waitingPlayerList"></ul>
+    <div id="botControls" style="display:none">
+      <select id="botDifficulty" class="bot-diff-select">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+      <button id="btnAddBot" class="btn btn-secondary">+ Add Bot</button>
+      <button id="btnRemoveBot" class="btn btn-secondary">− Remove Bot</button>
+    </div>
+    <div id="gameSettings" style="display:none;margin:10px 0;padding:8px 10px;background:rgba(255,255,255,0.06);border-radius:8px;font-size:.85rem">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="chkHideBankCards" style="width:16px;height:16px;cursor:pointer">
+        <span>Hide bank card counts</span>
+      </label>
+    </div>
+    <button id="btnStart" class="btn btn-primary" style="display:none">Start Game</button>
+    <p id="waitingHint" class="hint">Waiting for host to start…</p>
+  </div>
+</div>
+
+<!-- ── GAME ── -->
+<div id="game" style="display:none">
+
+  <!-- Left icon bar -->
+  <div id="leftBar">
+    <button class="icon-btn" id="btnSettings" title="Settings">⚙</button>
+    <button class="icon-btn" title="Rulebook">📖</button>
+    <button class="icon-btn" id="btnFullscreen" title="Fullscreen">⛶</button>
+    <button class="icon-btn" title="Info">ℹ</button>
+    <button class="icon-btn" id="btnGetAllRes" title="Get all resources (debug)" style="font-size:.65rem;padding:4px 6px">+Res</button>
+  </div>
+
+  <!-- Settings panel -->
+  <div id="settingsPanel">
+    <div class="settings-header">
+      <span>Scene Settings</span>
+      <button id="btnSettingsClose">✕</button>
+    </div>
+    <div class="settings-body">
+
+      <div class="settings-section-label">TILE HEIGHT</div>
+      <div class="tile-slider" data-param="tileHeight" data-type="mountains">
+        <label><span class="tile-icon">🏔</span> Mountains</label>
+        <div class="slider-row"><input type="range" min="0.3" max="3.5" step="0.05" value="2.10"/><span class="slider-val">2.10</span></div>
+      </div>
+      <div class="tile-slider" data-param="tileHeight" data-type="hills">
+        <label><span class="tile-icon">⛰</span> Hills</label>
+        <div class="slider-row"><input type="range" min="0.3" max="3.5" step="0.05" value="1.25"/><span class="slider-val">1.25</span></div>
+      </div>
+      <div class="tile-slider" data-param="tileHeight" data-type="forest">
+        <label><span class="tile-icon">🌲</span> Forest</label>
+        <div class="slider-row"><input type="range" min="0.3" max="3.5" step="0.05" value="2.05"/><span class="slider-val">2.05</span></div>
+      </div>
+      <div class="tile-slider" data-param="tileHeight" data-type="pasture">
+        <label><span class="tile-icon">🐑</span> Pasture</label>
+        <div class="slider-row"><input type="range" min="0.3" max="3.5" step="0.05" value="1.0"/><span class="slider-val">1.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="tileHeight" data-type="fields">
+        <label><span class="tile-icon">🌾</span> Fields</label>
+        <div class="slider-row"><input type="range" min="0.3" max="3.5" step="0.05" value="0.55"/><span class="slider-val">0.55</span></div>
+      </div>
+      <div class="tile-slider" data-param="tileHeight" data-type="desert">
+        <label><span class="tile-icon">🏜</span> Desert</label>
+        <div class="slider-row"><input type="range" min="0.3" max="3.5" step="0.05" value="1.30"/><span class="slider-val">1.30</span></div>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:10px">TILE VERTICAL</div>
+      <div class="tile-slider" data-param="tileY" data-type="mountains">
+        <label><span class="tile-icon">🏔</span> Mountains</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.35"/><span class="slider-val">-0.35</span></div>
+      </div>
+      <div class="tile-slider" data-param="tileY" data-type="hills">
+        <label><span class="tile-icon">⛰</span> Hills</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.26"/><span class="slider-val">-0.26</span></div>
+      </div>
+      <div class="tile-slider" data-param="tileY" data-type="forest">
+        <label><span class="tile-icon">🌲</span> Forest</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.18"/><span class="slider-val">-0.18</span></div>
+      </div>
+      <div class="tile-slider" data-param="tileY" data-type="pasture">
+        <label><span class="tile-icon">🐑</span> Pasture</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.39"/><span class="slider-val">-0.39</span></div>
+      </div>
+      <div class="tile-slider" data-param="tileY" data-type="fields">
+        <label><span class="tile-icon">🌾</span> Fields</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.18"/><span class="slider-val">-0.18</span></div>
+      </div>
+      <div class="tile-slider" data-param="tileY" data-type="desert">
+        <label><span class="tile-icon">🏜</span> Desert</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.18"/><span class="slider-val">-0.18</span></div>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:10px">ENVIRONMENT</div>
+      <div class="tile-slider" data-param="scene" data-type="sandTopY">
+        <label><span class="tile-icon">🏖</span> Sand Top</label>
+        <div class="slider-row"><input type="range" min="-0.8" max="0.4" step="0.01" value="-0.49"/><span class="slider-val">-0.49</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="sandBotY">
+        <label><span class="tile-icon">🏝</span> Sand Bottom</label>
+        <div class="slider-row"><input type="range" min="-1.5" max="0.0" step="0.01" value="-1.07"/><span class="slider-val">-1.07</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="sandRadius">
+        <label><span class="tile-icon">🏖</span> Sand Radius</label>
+        <div class="slider-row"><input type="range" min="1.0" max="8.0" step="0.1" value="2.6"/><span class="slider-val">2.60</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="oceanY">
+        <label><span class="tile-icon">🌊</span> Ocean Level</label>
+        <div class="slider-row"><input type="range" min="-1.5" max="0.0" step="0.01" value="-0.47"/><span class="slider-val">-0.47</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="portY">
+        <label><span class="tile-icon">⚓</span> Port Height</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="1.0" step="0.01" value="-0.22"/><span class="slider-val">-0.22</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="portDist">
+        <label><span class="tile-icon">⚓</span> Port Distance</label>
+        <div class="slider-row"><input type="range" min="0.1" max="3.5" step="0.05" value="0.50"/><span class="slider-val">0.50</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="portScale">
+        <label><span class="tile-icon">🔭</span> Port Scale</label>
+        <div class="slider-row"><input type="range" min="0.2" max="3.0" step="0.05" value="0.50"/><span class="slider-val">0.50</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="portIconScale">
+        <label><span class="tile-icon">🪙</span> Port Icon Scale</label>
+        <div class="slider-row"><input type="range" min="0.1" max="5.0" step="0.05" value="2.00"/><span class="slider-val">2.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="portIconY">
+        <label><span class="tile-icon">↑</span> Port 3D Y</label>
+        <div class="slider-row"><input type="range" min="-1" max="3" step="0.05" value="0.85"/><span class="slider-val">0.85</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="portIconTextScale">
+        <label><span class="tile-icon">🔡</span> Port Text Scale (2:1)</label>
+        <div class="slider-row"><input type="range" min="0.1" max="3.0" step="0.05" value="1.50"/><span class="slider-val">1.50</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="portIconTextY">
+        <label><span class="tile-icon">↕</span> Port Text Y (2:1)</label>
+        <div class="slider-row"><input type="range" min="-2" max="2" step="0.05" value="0.20"/><span class="slider-val">0.20</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="portIconText3dScale">
+        <label><span class="tile-icon">🔡</span> 3:1 Scale</label>
+        <div class="slider-row"><input type="range" min="0.1" max="3.0" step="0.05" value="1.35"/><span class="slider-val">1.35</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="portIconText3dY">
+        <label><span class="tile-icon">↕</span> 3:1 Y</label>
+        <div class="slider-row"><input type="range" min="-2" max="2" step="0.05" value="0.35"/><span class="slider-val">0.35</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="boatY">
+        <label><span class="tile-icon">⛵</span> Boat Y</label>
+        <div class="slider-row"><input type="range" min="-1" max="1" step="0.01" value="-0.27"/><span class="slider-val">-0.27</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="boatDockOffset">
+        <label><span class="tile-icon">⚓</span> Boat Dock Offset</label>
+        <div class="slider-row"><input type="range" min="-2" max="2" step="0.05" value="0.20"/><span class="slider-val">0.20</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="boatSpeed">
+        <label><span class="tile-icon">💨</span> Boat Speed</label>
+        <div class="slider-row"><input type="range" min="0" max="3" step="0.05" value="0.05"/><span class="slider-val">0.05</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="boatRotOffset">
+        <label><span class="tile-icon">🔄</span> Boat Rotation (moving)</label>
+        <div class="slider-row"><input type="range" min="-3.14" max="3.14" step="0.05" value="1.70"/><span class="slider-val">1.70</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="settlementY">
+        <label><span class="tile-icon">🏠</span> Settlement Y</label>
+        <div class="slider-row"><input type="range" min="-1" max="1" step="0.01" value="-0.60"/><span class="slider-val">-0.60</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="castleY">
+        <label><span class="tile-icon">🏰</span> Castle Y</label>
+        <div class="slider-row"><input type="range" min="-1" max="1" step="0.01" value="-0.60"/><span class="slider-val">-0.60</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="castleSize">
+        <label><span class="tile-icon">🏰</span> Castle size</label>
+        <div class="slider-row"><input type="range" min="0.2" max="2.0" step="0.01" value="0.72"/><span class="slider-val">0.72</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="sheepScale">
+        <label><span class="tile-icon">🐑</span> Sheep scale</label>
+        <div class="slider-row"><input type="range" min="0.02" max="0.6" step="0.01" value="0.14"/><span class="slider-val">0.14</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="sheepY">
+        <label><span class="tile-icon">🐑</span> Sheep Y</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="1.0" step="0.01" value="-0.06"/><span class="slider-val">-0.06</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="camelScale">
+        <label><span class="tile-icon">🐪</span> Camel Scale</label>
+        <div class="slider-row"><input type="range" min="0.02" max="0.8" step="0.01" value="0.18"/><span class="slider-val">0.18</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="camelY">
+        <label><span class="tile-icon">🐪</span> Camel Y</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="1.0" step="0.01" value="-0.06"/><span class="slider-val">-0.06</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="tokenWiggleAmp">
+        <label><span class="tile-icon">🎲</span> Token wiggle amplitude</label>
+        <div class="slider-row"><input type="range" min="0" max="1.5" step="0.01" value="0.45"/><span class="slider-val">0.45</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="tokenWiggleDur">
+        <label><span class="tile-icon">🎲</span> Token wiggle duration (s)</label>
+        <div class="slider-row"><input type="range" min="0.2" max="4" step="0.1" value="1.2"/><span class="slider-val">1.20</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="tokenWiggleSpd">
+        <label><span class="tile-icon">🎲</span> Token wiggle speed</label>
+        <div class="slider-row"><input type="range" min="2" max="40" step="0.5" value="14"/><span class="slider-val">14.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="roadY">
+        <label><span class="tile-icon">🛣</span> Road Y</label>
+        <div class="slider-row"><input type="range" min="-1" max="1" step="0.01" value="-0.63"/><span class="slider-val">-0.63</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="tokenMetalness">
+        <label><span class="tile-icon">🪙</span> Token Metalness</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.01" value="0.75"/><span class="slider-val">0.75</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="vertexMarkerY">
+        <label><span class="tile-icon">🟡</span> Vertex Marker Y</label>
+        <div class="slider-row"><input type="range" min="-2" max="2" step="0.02" value="-0.76"/><span class="slider-val">-0.76</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="edgeMarkerY">
+        <label><span class="tile-icon">🟨</span> Edge Marker Y</label>
+        <div class="slider-row"><input type="range" min="-2" max="2" step="0.02" value="-0.64"/><span class="slider-val">-0.64</span></div>
+      </div>
+      <div class="tile-slider" data-param="scene" data-type="hexMarkerY">
+        <label><span class="tile-icon">🔴</span> Hex Marker Y</label>
+        <div class="slider-row"><input type="range" min="-2" max="2" step="0.02" value="0.04"/><span class="slider-val">0.04</span></div>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:10px">NUMBER TOKEN Y</div>
+      <div class="tile-slider" data-param="numberY" data-type="mountains">
+        <label><span class="tile-icon">🏔</span> Mountains</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.04"/><span class="slider-val">-0.04</span></div>
+      </div>
+      <div class="tile-slider" data-param="numberY" data-type="hills">
+        <label><span class="tile-icon">⛰</span> Hills</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.18"/><span class="slider-val">-0.18</span></div>
+      </div>
+      <div class="tile-slider" data-param="numberY" data-type="forest">
+        <label><span class="tile-icon">🌲</span> Forest</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.50"/><span class="slider-val">-0.50</span></div>
+      </div>
+      <div class="tile-slider" data-param="numberY" data-type="pasture">
+        <label><span class="tile-icon">🐑</span> Pasture</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.13"/><span class="slider-val">-0.13</span></div>
+      </div>
+      <div class="tile-slider" data-param="numberY" data-type="fields">
+        <label><span class="tile-icon">🌾</span> Fields</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="-0.13"/><span class="slider-val">-0.13</span></div>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:10px">WATER</div>
+      <div class="tile-slider" data-param="water" data-type="waveSpeed">
+        <label><span class="tile-icon">💨</span> Wave Speed</label>
+        <div class="slider-row"><input type="range" min="0" max="4" step="0.05" value="1.30"/><span class="slider-val">1.30</span></div>
+      </div>
+      <div class="tile-slider" data-param="water" data-type="waveAmp">
+        <label><span class="tile-icon">〰</span> Wave Height</label>
+        <div class="slider-row"><input type="range" min="0" max="4" step="0.05" value="1.30"/><span class="slider-val">1.30</span></div>
+      </div>
+      <div class="tile-slider" data-param="water" data-type="waveScale">
+        <label><span class="tile-icon">📐</span> Wave Scale</label>
+        <div class="slider-row"><input type="range" min="0.2" max="5" step="0.05" value="3.00"/><span class="slider-val">3.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="water" data-type="foamStr">
+        <label><span class="tile-icon">🫧</span> Foam</label>
+        <div class="slider-row"><input type="range" min="0" max="1.2" step="0.02" value="0.75"/><span class="slider-val">0.75</span></div>
+      </div>
+      <div class="tile-slider" data-param="water" data-type="opacity">
+        <label><span class="tile-icon">👁</span> Opacity</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.02" value="0.80"/><span class="slider-val">0.80</span></div>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:10px">LIGHTING</div>
+      <div class="tile-slider" data-param="light" data-type="timeOfDay">
+        <label><span class="tile-icon">🌅</span> Time of Day</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.01" value="0.76"/><span class="slider-val">0.76</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="sunIntensity">
+        <label><span class="tile-icon">☀</span> Sun Intensity</label>
+        <div class="slider-row"><input type="range" min="0" max="5" step="0.05" value="2.60"/><span class="slider-val">2.60</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="ambIntensity">
+        <label><span class="tile-icon">🌤</span> Ambient</label>
+        <div class="slider-row"><input type="range" min="0" max="2" step="0.05" value="1.00"/><span class="slider-val">1.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="fillIntensity">
+        <label><span class="tile-icon">🔵</span> Sky Fill</label>
+        <div class="slider-row"><input type="range" min="0" max="1.5" step="0.05" value="0.70"/><span class="slider-val">0.70</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="exposure">
+        <label><span class="tile-icon">📷</span> Exposure</label>
+        <div class="slider-row"><input type="range" min="0" max="3" step="0.05" value="1.00"/><span class="slider-val">1.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="fogDensity">
+        <label><span class="tile-icon">🌫</span> Fog</label>
+        <div class="slider-row"><input type="range" min="0" max="0.08" step="0.001" value="0.01"/><span class="slider-val">0.010</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="bloomStr">
+        <label><span class="tile-icon">✨</span> Bloom</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.01" value="0.35"/><span class="slider-val">0.35</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="bloomRadius">
+        <label><span class="tile-icon">🔆</span> Bloom Radius</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.01" value="0.00"/><span class="slider-val">0.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="saturation">
+        <label><span class="tile-icon">🎨</span> Saturation</label>
+        <div class="slider-row"><input type="range" min="0" max="3" step="0.05" value="1.30"/><span class="slider-val">1.30</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="brightness">
+        <label><span class="tile-icon">☀️</span> Brightness</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="0.00"/><span class="slider-val">0.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="contrast">
+        <label><span class="tile-icon">◑</span> Contrast</label>
+        <div class="slider-row"><input type="range" min="0.5" max="2" step="0.01" value="1.00"/><span class="slider-val">1.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="hue">
+        <label><span class="tile-icon">🌈</span> Hue Shift</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="0.5" step="0.01" value="0.00"/><span class="slider-val">0.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="light" data-type="warmth">
+        <label><span class="tile-icon">🔥</span> Warmth</label>
+        <div class="slider-row"><input type="range" min="-0.3" max="0.3" step="0.01" value="0.03"/><span class="slider-val">0.03</span></div>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:10px">SKY</div>
+      <div class="tile-slider" data-param="sky" data-type="horizonR">
+        <label><span class="tile-icon">🌅</span> Horizon R</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.01" value="0.43"/><span class="slider-val">0.43</span></div>
+      </div>
+      <div class="tile-slider" data-param="sky" data-type="horizonG">
+        <label><span class="tile-icon">🌿</span> Horizon G</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.01" value="0.60"/><span class="slider-val">0.60</span></div>
+      </div>
+      <div class="tile-slider" data-param="sky" data-type="horizonB">
+        <label><span class="tile-icon">💧</span> Horizon B</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.01" value="0.68"/><span class="slider-val">0.68</span></div>
+      </div>
+      <div class="tile-slider" data-param="sky" data-type="zenithR">
+        <label><span class="tile-icon">🌅</span> Zenith R</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.01" value="0.14"/><span class="slider-val">0.14</span></div>
+      </div>
+      <div class="tile-slider" data-param="sky" data-type="zenithG">
+        <label><span class="tile-icon">🌿</span> Zenith G</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.01" value="0.31"/><span class="slider-val">0.31</span></div>
+      </div>
+      <div class="tile-slider" data-param="sky" data-type="zenithB">
+        <label><span class="tile-icon">💧</span> Zenith B</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.01" value="0.45"/><span class="slider-val">0.45</span></div>
+      </div>
+      <div class="tile-slider" data-param="sky" data-type="hazeAmt">
+        <label><span class="tile-icon">🌫</span> Haze</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.02" value="0.24"/><span class="slider-val">0.24</span></div>
+      </div>
+      <div class="tile-slider" data-param="sky" data-type="sunSize">
+        <label><span class="tile-icon">☀</span> Sun Disc</label>
+        <div class="slider-row"><input type="range" min="20" max="600" step="5" value="225"/><span class="slider-val">225</span></div>
+      </div>
+      <div class="tile-slider" data-param="sky" data-type="sunGlow">
+        <label><span class="tile-icon">🔆</span> Sun Glow</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.02" value="0"/><span class="slider-val">0.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="sky" data-type="cloudHeight">
+        <label><span class="tile-icon">⬆</span> Cloud Height</label>
+        <div class="slider-row"><input type="range" min="-20" max="30" step="0.5" value="0"/><span class="slider-val">0.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="sky" data-type="cloudColorTemp">
+        <label><span class="tile-icon">🌡</span> Cloud Color Temp</label>
+        <div class="slider-row"><input type="range" min="-1" max="1" step="0.05" value="1"/><span class="slider-val">1.00</span></div>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:10px">MOUNTAIN CLOUDS</div>
+      <div class="tile-slider" data-param="cloud" data-type="enabled">
+        <label><span class="tile-icon">☁</span> Enabled</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="1" value="1"/><span class="slider-val">1</span></div>
+      </div>
+      <div class="tile-slider" data-param="cloud" data-type="height">
+        <label><span class="tile-icon">⬆</span> Height</label>
+        <div class="slider-row"><input type="range" min="-4" max="8" step="0.05" value="-0.45"/><span class="slider-val">-0.45</span></div>
+      </div>
+      <div class="tile-slider" data-param="cloud" data-type="spread">
+        <label><span class="tile-icon">↔</span> Spread</label>
+        <div class="slider-row"><input type="range" min="-2" max="4" step="0.05" value="-0.20"/><span class="slider-val">-0.20</span></div>
+      </div>
+      <div class="tile-slider" data-param="cloud" data-type="scale">
+        <label><span class="tile-icon">🔍</span> Size</label>
+        <div class="slider-row"><input type="range" min="-2" max="4" step="0.05" value="0.50"/><span class="slider-val">0.50</span></div>
+      </div>
+      <div class="tile-slider" data-param="cloud" data-type="opacity">
+        <label><span class="tile-icon">👁</span> Opacity</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.02" value="0.02"/><span class="slider-val">0.02</span></div>
+      </div>
+      <div class="tile-slider" data-param="cloud" data-type="speed">
+        <label><span class="tile-icon">💨</span> Drift Speed</label>
+        <div class="slider-row"><input type="range" min="0" max="4" step="0.05" value="0.20"/><span class="slider-val">0.20</span></div>
+      </div>
+      <div class="tile-slider" data-param="cloud" data-type="amount">
+        <label><span class="tile-icon">🔢</span> Amount</label>
+        <div class="slider-row"><input type="range" min="0" max="3" step="0.1" value="2.4"/><span class="slider-val">2.40</span></div>
+      </div>
+      <div class="tile-slider" data-param="cloud" data-type="brightness">
+        <label><span class="tile-icon">✨</span> Brightness</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.02" value="0.66"/><span class="slider-val">0.66</span></div>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:10px">ROBBER</div>
+      <div class="tile-slider" data-param="robber" data-type="animSpeed">
+        <label><span class="tile-icon">▶</span> Anim Speed</label>
+        <div class="slider-row"><input type="range" min="0" max="4" step="0.05" value="1"/><span class="slider-val">1.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="robber" data-type="animCycle">
+        <label><span class="tile-icon">⏱</span> Anim Cycle (s)</label>
+        <div class="slider-row"><input type="range" min="1" max="60" step="1" value="8"/><span class="slider-val">8.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="robber" data-type="scale">
+        <label><span class="tile-icon">📏</span> Scale</label>
+        <div class="slider-row"><input type="range" min="0.2" max="3" step="0.05" value="1"/><span class="slider-val">1.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="robber" data-type="emissive">
+        <label><span class="tile-icon">💡</span> Emissive</label>
+        <div class="slider-row"><input type="range" min="0" max="1" step="0.02" value="0"/><span class="slider-val">0.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="robber" data-type="roughness">
+        <label><span class="tile-icon">🪨</span> Roughness</label>
+        <div class="slider-row"><input type="range" min="-1" max="1" step="0.02" value="1"/><span class="slider-val">1.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="robber" data-type="metalness">
+        <label><span class="tile-icon">⚙</span> Metalness</label>
+        <div class="slider-row"><input type="range" min="-1" max="1" step="0.02" value="-1"/><span class="slider-val">-1.00</span></div>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:10px">BANK</div>
+      <div class="tile-slider" data-param="bank" data-type="scale">
+        <label><span class="tile-icon">📏</span> Scale</label>
+        <div class="slider-row"><input type="range" min="0.1" max="4" step="0.05" value="0.70"/><span class="slider-val">0.70</span></div>
+      </div>
+      <div class="tile-slider" data-param="bank" data-type="rotationY">
+        <label><span class="tile-icon">🔄</span> Rotation</label>
+        <div class="slider-row"><input type="range" min="0" max="6.28" step="0.05" value="2.10"/><span class="slider-val">2.10</span></div>
+      </div>
+      <div class="tile-slider" data-param="bank" data-type="height">
+        <label><span class="tile-icon">⬆</span> Height</label>
+        <div class="slider-row"><input type="range" min="-0.5" max="1" step="0.01" value="0.07"/><span class="slider-val">0.07</span></div>
+      </div>
+      <div class="tile-slider" data-param="bank" data-type="islandR">
+        <label><span class="tile-icon">🏝</span> Island Radius</label>
+        <div class="slider-row"><input type="range" min="0.3" max="3" step="0.05" value="1.10"/><span class="slider-val">1.10</span></div>
+      </div>
+      <div class="tile-slider" data-param="bank" data-type="islandH">
+        <label><span class="tile-icon">⛰</span> Island Height</label>
+        <div class="slider-row"><input type="range" min="0.02" max="1" step="0.01" value="0.29"/><span class="slider-val">0.29</span></div>
+      </div>
+      <div class="tile-slider" data-param="bank" data-type="posX">
+        <label><span class="tile-icon">↔</span> Position X</label>
+        <div class="slider-row"><input type="range" min="-5" max="5" step="0.1" value="-2.00"/><span class="slider-val">-2.00</span></div>
+      </div>
+      <div class="tile-slider" data-param="bank" data-type="posY">
+        <label><span class="tile-icon">↑</span> Position Y</label>
+        <div class="slider-row"><input type="range" min="-2" max="2" step="0.05" value="-0.20"/><span class="slider-val">-0.20</span></div>
+      </div>
+      <div class="tile-slider" data-param="bank" data-type="posZ">
+        <label><span class="tile-icon">↕</span> Position Z</label>
+        <div class="slider-row"><input type="range" min="-5" max="5" step="0.1" value="0.20"/><span class="slider-val">0.20</span></div>
+      </div>
+
+      <div class="settings-section-label" style="margin-top:10px">AUDIO</div>
+
+      <div class="audio-row">
+        <span class="audio-row-label">🎵 Music</span>
+        <button id="audioMusicMute" class="mic-btn on">🔊</button>
+        <input id="audioMusicVol" type="range" min="0" max="0.25" step="0.005" value="0.05"/>
+      </div>
+      <div class="audio-row">
+        <span class="audio-row-label">🔔 SFX</span>
+        <button id="audioSfxMute" class="mic-btn on">🔊</button>
+        <input id="audioSfxVol" type="range" min="0" max="1" step="0.02" value="0.5"/>
+      </div>
+      <div class="audio-row">
+        <span class="audio-row-label">🎙 Voice Over</span>
+        <button id="audioVoMute" class="mic-btn on">🔊</button>
+        <input id="audioVoVol" type="range" min="0" max="1" step="0.02" value="0.2"/>
+      </div>
+      <div class="audio-row">
+        <span class="audio-row-label">🗣 Voice Chat</span>
+        <button id="audioVcMute" class="mic-btn on">🔊</button>
+        <input id="audioVcVol" type="range" min="0" max="1" step="0.02" value="1.0"/>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Center: canvas + bottom bar -->
+  <div id="centerArea">
+    <div id="canvasWrapper">
+      <canvas id="c"></canvas>
+
+      <!-- Floating game log toasts -->
+      <div id="logToastArea"></div>
+
+      <!-- build mode hint -->
+      <div id="buildMode" style="display:none"></div>
+      <button id="btnCancel" style="display:none" class="cancel-overlay-btn">✕ Cancel</button>
+
+      <!-- Build confirmation popup -->
+      <div id="buildConfirm" style="display:none">
+        <div id="buildConfirmCard">
+          <div id="buildConfirmMsg"></div>
+          <div class="build-confirm-row">
+            <button id="btnBuildConfirmYes" class="btn btn-primary">Build</button>
+            <button id="btnBuildConfirmNo" class="btn btn-secondary">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- dice pop-up overlay -->
+      <div id="diceOverlay" style="display:none">
+        <div id="dicePopNum"></div>
+        <div id="dicePopSub"></div>
+      </div>
+
+      <!-- other modals remain in canvas area -->
+
+      <!-- Incoming trade notification (top-right, shown to non-proposer players) -->
+      <div id="tradeIncoming" style="display:none">
+        <div class="trade-incoming-card">
+          <div class="ti-header">🤝 <span id="tiProposerName"></span> offers a trade</div>
+          <div class="ti-body">
+            <div class="ti-side">
+              <div class="ti-label">They give</div>
+              <div id="tiOfferRow" class="ti-res-row"></div>
+            </div>
+            <div class="ti-arrow">⟺</div>
+            <div class="ti-side">
+              <div class="ti-label">You give</div>
+              <div id="tiWantRow" class="ti-res-row"></div>
+            </div>
+          </div>
+          <div id="tiOtherResponses" style="display:none;margin:6px 0;font-size:.78rem;color:rgba(255,255,255,0.55);"></div>
+          <div class="trade-btn-row">
+            <button id="btnTradeAccept" class="btn btn-primary">✓ Accept</button>
+            <button id="btnTradeReject" class="btn btn-secondary">✗ Decline</button>
+          </div>
+          <button id="btnCounteroffer" class="btn btn-secondary" style="margin-top:6px;width:100%;font-size:.82rem;">⟺ Counteroffer</button>
+        </div>
+      </div>
+
+      <!-- Counteroffer modal -->
+      <div id="counterofferModal" style="display:none;position:fixed;inset:0;z-index:950;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);">
+        <div class="modal-card" style="min-width:320px;max-width:420px;">
+          <h3 style="margin:0 0 12px">⟺ Counteroffer</h3>
+          <div style="font-size:.8rem;color:rgba(255,255,255,0.5);margin-bottom:10px;">You give → You receive</div>
+          <div id="coOfferRows" style="margin-bottom:12px;"></div>
+          <div class="modal-row" style="margin-top:12px;gap:8px;display:flex;">
+            <button id="btnCoSend" class="btn btn-primary" style="flex:1">Send Counteroffer</button>
+            <button id="btnCoCancel" class="btn btn-secondary" style="flex:1">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="devModal" style="display:none">
+        <div class="modal-card">
+          <h3>Play Dev Card</h3>
+          <div id="devCardList"></div>
+          <button id="btnDevCancel" class="btn btn-secondary" style="margin-top:8px">Cancel</button>
+        </div>
+      </div>
+
+      <div id="paramModal" style="display:none">
+        <div class="modal-card">
+          <h3 id="paramTitle"></h3>
+          <div id="paramFields"></div>
+          <div class="modal-row">
+            <button id="btnParamOk" class="btn btn-primary">OK</button>
+            <button id="btnParamCancel" class="btn btn-secondary">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="discardModal" style="display:none">
+        <div class="modal-card" style="min-width:320px;max-width:420px">
+          <h3 id="discardTitle">Discard Cards</h3>
+          <p id="discardSubtitle" style="color:var(--text-muted);font-size:.85rem;margin:0 0 12px"></p>
+          <div id="discardRows" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:.85rem;color:var(--text-muted);margin-bottom:10px">
+            <span>Selected: <b id="discardCount">0</b></span>
+            <span>Need to discard: <b id="discardNeeded">0</b></span>
+          </div>
+          <button id="btnDiscardConfirm" class="btn btn-primary" disabled>Discard</button>
+        </div>
+      </div>
+
+      <div id="gameOverBanner" style="display:none">
+        <div class="modal-card">
+          <h2 id="gameOverTitle"></h2>
+          <p id="gameOverMsg"></p>
+          <button id="btnReload" class="btn btn-primary">Back to Lobby</button>
+        </div>
+      </div>
+    </div><!-- /canvasWrapper -->
+
+    <!-- Bottom action bar -->
+    <div id="bottomBar">
+      <!-- Left: dice display -->
+      <div id="mainActionArea">
+        <div id="diceDisplay"></div>
+      </div>
+
+      <!-- Center: main action button -->
+      <div id="mainActionFloat">
+        <div id="actionAvatar"></div>
+        <button id="mainActionBtn" disabled>—</button>
+        <div id="autoRollBar" style="display:none;width:100%;height:5px;background:rgba(255,255,255,0.15);border-radius:3px;margin-top:4px;overflow:hidden;">
+          <div id="autoRollFill" style="height:100%;width:100%;background:#e74c3c;transition:none;"></div>
+        </div>
+        <div id="turnTimerBar" style="width:100%;height:4px;background:rgba(255,255,255,0.12);border-radius:3px;margin-top:3px;overflow:hidden;">
+          <div id="turnTimerFill" style="height:100%;width:100%;background:#3498db;transition:width 0.5s linear;"></div>
+        </div>
+        <div id="turnTimer">1:30</div>
+      </div>
+
+      <!-- Left: resource bar + trade -->
+      <div id="myResourceBarWrap">
+        <div id="myResourceBar"></div>
+        <button id="btnOpenTrade" class="res-bar-trade-btn">⟺ Trade</button>
+      </div>
+
+      <!-- Flex spacer pushes shortcuts to the right -->
+      <div style="flex:1;min-width:0;"></div>
+
+      <!-- Right: build shortcuts -->
+      <div id="buildShortcuts">
+        <button class="shortcut-btn" id="btnRoad">
+          <span class="sc-icon">🛤</span><span class="sc-lbl">Road</span>
+        </button>
+        <button class="shortcut-btn" id="btnSettle">
+          <span class="sc-icon">🗼</span><span class="sc-lbl">Tower</span>
+        </button>
+        <button class="shortcut-btn" id="btnCity">
+          <span class="sc-icon">🏯</span><span class="sc-lbl">Castle</span>
+        </button>
+        <button class="shortcut-btn" id="btnDevBuy">
+          <span class="sc-icon">📜</span><span class="sc-lbl">Dev Card</span>
+        </button>
+        <button class="shortcut-btn" id="btnDevPlay">
+          <span class="sc-icon">▶</span><span class="sc-lbl">Play Card</span>
+        </button>
+      </div>
+
+      <!-- Right: pieces remaining -->
+      <div id="piecesRemaining"></div>
+    </div><!-- /bottomBar -->
+
+    <!-- Trade popup (floats above resource bar) -->
+    <div id="tradePanelPopup" style="display:none">
+      <div class="trade-popup-inner">
+        <div class="trade-popup-header">
+          <span class="trade-popup-title">Trade</span>
+          <button id="btnTradeClose" class="trade-close-btn">✕</button>
+        </div>
+        <!-- Main propose panel -->
+        <div id="tradeProposePanel">
+          <div class="trade-popup-cols">
+            <div class="trade-bar-col">
+              <div class="trade-section-label">YOU GIVE</div>
+              <div class="trade-res-row" id="tradeGiveRow"></div>
+            </div>
+            <div class="trade-popup-arrow">⟺</div>
+            <div class="trade-bar-col">
+              <div class="trade-section-label">YOU RECEIVE</div>
+              <div class="trade-res-row" id="tradeRecvRow"></div>
+            </div>
+          </div>
+          <div id="tradeRatioInfo" class="trade-ratio-info"></div>
+          <div class="trade-btn-row">
+            <button id="btnTradeConfirm" class="btn btn-primary" disabled>Bank Trade</button>
+            <button id="btnTradePropose" class="btn btn-trade-propose">Offer Players</button>
+          </div>
+          <button id="btnTradeCancel" class="btn btn-secondary" style="width:100%;margin-top:4px">Cancel</button>
+        </div>
+        <!-- Waiting panel -->
+        <div id="tradeWaitPanel" style="display:none">
+          <div class="trade-waiting-msg">⏳ Waiting for responses…</div>
+          <div id="tradeResponseList"></div>
+          <button id="btnTradeCancelProp" class="btn btn-secondary" style="width:100%;margin-top:6px">Cancel Proposal</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /centerArea -->
+
+  <!-- Right sidebar -->
+  <div id="rightPanel">
+
+    <!-- Chat messages (top, scrollable) -->
+    <div id="chatSection">
+      <div id="chatMessages"></div>
+      <div id="chatInputRow">
+        <input id="chatInput" type="text" placeholder="Send a message…" maxlength="200" autocomplete="off"/>
+        <button id="btnChatSend" title="Send">↑</button>
+      </div>
+    </div>
+
+    <!-- Bank + mic row -->
+    <div id="bankVoiceRow">
+      <div id="bankSection">
+        <div class="panel-label">BANK</div>
+        <div id="bankResources"></div>
+      </div>
+      <div id="voiceControls">
+        <div class="panel-label">VOICE</div>
+        <button id="btnMicToggle" class="mic-btn off">🎤 Off</button>
+      </div>
+    </div>
+
+    <!-- Music controls -->
+    <div id="musicRow">
+      <div id="musicInfo">
+        <span id="musicIcon">🎵</span>
+        <span id="musicTitle" class="music-title">Loading…</span>
+      </div>
+      <div id="musicControls">
+        <button id="btnMusicMute" class="mic-btn on" title="Mute music">🔊</button>
+        <input id="musicVolume" type="range" min="0" max="0.25" step="0.005" value="0.05" title="Music volume"/>
+      </div>
+    </div>
+
+    <!-- Voice player indicators -->
+    <div id="voicePlayers"></div>
+
+    <!-- Opponent player rows -->
+    <div id="playersList"></div>
+
+    <!-- Self player (pinned at bottom) -->
+    <div id="selfPlayerSection"></div>
+
+  </div><!-- /rightPanel -->
+
+</div><!-- /game -->
+
+<script type="module" src="game.js"></script>
+</body>
+</html>
