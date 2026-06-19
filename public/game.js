@@ -1749,17 +1749,27 @@ function renderBoard(state) {
 function startTileIntro(hexes) {
   tileIntro.active = true;
   tileIntro.t = 0;
-  tileIntro.duration = 4.0;
+  tileIntro.duration = 7.0;
   tileIntro.hexes = hexes;
   tileIntro.hexOffsets.clear();
-  tileIntro.hexCollOff = new Map(); // additive XZ collision displacements
+  tileIntro.hexCollOff = new Map();
   tileIntro.shakeTriggered = false;
 
-  // Each hex starts exactly 1 tile width away in a random direction
+  // All tiles start on a ring outside the board, converging inward
+  // Board outer radius ≈ HEX_R * sqrt(3) * 2 ≈ 4.2 — start well beyond that
+  const RING_R = 9.0;
   hexes.forEach(hex => {
-    const angle = Math.random() * Math.PI * 2;
-    const scatter = HEX_R * 2.0 + Math.random() * HEX_R * 0.5;
-    tileIntro.hexOffsets.set(hex.id, { x0: Math.cos(angle) * scatter, z0: Math.sin(angle) * scatter });
+    // Angle outward from board center toward each hex's final position
+    // Center hex (0,0) gets a random angle since atan2(0,0) = 0
+    const baseAngle = (hex.x === 0 && hex.z === 0)
+      ? Math.random() * Math.PI * 2
+      : Math.atan2(hex.z, hex.x);
+    const angle = baseAngle + (Math.random() - 0.5) * 0.25; // slight jitter
+    const r = RING_R + (Math.random() - 0.5) * 0.8;
+    tileIntro.hexOffsets.set(hex.id, {
+      x0: Math.cos(angle) * r - hex.x,
+      z0: Math.sin(angle) * r - hex.z,
+    });
     tileIntro.hexCollOff.set(hex.id, { x: 0, z: 0 });
   });
 
