@@ -1528,9 +1528,16 @@ img.piece-icon {
     z-index: 200;
   }
 
-  /* ── Right side bar: less padding, tighter ── */
+  /* ── Right side bar: no background, transparent ── */
   #canvasWrapper { padding-right: 44px; }
-  #rightSideBar { gap: 2px; padding: 6px 3px; }
+  #rightSideBar {
+    background: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-left: none;
+    border-radius: 0;
+    gap: 2px; padding: 6px 3px;
+  }
   .rsb-btn {
     width: 38px; height: 38px; font-size: 1rem;
     min-height: 38px;

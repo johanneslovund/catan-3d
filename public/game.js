@@ -3713,13 +3713,15 @@ function syncLog(state) {
       container.appendChild(div);
       container.scrollTop = container.scrollHeight;
     }
-    // Show floating toast
+    // Show floating toast (max 5 visible — evict oldest if over limit)
     if (toastArea) {
+      const MAX_TOASTS = 5;
+      const existing = toastArea.querySelectorAll('.log-toast');
+      if (existing.length >= MAX_TOASTS) existing[0].remove();
       const toast = document.createElement('div');
       toast.className = 'log-toast';
       toast.textContent = msg;
       toastArea.appendChild(toast);
-      // Fade out after 5.5s, remove at 7s
       setTimeout(() => { toast.classList.add('fading'); }, 5500);
       setTimeout(() => { toast.remove(); }, 7000);
     }
@@ -6186,13 +6188,14 @@ function animate() {
     const cp = Math.min(1, cameraIntro.t / cameraIntro.duration);
     const ce = cp * cp * (3 - 2 * cp); // smooth step (ease-in-out)
     camera.position.x = 0;
-    camera.position.y = 5.5 + ce * (16 - 5.5);
+    const _introEndY = _isMobile ? 22 : 16;
+    camera.position.y = 5.5 + ce * (_introEndY - 5.5);
     camera.position.z = 13 + ce * (0.1 - 13);
     camera.lookAt(0, 0, 0);
     if (cp >= 1) {
       cameraIntro.active = false;
       controls.enabled = true;
-      camera.position.set(0, 16, 0);
+      camera.position.set(0, _introEndY, 0);
       camera.up.set(0, 1, 0);
       controls.target.set(0, 0, 0);
       controls.update();
