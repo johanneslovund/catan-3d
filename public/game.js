@@ -3465,6 +3465,8 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
     const input = el.querySelector('input[type=range]');
     const valEl = el.querySelector('.slider-val');
 
+    if (!input) return; // skip non-range sliders (e.g. camera preset select)
+
     function updateTrack() {
       const min = parseFloat(input.min), max = parseFloat(input.max), val = parseFloat(input.value);
       const pct = ((val - min) / (max - min) * 100).toFixed(1);
