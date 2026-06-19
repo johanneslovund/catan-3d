@@ -4030,7 +4030,6 @@ socket.on('gameUpdate', state => {
   }
 
   gameState = state;
-  if (typeof _2D !== 'undefined') _2D.drawBoard();
   if (wasNull) {
     // Skip toasts for existing log entries on initial load
     lastLogLength = (state.log || []).length;
@@ -6777,586 +6776,57 @@ function animate() {
 }
 animate();
 
-// ─── 2D Board View ────────────────────────────────────────────────────────────
+// ─── 2D Mode: top-down orthographic camera ────────────────────────────────────
 
-const _2D = (() => {
-  const canvas = document.getElementById('canvas2d');
-  const ctx    = canvas.getContext('2d');
 
-  // World→screen transform
-  let _pan  = { x: 0, y: 0 };
-  let _zoom = 1;
-  let _drag = null;
-
-  // Robber image
-  const _robberImg = new Image();
-  _robberImg.src = 'robber.png';
-
-  // Tile base fills and border colours
-  const TILE_FILL = {
-    forest:    '#2b6e28',
-    pasture:   '#7dbf3e',
-    fields:    '#e8a820',
-    hills:     '#b83c10',
-    mountains: '#6e8490',
-    desert:    '#c9b56a',
-  };
-  const TILE_BORDER = {
-    forest:    '#1a4d18',
-    pasture:   '#4e8a22',
-    fields:    '#a06800',
-    hills:     '#7a1e00',
-    mountains: '#3c5460',
-    desert:    '#8a7a30',
-  };
-  const TILE_ICON = {
-    forest:    '🌲',
-    pasture:   '🐑',
-    fields:    '🌾',
-    hills:     '🧱',
-    mountains: '⛰️',
-    desert:    '🌵',
-  };
-  const PORT_COLORS = {
-    wood:'#6b9b37', sheep:'#7dbf3e', wheat:'#e8a820',
-    brick:'#b83c10', ore:'#6e8490', any:'#c8c8c8',
-  };
-
-  const W_R = 1.2; // matches server HEX_SIZE
-
-  function scale() { return Math.min(canvas.width, canvas.height) / 7.0 * _zoom; }
-  function cx0()   { return canvas.width  / 2 + _pan.x; }
-  function cy0()   { return canvas.height / 2 + _pan.y; }
-
-  function worldToScreen(wx, wz) {
-    const s = scale();
-    return { x: cx0() + wx * s, y: cy0() + wz * s };
-  }
-
-  // Flat-top hex: first vertex at 0° (right), matching server's Math.PI/3 * i formula
-  function hexPts(sx, sy, r) {
-    const pts = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i;
-      pts.push({ x: sx + r * Math.cos(a), y: sy + r * Math.sin(a) });
-    }
-    return pts;
-  }
-
-  function tracePoly(pts) {
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.closePath();
-  }
-
-  // ── Procedural terrain textures ──────────────────────────────────────────────
-
-  function drawForest(sx, sy, r) {
-    // Dark green base already filled; draw pine tree shapes
-    const trees = [[0,-0.45],[0.32,-0.1],[-0.3,0.05],[0.1,0.35],[-0.18,-0.2]];
-    trees.forEach(([ox,oy]) => {
-      const tx = sx + ox*r, ty = sy + oy*r, tr = r*0.20;
-      // trunk
-      ctx.fillStyle = '#5d3a1a';
-      ctx.fillRect(tx - tr*0.12, ty + tr*0.6, tr*0.24, tr*0.5);
-      // canopy layers
-      [[0,0,1],[0,-tr*0.35,0.75],[0,-tr*0.65,0.5]].forEach(([,dy,sc]) => {
-        ctx.beginPath();
-        ctx.moveTo(tx, ty + dy - tr*sc);
-        ctx.lineTo(tx + tr*sc*1.1, ty + dy + tr*sc*0.5);
-        ctx.lineTo(tx - tr*sc*1.1, ty + dy + tr*sc*0.5);
-        ctx.closePath();
-        ctx.fillStyle = dy === 0 ? '#1e6b1c' : '#267024';
-        ctx.fill();
-      });
-    });
-  }
-
-  function drawPasture(sx, sy, r) {
-    // Light green hills + dots
-    for (let i = 0; i < 6; i++) {
-      const a = Math.PI/3*i + 0.2, d = r*0.38;
-      ctx.beginPath();
-      ctx.arc(sx+Math.cos(a)*d, sy+Math.sin(a)*d, r*0.18, 0, Math.PI*2);
-      ctx.fillStyle = 'rgba(130,200,60,0.45)';
-      ctx.fill();
-    }
-    // small flowers
-    const flowers = [[0.1,-0.3],[-0.25,0.1],[0.3,0.25]];
-    flowers.forEach(([ox,oy]) => {
-      ctx.beginPath();
-      ctx.arc(sx+ox*r, sy+oy*r, r*0.045, 0, Math.PI*2);
-      ctx.fillStyle = '#fff9a0';
-      ctx.fill();
-    });
-  }
-
-  function drawFields(sx, sy, r) {
-    // Wheat row lines
-    ctx.strokeStyle = 'rgba(180,110,0,0.5)';
-    ctx.lineWidth = Math.max(1, r*0.045);
-    for (let i = -3; i <= 3; i++) {
-      const y = sy + i * r * 0.22;
-      ctx.beginPath(); ctx.moveTo(sx - r*0.7, y); ctx.lineTo(sx + r*0.7, y); ctx.stroke();
-    }
-    // wheat heads
-    const stalks = [[-0.35,-0.35],[0,-0.45],[0.35,-0.3],[-0.2,0.1],[0.25,0.05],[0,0.35]];
-    stalks.forEach(([ox,oy]) => {
-      const wx = sx+ox*r, wy = sy+oy*r;
-      ctx.strokeStyle = '#c8860a'; ctx.lineWidth = Math.max(1, r*0.025);
-      ctx.beginPath(); ctx.moveTo(wx, wy+r*0.12); ctx.lineTo(wx, wy-r*0.08); ctx.stroke();
-      ctx.beginPath(); ctx.ellipse(wx, wy-r*0.14, r*0.05, r*0.1, 0, 0, Math.PI*2);
-      ctx.fillStyle = '#e8c050'; ctx.fill();
-    });
-  }
-
-  function drawHills(sx, sy, r) {
-    // Brick rows
-    const bw = r*0.28, bh = r*0.14;
-    for (let row = -2; row <= 2; row++) {
-      const y = sy + row*bh - bh/2;
-      const offset = (row % 2 === 0) ? 0 : bw/2;
-      for (let col = -3; col <= 3; col++) {
-        const x = sx + col*bw + offset;
-        const rx = x - bw*0.45, ry = y - bh*0.42, rw = bw*0.88, rh = bh*0.82;
-        ctx.fillStyle = row % 2 === 0 ? '#9e2c08' : '#b83410';
-        ctx.fillRect(rx, ry, rw, rh);
-        ctx.strokeStyle = '#7a1e00';
-        ctx.lineWidth = Math.max(0.5, r*0.012);
-        ctx.strokeRect(rx, ry, rw, rh);
-      }
-    }
-  }
-
-  function drawMountains(sx, sy, r) {
-    const peaks = [[-0.28,0.25,0.45],[0.26,0.28,0.42],[0,-0.05,0.55]];
-    peaks.forEach(([ox,oy,sc], i) => {
-      const px = sx+ox*r, py = sy+oy*r, ph = sc*r;
-      // mountain body
-      ctx.beginPath();
-      ctx.moveTo(px, py - ph);
-      ctx.lineTo(px + ph*0.7, py + ph*0.55);
-      ctx.lineTo(px - ph*0.7, py + ph*0.55);
-      ctx.closePath();
-      ctx.fillStyle = i === 2 ? '#5a6e7a' : '#4e6370';
-      ctx.fill();
-      ctx.strokeStyle = '#3c5060'; ctx.lineWidth = Math.max(0.5, r*0.015); ctx.stroke();
-      // snow cap
-      ctx.beginPath();
-      ctx.moveTo(px, py - ph);
-      ctx.lineTo(px + ph*0.22, py - ph*0.52);
-      ctx.lineTo(px - ph*0.22, py - ph*0.52);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(240,248,255,0.88)'; ctx.fill();
-    });
-  }
-
-  function drawDesert(sx, sy, r) {
-    // Sand dune curves
-    for (let i = 0; i < 4; i++) {
-      const dy = (i-1.5)*r*0.22;
-      ctx.beginPath();
-      ctx.moveTo(sx - r*0.7, sy+dy+r*0.08);
-      ctx.bezierCurveTo(sx-r*0.2, sy+dy-r*0.08, sx+r*0.2, sy+dy+r*0.12, sx+r*0.7, sy+dy);
-      ctx.strokeStyle = `rgba(160,120,30,${0.25+i*0.07})`; ctx.lineWidth = Math.max(1,r*0.04); ctx.stroke();
-    }
-    // pebbles
-    const pebbles = [[0.1,0.35],[-0.3,0.2],[0.35,-0.1],[-0.1,-0.35]];
-    pebbles.forEach(([ox,oy]) => {
-      ctx.beginPath(); ctx.arc(sx+ox*r, sy+oy*r, r*0.055, 0, Math.PI*2);
-      ctx.fillStyle = '#a8955a'; ctx.fill();
-    });
-  }
-
-  const TERRAIN_DRAW = { forest:drawForest, pasture:drawPasture, fields:drawFields,
-                         hills:drawHills, mountains:drawMountains, desert:drawDesert };
-
-  // ── Ocean animated waves ──────────────────────────────────────────────────────
-  let _waveT = 0;
-
-  function drawOcean() {
-    const grd = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    grd.addColorStop(0,   '#1565a8');
-    grd.addColorStop(0.5, '#1a7dc0');
-    grd.addColorStop(1,   '#0e4f82');
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // subtle wave lines
-    ctx.save();
-    ctx.globalAlpha = 0.12;
-    ctx.strokeStyle = '#8ecfee';
-    ctx.lineWidth = Math.max(1, canvas.width * 0.002);
-    for (let row = 0; row < 14; row++) {
-      const y0 = canvas.height * row / 13;
-      ctx.beginPath();
-      for (let x = 0; x < canvas.width; x += 4) {
-        const y = y0 + Math.sin((x * 0.018) + _waveT + row * 0.7) * 5;
-        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // ── Shoreline ──────────────────────────────────────────────────────────────────
-  function drawShoreline(hexes, r) {
-    // Build island outer path by scaling hex polygons outward (beach)
-    const beachExpand = r * 0.55;
-    const waveExpand  = r * 0.85;
-
-    // Draw 3 rings: outer glow (wave), sand, then tile fill on top
-    [waveExpand, beachExpand].forEach((exp, pass) => {
-      ctx.save();
-      ctx.beginPath();
-      hexes.forEach(hex => {
-        const { x: sx, y: sy } = worldToScreen(hex.x, hex.z);
-        const pts = hexPts(sx, sy, r + exp);
-        ctx.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < 6; i++) ctx.lineTo(pts[i].x, pts[i].y);
-        ctx.closePath();
-      });
-
-      if (pass === 0) {
-        // Outer ocean-edge wave foam
-        ctx.fillStyle = 'rgba(120,200,240,0.22)';
-        ctx.shadowColor = '#5ab8e8';
-        ctx.shadowBlur = Math.max(8, r * 0.4);
-      } else {
-        // Sandy beach
-        const grd = ctx.createRadialGradient(cx0(), cy0(), r*2, cx0(), cy0(), r*6);
-        grd.addColorStop(0,   '#d4b96a');
-        grd.addColorStop(0.6, '#c9a85a');
-        grd.addColorStop(1,   '#b8924a');
-        ctx.fillStyle = grd;
-        ctx.shadowColor = 'rgba(0,0,0,0.35)';
-        ctx.shadowBlur = Math.max(6, r*0.3);
-      }
-      ctx.fill();
-      ctx.restore();
-    });
-
-    // Shore surf line
-    ctx.save();
-    ctx.beginPath();
-    hexes.forEach(hex => {
-      const { x: sx, y: sy } = worldToScreen(hex.x, hex.z);
-      const pts = hexPts(sx, sy, r + beachExpand * 0.25);
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < 6; i++) ctx.lineTo(pts[i].x, pts[i].y);
-      ctx.closePath();
-    });
-    ctx.strokeStyle = 'rgba(200,235,255,0.45)';
-    ctx.lineWidth = Math.max(2, r * 0.06);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // ── Main draw ─────────────────────────────────────────────────────────────────
-  function drawBoard() {
-    if (!gameState?.board) return;
-    const { hexes, vertices, edges, ports } = gameState.board;
-    const r = W_R * scale();
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawOcean();
-    drawShoreline(hexes, r);
-
-    // ── Hex tiles ──
-    hexes.forEach(hex => {
-      const { x: sx, y: sy } = worldToScreen(hex.x, hex.z);
-      const pts = hexPts(sx, sy, r * 0.974);
-
-      // Base fill
-      ctx.fillStyle = TILE_FILL[hex.type] || '#888';
-      tracePoly(pts); ctx.fill();
-
-      // Texture detail
-      ctx.save();
-      tracePoly(pts); ctx.clip();
-      (TERRAIN_DRAW[hex.type] || (() => {}))(sx, sy, r);
-      ctx.restore();
-
-      // Inner highlight (top-left gleam)
-      ctx.save();
-      tracePoly(pts); ctx.clip();
-      const hiGrd = ctx.createRadialGradient(sx - r*0.25, sy - r*0.25, 0, sx, sy, r*1.1);
-      hiGrd.addColorStop(0,   'rgba(255,255,255,0.18)');
-      hiGrd.addColorStop(0.5, 'rgba(255,255,255,0.04)');
-      hiGrd.addColorStop(1,   'rgba(0,0,0,0.12)');
-      ctx.fillStyle = hiGrd; ctx.fill();
-      ctx.restore();
-
-      // Border
-      ctx.strokeStyle = TILE_BORDER[hex.type] || '#333';
-      ctx.lineWidth = Math.max(1.5, r * 0.038);
-      tracePoly(pts); ctx.stroke();
-    });
-
-    // ── Number tokens ──
-    hexes.forEach(hex => {
-      if (!hex.number) return;
-      const { x: sx, y: sy } = worldToScreen(hex.x, hex.z);
-      const r2 = r;
-      const isRed = hex.number === 6 || hex.number === 8;
-      const tr = r2 * 0.295;
-
-      // Token shadow
-      ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = r2*0.08; ctx.shadowOffsetY = r2*0.03;
-      ctx.beginPath(); ctx.arc(sx, sy, tr, 0, Math.PI*2);
-      ctx.fillStyle = isRed ? '#fff5f5' : '#fffef0'; ctx.fill();
-      ctx.restore();
-
-      ctx.beginPath(); ctx.arc(sx, sy, tr, 0, Math.PI*2);
-      ctx.strokeStyle = isRed ? '#c0392b' : '#8a6820';
-      ctx.lineWidth = Math.max(1.5, r2*0.035); ctx.stroke();
-
-      // Number
-      ctx.font = `bold ${Math.max(9, r2*0.28)}px Georgia,serif`;
-      ctx.fillStyle = isRed ? '#c0392b' : '#2c1800';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(String(hex.number), sx, sy - r2*0.04);
-
-      // Pip dots
-      const pips = {2:1,3:2,4:3,5:4,6:5,8:5,9:4,10:3,11:2,12:1}[hex.number] || 3;
-      const pipR = Math.max(1, r2*0.028);
-      const startX = sx - (pips-1) * pipR * 2.5 / 2;
-      for (let i = 0; i < pips; i++) {
-        ctx.beginPath();
-        ctx.arc(startX + i*pipR*2.5, sy + r2*0.19, pipR, 0, Math.PI*2);
-        ctx.fillStyle = isRed ? '#c0392b' : '#8a6820'; ctx.fill();
-      }
-    });
-
-    // Robber
-    if (gameState.robberHex != null) {
-      const rHex = hexes[gameState.robberHex];
-      if (rHex) {
-        const { x: sx, y: sy } = worldToScreen(rHex.x, rHex.z);
-        const rs = r * 0.38;
-        if (_robberImg.complete && _robberImg.naturalWidth > 0) {
-          ctx.drawImage(_robberImg, sx - rs/2, sy - rs*0.9, rs, rs*1.1);
-        } else {
-          ctx.font = `${rs}px serif`;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.fillText('🦹', sx, sy - r*0.3);
-        }
-      }
-    }
-
-    // ── Ports ──
-    ports?.forEach(port => {
-      const v1 = vertices[port.vertices[0]], v2 = vertices[port.vertices[1]];
-      if (!v1 || !v2) return;
-      const p1 = worldToScreen(v1.x, v1.z);
-      const p2 = worldToScreen(v2.x, v2.z);
-      const mx = (p1.x+p2.x)/2, my = (p1.y+p2.y)/2;
-
-      // Dock plank
-      ctx.strokeStyle = '#8b5e1a';
-      ctx.lineWidth = Math.max(4, r*0.16);
-      ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-      ctx.strokeStyle = '#c49a3c';
-      ctx.lineWidth = Math.max(2, r*0.06);
-      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-      ctx.lineCap = 'butt';
-
-      // Port label bubble pushed outward
-      const board_cx = cx0(), board_cy = cy0();
-      const dx = mx-board_cx, dy = my-board_cy;
-      const ld = Math.sqrt(dx*dx+dy*dy) || 1;
-      const lx = mx + (dx/ld)*r*0.58, ly = my + (dy/ld)*r*0.58;
-
-      const bubR = Math.max(12, r*0.32);
-      ctx.save();
-      ctx.shadowColor='rgba(0,0,0,0.4)'; ctx.shadowBlur=r*0.1; ctx.shadowOffsetY=r*0.03;
-      ctx.beginPath(); ctx.arc(lx, ly, bubR, 0, Math.PI*2);
-      ctx.fillStyle = PORT_COLORS[port.type] || '#aaa'; ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = Math.max(1,r*0.025); ctx.stroke();
-      ctx.restore();
-
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      const resTxt = port.type === 'any' ? '?' : (RES_EMOJI[port.type] || '');
-      const ratioTxt = port.type === 'any' ? '3:1' : '2:1';
-      if (resTxt && port.type !== 'any') {
-        ctx.font = `${Math.max(8, bubR*0.7)}px serif`;
-        ctx.fillStyle = '#fff';
-        ctx.fillText(resTxt, lx, ly - bubR*0.28);
-        ctx.font = `bold ${Math.max(6, bubR*0.45)}px sans-serif`;
-        ctx.fillText(ratioTxt, lx, ly + bubR*0.42);
-      } else {
-        ctx.font = `bold ${Math.max(7, bubR*0.52)}px sans-serif`;
-        ctx.fillStyle = '#fff';
-        ctx.fillText(resTxt || ratioTxt, lx, ly - bubR*0.15);
-        ctx.font = `${Math.max(6, bubR*0.42)}px sans-serif`;
-        ctx.fillText(ratioTxt, lx, ly + bubR*0.38);
-      }
-    });
-
-    // ── Roads ──
-    edges.forEach(e => {
-      if (!e.road) return;
-      const player = gameState.players.find(p => p.id === e.road.playerId);
-      if (!player) return;
-      const v1 = vertices[e.vertices[0]], v2 = vertices[e.vertices[1]];
-      if (!v1 || !v2) return;
-      const p1 = worldToScreen(v1.x, v1.z);
-      const p2 = worldToScreen(v2.x, v2.z);
-      ctx.save();
-      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=r*0.06;
-      ctx.strokeStyle = '#000'; ctx.lineWidth = Math.max(4, r*0.17); ctx.lineCap='round';
-      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-      ctx.strokeStyle = player.color; ctx.lineWidth = Math.max(3, r*0.12);
-      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-      ctx.restore();
-    });
-
-    // ── Buildings ──
-    vertices.forEach(v => {
-      if (!v.building) return;
-      const player = gameState.players.find(p => p.id === v.building.playerId);
-      if (!player) return;
-      const { x: sx, y: sy } = worldToScreen(v.x, v.z);
-      const isCity = v.building.type === 'city';
-      const br = isCity ? r*0.22 : r*0.155;
-
-      ctx.save();
-      ctx.shadowColor='rgba(0,0,0,0.55)'; ctx.shadowBlur=r*0.1; ctx.shadowOffsetY=r*0.04;
-
-      if (isCity) {
-        // Castle shape: tall keep + two small towers
-        const kw = br*1.1, kh = br*1.5;
-        ctx.fillStyle = player.color;
-        // body
-        ctx.fillRect(sx - kw/2, sy - kh*0.6, kw, kh);
-        // battlements
-        for (let t = 0; t < 3; t++) {
-          ctx.fillRect(sx - kw/2 + t*(kw/3), sy - kh*0.6 - br*0.22, kw/3 * 0.65, br*0.22);
-        }
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1,r*0.025);
-        ctx.strokeRect(sx - kw/2, sy - kh*0.6, kw, kh);
-        // window
-        ctx.fillStyle='rgba(30,20,10,0.7)';
-        ctx.fillRect(sx-br*0.14, sy-kh*0.1, br*0.28, br*0.38);
-      } else {
-        // House shape: square base + triangle roof
-        const hw = br*1.0, hh = br*0.85;
-        ctx.fillStyle = player.color;
-        ctx.fillRect(sx - hw/2, sy - hh*0.3, hw, hh);
-        ctx.beginPath();
-        ctx.moveTo(sx - hw*0.62, sy - hh*0.3);
-        ctx.lineTo(sx, sy - hh*0.3 - hh*0.72);
-        ctx.lineTo(sx + hw*0.62, sy - hh*0.3);
-        ctx.closePath(); ctx.fill();
-        ctx.strokeStyle='#fff'; ctx.lineWidth=Math.max(1,r*0.022);
-        ctx.strokeRect(sx - hw/2, sy - hh*0.3, hw, hh);
-        ctx.beginPath();
-        ctx.moveTo(sx - hw*0.62, sy - hh*0.3);
-        ctx.lineTo(sx, sy - hh*0.3 - hh*0.72);
-        ctx.lineTo(sx + hw*0.62, sy - hh*0.3);
-        ctx.closePath(); ctx.stroke();
-      }
-      ctx.restore();
-    });
-  }
-
-  function resize() {
-    const wrap = document.getElementById('view2d');
-    if (!wrap || wrap.style.display === 'none') return;
-    canvas.width  = wrap.clientWidth  || window.innerWidth;
-    canvas.height = wrap.clientHeight || window.innerHeight;
-    drawBoard();
-  }
-
-  // Animate wave time — only when 2D view is visible
-  function animateWaves() {
-    requestAnimationFrame(animateWaves);
-    if (document.getElementById('view2d')?.style.display === 'none') return;
-    _waveT += 0.018;
-    if (gameState?.board) drawBoard();
-  }
-  animateWaves();
-
-  // Pan + zoom
-  canvas.addEventListener('mousedown', e => {
-    _drag = { startX: e.clientX, startY: e.clientY, panX: _pan.x, panY: _pan.y };
-  });
-  canvas.addEventListener('mousemove', e => {
-    if (!_drag) return;
-    _pan.x = _drag.panX + e.clientX - _drag.startX;
-    _pan.y = _drag.panY + e.clientY - _drag.startY;
-    drawBoard();
-  });
-  canvas.addEventListener('mouseup',    () => { _drag = null; });
-  canvas.addEventListener('mouseleave', () => { _drag = null; });
-  canvas.addEventListener('wheel', e => {
-    e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    _zoom = Math.min(4, Math.max(0.35, _zoom * factor));
-    drawBoard();
-  }, { passive: false });
-
-  let _touches = [];
-  canvas.addEventListener('touchstart', e => {
-    _touches = Array.from(e.touches);
-    _drag = _touches.length === 1
-      ? { startX: _touches[0].clientX, startY: _touches[0].clientY, panX: _pan.x, panY: _pan.y }
-      : null;
-  }, { passive: true });
-  canvas.addEventListener('touchmove', e => {
-    const ts = Array.from(e.touches);
-    if (ts.length === 1 && _drag) {
-      _pan.x = _drag.panX + ts[0].clientX - _drag.startX;
-      _pan.y = _drag.panY + ts[0].clientY - _drag.startY;
-    } else if (ts.length === 2 && _touches.length === 2) {
-      const d0 = Math.hypot(_touches[0].clientX-_touches[1].clientX, _touches[0].clientY-_touches[1].clientY);
-      const d1 = Math.hypot(ts[0].clientX-ts[1].clientX, ts[0].clientY-ts[1].clientY);
-      if (d0 > 0) _zoom = Math.min(4, Math.max(0.35, _zoom * (d1 / d0)));
-    }
-    _touches = ts;
-    drawBoard();
-  }, { passive: true });
-
-  window.addEventListener('resize', resize);
-
-  return { drawBoard, resize };
-})();
-
-// ── 2D / 3D toggle ────────────────────────────────────────────────────────────
+// ── 2D / 3D toggle (camera-based) ─────────────────────────────────────────────
 let _is2D = false;
 const _btn2d = document.getElementById('btn2dToggle');
 
+// Saved 3D camera state
+let _3dCamPos    = null;
+let _3dCamTarget = null;
+let _3dMaxPolar  = controls.maxPolarAngle;
+let _3dMinDist   = controls.minDistance;
+let _3dMaxDist   = controls.maxDistance;
+
 function toggle2D() {
   _is2D = !_is2D;
-  const view2d = document.getElementById('view2d');
-  const threeCanvas = renderer.domElement;
-
-  view2d.style.display    = _is2D ? 'flex'  : 'none';
-  threeCanvas.style.visibility = _is2D ? 'hidden' : 'visible';
-  _btn2d.textContent      = _is2D ? '3D' : '2D';
-  _btn2d.classList.toggle('active', _is2D);
 
   if (_is2D) {
-    _2D.resize();
-    _2D.drawBoard();
+    // Save current 3D state
+    _3dCamPos    = camera.position.clone();
+    _3dCamTarget = controls.target.clone();
+
+    // Smoothly go to orthographic top-down view
+    camera.up.set(0, 0, -1);
+    controls.enableRotate = false;
+    controls.maxPolarAngle = 0.001;
+    controls.minDistance = 5;
+    controls.maxDistance = 35;
+    camera.position.set(controls.target.x, 22, controls.target.z);
+    controls.target.set(controls.target.x, 0, controls.target.z);
+    controls.update();
+
+    _btn2d.textContent = '3D';
+    _btn2d.classList.add('active');
+  } else {
+    // Restore 3D camera
+    camera.up.set(0, 1, 0);
+    controls.enableRotate = true;
+    controls.maxPolarAngle = _3dMaxPolar;
+    controls.minDistance   = _3dMinDist;
+    controls.maxDistance   = _3dMaxDist;
+
+    if (_3dCamPos) {
+      camera.position.copy(_3dCamPos);
+      controls.target.copy(_3dCamTarget);
+    }
+    controls.update();
+
+    _btn2d.textContent = '2D';
+    _btn2d.classList.remove('active');
   }
 }
 
 _btn2d.addEventListener('click', toggle2D);
-
-// Show toggle once the game is in play
-const _orig_gameUpdate = socket.listeners('gameUpdate')[0];
-socket.on('gameUpdate', () => {
-  if (gameState?.status === 'playing') {
-    _btn2d.style.display = 'block';
-  }
-});
-
-// Redraw 2D when state changes (if active)
-const _orig_draw2d = _2D.drawBoard.bind(_2D);
-_2D.drawBoard = function() {
-  if (document.getElementById('view2d')?.style.display !== 'none') _orig_draw2d();
-};

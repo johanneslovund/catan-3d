@@ -329,21 +329,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .icon-btn:hover { background: var(--glass-hi); color: var(--text); }
 .icon-btn.active { background: var(--glass-md); color: #fff; }
 
-/* ── 2D board view ───────────────────────────────────────────────────────────── */
-#view2d {
-  position: absolute;
-  inset: 0;
-  background: #1a6fa8;
-  z-index: 20;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-#canvas2d {
-  display: block;
-  touch-action: none;
-}
+/* ── 2D/3D toggle button ─────────────────────────────────────────────────────── */
 .btn-2d-toggle {
   position: absolute;
   top: 14px;
