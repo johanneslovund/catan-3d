@@ -101,6 +101,21 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .bot-diff-select option { background: #1a2035; }
 .room-code { font-family: monospace; font-size: 1.3rem; font-weight: 700; letter-spacing: .12em; color: #f5c842; }
 
+.private-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: .85rem; color: var(--text-mid); margin-bottom: 2px; }
+.private-toggle input { width: 15px; height: 15px; cursor: pointer; accent-color: #f5c842; }
+
+.public-lobbies { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; }
+.lobby-entry {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--glass); backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border); border-radius: 10px;
+  padding: 8px 12px; gap: 10px;
+}
+.lobby-entry-info { display: flex; flex-direction: column; gap: 2px; }
+.lobby-entry-host { font-weight: 600; font-size: .88rem; }
+.lobby-entry-count { font-size: .75rem; color: var(--text-mid); }
+.lobby-entry .btn { padding: 5px 14px; font-size: .8rem; flex-shrink: 0; }
+
 #waitingPlayerList { list-style: none; display: flex; flex-direction: column; gap: 6px; }
 #waitingPlayerList li {
   background: var(--glass);

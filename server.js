@@ -950,7 +950,22 @@ function broadcastLobby(roomId) {
     players: game.players.map(p => ({ id: p.id, name: p.name, color: p.color, isBot: !!p.isBot, difficulty: p.difficulty || null })),
     hostId: game.players[0] && game.players[0].id,
     settings: game.settings,
+    isPrivate: !!game.isPrivate,
   });
+  broadcastLobbyList();
+}
+
+function broadcastLobbyList() {
+  const list = Object.entries(rooms)
+    .filter(([, g]) => g.status === 'lobby' && !g.isPrivate)
+    .map(([id, g]) => ({
+      roomId: id,
+      host: g.players.find(p => !isBotId(p.id))?.name ?? '?',
+      playerCount: g.players.filter(p => !isBotId(p.id)).length,
+      botCount: g.players.filter(p => isBotId(p.id)).length,
+      maxPlayers: 4,
+    }));
+  io.emit('lobbyList', list);
 }
 
 function broadcastState(roomId) {
@@ -989,9 +1004,33 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('createRoom', ({ name }) => {
+  socket.on('getLobbies', () => {
+    const list = Object.entries(rooms)
+      .filter(([, g]) => g.status === 'lobby' && !g.isPrivate)
+      .map(([id, g]) => ({
+        roomId: id,
+        host: g.players.find(p => !isBotId(p.id))?.name ?? '?',
+        playerCount: g.players.filter(p => !isBotId(p.id)).length,
+        botCount: g.players.filter(p => isBotId(p.id)).length,
+        maxPlayers: 4,
+      }));
+    socket.emit('lobbyList', list);
+  });
+
+  socket.on('setPrivate', ({ isPrivate }) => {
+    const info = playerInfo.get(socket.id);
+    if (!info) return;
+    const game = rooms[info.roomId];
+    if (!game || game.status !== 'lobby') return;
+    if (game.players[0]?.id !== socket.id) return;
+    game.isPrivate = !!isPrivate;
+    broadcastLobby(info.roomId);
+  });
+
+  socket.on('createRoom', ({ name, isPrivate }) => {
     const roomId = Math.random().toString(36).slice(2, 8).toUpperCase();
     rooms[roomId] = createGame(roomId);
+    rooms[roomId].isPrivate = !!isPrivate;
     joinRoom(socket, roomId, name, true);
   });
 
@@ -1051,6 +1090,7 @@ io.on('connection', socket => {
     game.setupRound = 0;
     game.setupPhase = 'settlement';
     game.currentPlayerIndex = 0;
+    broadcastLobbyList(); // remove from public list once game starts
 
     const desertHex = game.board.hexes.find(h => h.type === 'desert');
     game.robberHex = desertHex.id;

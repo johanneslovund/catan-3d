@@ -28,11 +28,20 @@
       <label>Your Name</label>
       <input id="playerName" type="text" maxlength="16" placeholder="Enter name…"/>
     </div>
-    <div class="divider">Create or Join</div>
+    <div class="divider">Create</div>
+    <label class="private-toggle">
+      <input type="checkbox" id="chkPrivate"/>
+      <span>Private lobby</span>
+    </label>
     <button id="btnCreate" class="btn btn-primary">Create Room</button>
+    <div class="divider">Join by Code</div>
     <div class="join-row">
       <input id="roomCodeInput" type="text" maxlength="6" placeholder="Room code…" style="text-transform:uppercase"/>
       <button id="btnJoin" class="btn btn-secondary">Join</button>
+    </div>
+    <div class="divider">Open Lobbies</div>
+    <div id="publicLobbies" class="public-lobbies">
+      <p class="hint" id="noLobbiesHint">No open lobbies right now.</p>
     </div>
     <p id="lobbyError" class="error-msg"></p>
   </div>
@@ -55,6 +64,10 @@
     </div>
     <div id="gameSettings" style="display:none;margin:10px 0;padding:8px 10px;background:rgba(255,255,255,0.06);border-radius:8px;font-size:.85rem">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="chkPrivateRoom" style="width:16px;height:16px;cursor:pointer">
+        <span>Private lobby</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px">
         <input type="checkbox" id="chkHideBankCards" style="width:16px;height:16px;cursor:pointer">
         <span>Hide bank card counts</span>
       </label>

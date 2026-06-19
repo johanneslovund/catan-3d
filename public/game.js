@@ -3328,9 +3328,11 @@ socket.on('lobbyUpdate', data => {
   const hasBots = data.players.some(p => p.isBot);
   document.getElementById('btnRemoveBot').style.opacity = hasBots ? '1' : '0.4';
   document.getElementById('btnAddBot').style.opacity = data.players.length < 4 ? '1' : '0.4';
-  // Sync settings checkbox
+  // Sync settings checkboxes
   const chk = document.getElementById('chkHideBankCards');
   if (chk) chk.checked = !!(data.settings?.hideBankCards);
+  const chkPriv = document.getElementById('chkPrivateRoom');
+  if (chkPriv) chkPriv.checked = !!data.isPrivate;
 });
 
 document.getElementById('btnAddBot').addEventListener('click', () => {
@@ -3340,6 +3342,9 @@ document.getElementById('btnAddBot').addEventListener('click', () => {
 document.getElementById('btnRemoveBot').addEventListener('click', () => socket.emit('removeBot'));
 document.getElementById('chkHideBankCards').addEventListener('change', e => {
   socket.emit('setGameSetting', { key: 'hideBankCards', value: e.target.checked });
+});
+document.getElementById('chkPrivateRoom').addEventListener('change', e => {
+  socket.emit('setPrivate', { isPrivate: e.target.checked });
 });
 
 socket.on('gameUpdate', state => {
@@ -3664,12 +3669,50 @@ socket.on('voicePeerLeft', ({ peerId }) => { voiceChat.removePeer(peerId); });
 
 // ─── Button handlers ──────────────────────────────────────────────────────────
 
+// Public lobby list
+socket.on('lobbyList', list => {
+  const container = document.getElementById('publicLobbies');
+  const hint = document.getElementById('noLobbiesHint');
+  if (!container) return;
+  const entries = container.querySelectorAll('.lobby-entry');
+  entries.forEach(e => e.remove());
+  if (!list.length) {
+    if (hint) hint.style.display = 'block';
+    return;
+  }
+  if (hint) hint.style.display = 'none';
+  list.forEach(l => {
+    const div = document.createElement('div');
+    div.className = 'lobby-entry';
+    const humanCount = l.playerCount + (l.botCount ? ` + ${l.botCount} bot${l.botCount>1?'s':''}` : '');
+    div.innerHTML = `
+      <div class="lobby-entry-info">
+        <span class="lobby-entry-host">${escapeHtml(l.host)}'s game</span>
+        <span class="lobby-entry-count">${humanCount} / ${l.maxPlayers} players</span>
+      </div>
+      <button class="btn btn-secondary">Join</button>`;
+    div.querySelector('button').addEventListener('click', () => {
+      const name = document.getElementById('playerName').value.trim();
+      if (!name) { document.getElementById('lobbyError').textContent = 'Enter your name first'; return; }
+      document.getElementById('lobbyError').textContent = 'Joining…';
+      document.getElementById('btnJoin').disabled = true;
+      _joiningRoom = true;
+      socket.emit('joinRoom', { roomId: l.roomId, name });
+    });
+    container.appendChild(div);
+  });
+});
+
+// Request lobby list on load
+socket.emit('getLobbies');
+
 // Lobby
 document.getElementById('btnCreate').addEventListener('click', () => {
   const name = document.getElementById('playerName').value.trim();
   if (!name) { document.getElementById('lobbyError').textContent='Enter your name first'; return; }
+  const isPrivate = document.getElementById('chkPrivate')?.checked ?? false;
   document.getElementById('lobbyError').textContent='';
-  socket.emit('createRoom',{name});
+  socket.emit('createRoom', { name, isPrivate });
   document.getElementById('lobby').style.display='none';
   document.getElementById('waiting').style.display='flex';
 });
