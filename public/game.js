@@ -8,6 +8,8 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
@@ -105,8 +107,7 @@ scene.background = new THREE.Color(0xa8c8d8);
 scene.fog = new THREE.FogExp2(0xb8c8c0, LIGHT_PARAMS.fogDensity);
 
 const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 80);
-camera.position.set(0, 22, 0);
-camera.up.set(0, 0, -1);
+camera.position.set(0, 13, 11);
 camera.lookAt(0, 0, 0);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -661,11 +662,11 @@ MeshoptDecoder.ready.then(() => {
   preloadModels(); // move initial load to after decoder is ready
 });
 
-// Font for 3D port labels — loaded once at startup
+// Font for 3D port labels and token numbers — loaded once at startup
 let _portFont = null;
 new FontLoader().load('https://unpkg.com/three@0.158.0/examples/fonts/helvetiker_bold.typeface.json', font => {
   _portFont = font;
-  // Re-render board if already loaded so port text appears
+  // Re-render board if already loaded so port text and 3D tokens appear
   if (gameState) renderBoard(gameState);
 });
 
@@ -817,7 +818,27 @@ const SCENE_PARAMS = {
   hexMarkerY:      0.04,
   buildingColorTint: 1.0,
   buildingColorSaturation: 1.0,
+  token3dDepth: 0.06,
+  token3dScale: 1.0,
+  token3dRed: 0xcc2020,
+  token3dSilver: 0xd8e8f0,
+  tokenRoughness: 0.18,
 };
+
+const CAMERA_PRESETS = {
+  'Default':   { pos: [0, 13, 11],  target: [0, 0, 0] },
+  'Top-Down':  { pos: [0, 22, 0.1], target: [0, 0, 0] },
+  'Low Angle': { pos: [0, 5, 14],   target: [0, 0, 0] },
+  'Side':      { pos: [14, 8, 0],   target: [0, 0, 0] },
+  'Corner':    { pos: [10, 12, 10], target: [0, 0, 0] },
+};
+function applyCameraPreset(name) {
+  const p = CAMERA_PRESETS[name];
+  if (!p) return;
+  camera.position.set(...p.pos);
+  controls.target.set(...p.target);
+  controls.update();
+}
 
 // Per-tile-type number token Y offset (defaults match dialled-in screenshot values)
 const NUMBER_Y_OFFSET = { mountains:-0.04, hills:-0.18, forest:-0.50, pasture:-0.13, fields:-0.13, desert:0.0 };
@@ -1162,56 +1183,12 @@ function renderBoard(state) {
   boardGroup.add(ocean);
   boardGroup.userData.oceanMat = oceanMat;
 
-  // Sandy island base
+  // Sandy island base (removed — no sand layer under map)
   const COAST_R = 7.2;
   const sandTexLoader = new THREE.TextureLoader();
   const sandTex = sandTexLoader.load('textures/Sand Texture.png');
   sandTex.wrapS = sandTex.wrapT = THREE.RepeatWrapping;
   sandTex.repeat.set(8, 8);
-
-  const sandTopY  = SCENE_PARAMS.sandTopY;
-  const sandBotY  = SCENE_PARAMS.sandBotY;
-  const sandH     = Math.max(0.01, sandTopY - sandBotY);
-  const SAND_MAX_R = 14.0; // large fixed geometry, shader clips it
-  const sandGeo = new THREE.CylinderGeometry(SAND_MAX_R, SAND_MAX_R, sandH, 64, 1);
-  const sandMat = new THREE.ShaderMaterial({
-    uniforms: {
-      uMap:    { value: sandTex },
-      uSandR:  { value: SCENE_PARAMS.sandRadius }, // total extent of sand
-      uColor:  { value: new THREE.Color(0xd4b87a) },
-    },
-    vertexShader: `
-      varying vec3 vWPos;
-      void main() {
-        vWPos = (modelMatrix * vec4(position, 1.0)).xyz;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform sampler2D uMap;
-      uniform float uSandR;
-      uniform vec3 uColor;
-      varying vec3 vWPos;
-      void main() {
-        vec4 tex = texture2D(uMap, vWPos.xz * 0.18);
-        vec3 col = tex.rgb * uColor;
-        float dist = length(vWPos.xz);
-        // flat sand from 0..fadeStart, fade to 0 at uSandR
-        float fadeStart = uSandR * 0.72;
-        float alpha = 1.0 - smoothstep(fadeStart, uSandR, dist);
-        if (alpha < 0.01) discard;
-        gl_FragColor = vec4(col, alpha);
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-  });
-  const sandBase = new THREE.Mesh(sandGeo, sandMat);
-  sandBase.position.y = sandBotY + sandH / 2;
-  sandBase.receiveShadow = false;
-  boardGroup.add(sandBase);
-  boardGroup.userData.sandMat = sandMat;
 
   // Bank island — small sandy mound in the water
   const BANK_ANGLE = Math.PI * 0.72;
@@ -1432,23 +1409,56 @@ function renderBoard(state) {
 
     // Number token disc — sits on top of the tile surface
     if (hex.number) {
+      const tokenY = tileTopY(hex.type);
+      const discBaseY = tokenY + 0.025 + (NUMBER_Y_OFFSET[hex.type] ?? 0);
+
+      // Gold coin disc
       const discGeo = new THREE.CylinderGeometry(HEX_R*0.27, HEX_R*0.265, 0.09, 28);
       const discMat = new THREE.MeshStandardMaterial({
         color: 0xd4aa30,
         map: numberTokenTex(hex.number),
         roughnessMap: tokenScratchTex(),
-        roughness: 0.18,
-        metalness: 0.92,
+        roughness: SCENE_PARAMS.tokenRoughness ?? 0.18,
+        metalness: SCENE_PARAMS.tokenMetalness ?? 0.92,
         envMapIntensity: 2.5,
       });
       discMat.userData = { isTokenDisc: true };
       const disc = new THREE.Mesh(discGeo, discMat);
-      // Place number token at actual tile top surface (accounts for TILE_SINK)
-      const tokenY = tileTopY(hex.type);
-      disc.position.set(hex.x, tokenY + 0.025 + (NUMBER_Y_OFFSET[hex.type] ?? 0), hex.z);
+      disc.position.set(hex.x, discBaseY, hex.z);
       disc.castShadow = true;
       disc.userData.tokenHexId = hex.id;
       boardGroup.add(disc);
+
+      // 3D extruded number on top of the coin
+      if (_portFont) {
+        const isRed = hex.number === 6 || hex.number === 8;
+        const textGeo = new TextGeometry(String(hex.number), {
+          font: _portFont,
+          size: HEX_R * 0.13 * SCENE_PARAMS.token3dScale,
+          height: SCENE_PARAMS.token3dDepth,
+          curveSegments: 6,
+          bevelEnabled: true,
+          bevelThickness: 0.008,
+          bevelSize: 0.006,
+          bevelSegments: 2,
+        });
+        textGeo.computeBoundingBox();
+        const bb = textGeo.boundingBox;
+        const cx = (bb.max.x - bb.min.x) / 2;
+        const cz = (bb.max.y - bb.min.y) / 2;
+        const numMat = new THREE.MeshStandardMaterial({
+          color: isRed ? SCENE_PARAMS.token3dRed : SCENE_PARAMS.token3dSilver,
+          metalness: 0.90,
+          roughness: isRed ? 0.22 : 0.10,
+          envMapIntensity: 3.0,
+        });
+        const numMesh = new THREE.Mesh(textGeo, numMat);
+        numMesh.rotation.x = -Math.PI / 2;
+        numMesh.position.set(hex.x - cx, discBaseY + 0.048, hex.z + cz);
+        numMesh.castShadow = false;
+        numMesh.userData.tokenHexId = hex.id;
+        boardGroup.add(numMesh);
+      }
     }
   });
 
@@ -3426,6 +3436,10 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
     });
   });
 
+  document.getElementById('cameraPresetSelect')?.addEventListener('change', e => {
+    applyCameraPreset(e.target.value);
+  });
+
   btnOpen.addEventListener('click', () => {
     if (panel.classList.contains('open')) {
       panel.classList.remove('open');
@@ -3494,6 +3508,13 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         if (type === 'colorTint') SCENE_PARAMS.buildingColorTint = v;
         else if (type === 'colorSaturation') SCENE_PARAMS.buildingColorSaturation = v;
         if (gameState) renderBuildings(gameState);
+        return;
+      } else if (param === 'token') {
+        if (type === 'token3dDepth') SCENE_PARAMS.token3dDepth = v;
+        else if (type === 'token3dScale') SCENE_PARAMS.token3dScale = v;
+        else if (type === 'tokenMetalness') SCENE_PARAMS.tokenMetalness = v;
+        else if (type === 'tokenRoughness') SCENE_PARAMS.tokenRoughness = v;
+        if (gameState) renderBoard(gameState);
         return;
       } else if (param === 'bank') {
         BANK_PARAMS[type] = v;
@@ -4221,11 +4242,11 @@ AUDIO.musicVolume = 0.05;
 AUDIO.musicMuted  = false;
 {
   const TRACKS = [
-    'music/Adam Dib - Still We Rise.mp3',
-    'music/Bara Matahari Pagi - A Clash Among the Stars.mp3',
-    'music/Bara Matahari Pagi - Voyage to the Unknown.mp3',
-    'music/Kyle Preston - Hall of the Elders.mp3',
-    'music/Linus Johnsson - The Children of the Woods.mp3',
+    'Music/Adam Dib - Still We Rise.mp3',
+    'Music/Bara Matahari Pagi - A Clash Among the Stars.mp3',
+    'Music/Bara Matahari Pagi - Voyage to the Unknown.mp3',
+    'Music/Kyle Preston - Hall of the Elders.mp3',
+    'Music/Linus Johnsson - The Children of the Woods.mp3',
   ];
   const FADE_DURATION = 10;
   let trackIdx = 0;

@@ -612,6 +612,40 @@
       </div>
       </div><!-- /settings-cat-body AUDIO -->
 
+      <div class="settings-section-label collapsible" style="margin-top:10px">CAMERA</div>
+      <div class="settings-cat-body">
+        <div class="tile-slider">
+          <label><span class="tile-icon">📷</span> Preset</label>
+          <select id="cameraPresetSelect" style="width:100%;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;color:#fff;padding:6px 10px;font-size:.82rem;cursor:pointer;outline:none;margin-top:4px">
+            <option>Default</option>
+            <option>Top-Down</option>
+            <option>Low Angle</option>
+            <option>Side</option>
+            <option>Corner</option>
+          </select>
+        </div>
+      </div><!-- /settings-cat-body CAMERA -->
+
+      <div class="settings-section-label collapsible" style="margin-top:10px">TOKEN</div>
+      <div class="settings-cat-body">
+        <div class="tile-slider" data-param="token" data-type="token3dDepth">
+          <label><span class="tile-icon">📐</span> Number Depth</label>
+          <div class="slider-row"><input type="range" min="0" max="0.2" step="0.005" value="0.06"/><span class="slider-val">0.06</span></div>
+        </div>
+        <div class="tile-slider" data-param="token" data-type="token3dScale">
+          <label><span class="tile-icon">🔡</span> Number Size</label>
+          <div class="slider-row"><input type="range" min="0.3" max="2" step="0.05" value="1"/><span class="slider-val">1.00</span></div>
+        </div>
+        <div class="tile-slider" data-param="token" data-type="tokenMetalness">
+          <label><span class="tile-icon">✨</span> Coin Metalness</label>
+          <div class="slider-row"><input type="range" min="0" max="1" step="0.02" value="0.92"/><span class="slider-val">0.92</span></div>
+        </div>
+        <div class="tile-slider" data-param="token" data-type="tokenRoughness">
+          <label><span class="tile-icon">🪨</span> Coin Roughness</label>
+          <div class="slider-row"><input type="range" min="0" max="1" step="0.02" value="0.18"/><span class="slider-val">0.18</span></div>
+        </div>
+      </div><!-- /settings-cat-body TOKEN -->
+
     </div>
   </div>
 
