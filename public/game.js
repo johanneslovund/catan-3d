@@ -106,6 +106,7 @@ scene.fog = new THREE.FogExp2(0xb8c8c0, LIGHT_PARAMS.fogDensity);
 
 const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 80);
 camera.position.set(0, 22, 0);
+camera.up.set(0, 0, -1);
 camera.lookAt(0, 0, 0);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -689,7 +690,7 @@ const MODEL_FILE_MAP = {
   hex_forest:    'wood hex',
   port_brick:  'brick object',
   port_wheat:  'Wheat object',
-  port_sheep:  'sheep object',
+  port_sheep:  'Sheep object',
   port_wood:   'Wood Log object',
   port_ore:    'Rock Object',
   boat:        'boat object',
@@ -1012,45 +1013,46 @@ function tokenScratchTex() {
 function numberTokenTex(num) {
   const red = num === 6 || num === 8;
   return makeCanvasTexture((ctx, w, h) => {
-    // Chrome/silver coin face — radial gradient from bright silver centre to darker edge
-    const bg = ctx.createRadialGradient(w*0.38,h*0.35,w*0.04, w/2,h/2,w*0.48);
-    bg.addColorStop(0,   '#ffffff');
-    bg.addColorStop(0.3, '#e8e8e8');
-    bg.addColorStop(0.7, '#b0b8c0');
-    bg.addColorStop(1,   '#606870');
+    // Gold coin face — radial gradient from bright centre to rich gold edge
+    const bg = ctx.createRadialGradient(w*0.42,h*0.38,w*0.04, w/2,h/2,w*0.48);
+    bg.addColorStop(0,   '#fff8d0');
+    bg.addColorStop(0.45,'#f0c040');
+    bg.addColorStop(1,   '#8a5a00');
     ctx.fillStyle = bg;
-    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 5;
+    ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 5;
     ctx.beginPath(); ctx.arc(w/2,h/2,w/2-3,0,Math.PI*2); ctx.fill();
     ctx.shadowBlur = 0;
-    // Raised chrome rim highlight
-    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    // Raised rim ring
+    ctx.strokeStyle = 'rgba(255,230,100,0.55)';
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(w/2,h/2,w/2-5,0,Math.PI*2); ctx.stroke();
-    ctx.strokeStyle = 'rgba(80,90,100,0.5)';
+    ctx.strokeStyle = 'rgba(80,40,0,0.4)';
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(w/2,h/2,w/2-8,0,Math.PI*2); ctx.stroke();
-    // Number — gradient fill
+    // Number — chrome silver for normal, shiny red metallic for 6/8
     ctx.font = `bold ${~~(w*0.4)}px Arial`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     if (red) {
       const ng = ctx.createLinearGradient(w/2,h/2-w*0.22,w/2,h/2+w*0.22);
-      ng.addColorStop(0, '#ff4040');
-      ng.addColorStop(1, '#8b0000');
+      ng.addColorStop(0, '#ff6060');
+      ng.addColorStop(0.5, '#cc0000');
+      ng.addColorStop(1, '#7a0000');
       ctx.fillStyle = ng;
+      ctx.strokeStyle = 'rgba(40,0,0,0.8)';
     } else {
       const ng = ctx.createLinearGradient(w/2,h/2-w*0.22,w/2,h/2+w*0.22);
       ng.addColorStop(0, '#ffffff');
-      ng.addColorStop(1, '#8090a0');
+      ng.addColorStop(0.4, '#d8e0e8');
+      ng.addColorStop(1, '#7090a8');
       ctx.fillStyle = ng;
+      ctx.strokeStyle = 'rgba(30,50,70,0.7)';
     }
-    // Dark outline for readability
-    ctx.strokeStyle = red ? 'rgba(60,0,0,0.7)' : 'rgba(40,50,60,0.7)';
     ctx.lineWidth = 3;
     ctx.strokeText(String(num), w/2, h/2 - 3);
     ctx.fillText(String(num), w/2, h/2 - 3);
-    // Probability pips
+    // Probability pips — chrome or red
     const pips = num <= 7 ? num - 1 : 13 - num;
-    ctx.fillStyle = red ? '#cc2020' : '#909faf';
+    ctx.fillStyle = red ? '#cc2020' : '#a0b8cc';
     for (let i = 0; i < pips; i++) {
       ctx.beginPath();
       ctx.arc(w/2 + (i-(pips-1)/2)*9, h*0.77, 3, 0, Math.PI*2);
@@ -1432,11 +1434,12 @@ function renderBoard(state) {
     if (hex.number) {
       const discGeo = new THREE.CylinderGeometry(HEX_R*0.27, HEX_R*0.265, 0.09, 28);
       const discMat = new THREE.MeshStandardMaterial({
-        color: 0xe8e8e8,
+        color: 0xd4aa30,
         map: numberTokenTex(hex.number),
-        roughness: 0.08,
-        metalness: 0.95,
-        envMapIntensity: 3.0,
+        roughnessMap: tokenScratchTex(),
+        roughness: 0.18,
+        metalness: 0.92,
+        envMapIntensity: 2.5,
       });
       discMat.userData = { isTokenDisc: true };
       const disc = new THREE.Mesh(discGeo, discMat);
@@ -3417,8 +3420,8 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
     lbl.addEventListener('click', () => {
       const body = lbl.nextElementSibling;
       if (!body || !body.classList.contains('settings-cat-body')) return;
-      const open = body.style.display !== 'none' && body.style.display !== '';
-      body.style.display = open ? 'none' : '';
+      const open = window.getComputedStyle(body).display !== 'none';
+      body.style.display = open ? 'none' : 'block';
       lbl.classList.toggle('open', !open);
     });
   });
