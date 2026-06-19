@@ -1548,7 +1548,9 @@ function renderBoard(state) {
     hexes.filter(h => h.type === 'mountains').forEach(hex => {
       const baseY = tileTopY('mountains');
       const rng = (s) => { let x=Math.sin(s*127.1)*43758.5453; return x-Math.floor(x); };
-      const seed = hex.id * 7 + 3;
+      // Use a seed that mixes hex.id with a random salt so clouds vary between games
+      const salt = Math.floor(Math.random() * 9973);
+      const seed = hex.id * 7919 + salt;
       const numClouds = Math.max(0, Math.round((2 + Math.floor(rng(seed) * 2)) * CLOUD_PARAMS.amount));
       for (let ci = 0; ci < numClouds; ci++) {
         const ang = rng(seed + ci) * Math.PI * 2;
@@ -1559,9 +1561,14 @@ function renderBoard(state) {
         const sc  = CLOUD_PARAMS.scale * (0.7 + rng(seed + ci + 3) * 0.6);
         const cg  = new THREE.Group();
         cg.userData = { cloudBase: cy, cloudSeed: seed + ci * 31, cloudIdx: ci, hexId: hex.id, cloudBaseOffX: cx - hex.x, cloudBaseOffZ: cz - hex.z };
-        puffOffsets.forEach(([bx,by,bz,bs]) => {
-          const m = new THREE.Mesh(new THREE.SphereGeometry(0.9*bs, 7, 5), cloudMat.clone());
-          m.position.set(bx, by, bz); m.scale.set(1.6, 0.9, 1.0); cg.add(m);
+        // Randomise each puff's position/size per cloud so no two clouds look identical
+        puffOffsets.forEach(([bx,by,bz,bs], pi) => {
+          const jx = (rng(seed + ci * 17 + pi * 5    ) - 0.5) * 0.7;
+          const jy = (rng(seed + ci * 17 + pi * 5 + 1) - 0.5) * 0.3;
+          const jz = (rng(seed + ci * 17 + pi * 5 + 2) - 0.5) * 0.7;
+          const js = 0.65 + rng(seed + ci * 17 + pi * 5 + 3) * 0.7;
+          const m = new THREE.Mesh(new THREE.SphereGeometry(0.9 * bs * js, 7, 5), cloudMat.clone());
+          m.position.set(bx + jx, by + jy, bz + jz); m.scale.set(1.6, 0.9, 1.0); cg.add(m);
         });
         cg.position.set(cx, cy, cz);
         cg.scale.setScalar(sc);
@@ -1755,20 +1762,17 @@ function startTileIntro(hexes) {
   tileIntro.hexCollOff = new Map();
   tileIntro.shakeTriggered = false;
 
-  // All tiles start on a ring outside the board, converging inward
-  // Board outer radius ≈ HEX_R * sqrt(3) * 2 ≈ 4.2 — start well beyond that
-  const RING_R = 9.0;
+  // Each tile starts between 1 and 22 units from its final position,
+  // in the outward direction from the board center (circle collapsing inward)
   hexes.forEach(hex => {
-    // Angle outward from board center toward each hex's final position
-    // Center hex (0,0) gets a random angle since atan2(0,0) = 0
     const baseAngle = (hex.x === 0 && hex.z === 0)
       ? Math.random() * Math.PI * 2
       : Math.atan2(hex.z, hex.x);
-    const angle = baseAngle + (Math.random() - 0.5) * 0.25; // slight jitter
-    const r = RING_R + (Math.random() - 0.5) * 0.8;
+    const angle = baseAngle + (Math.random() - 0.5) * 0.25;
+    const r = 1 + Math.random() * 21; // 1–22 units from final position
     tileIntro.hexOffsets.set(hex.id, {
-      x0: Math.cos(angle) * r - hex.x,
-      z0: Math.sin(angle) * r - hex.z,
+      x0: Math.cos(angle) * r,
+      z0: Math.sin(angle) * r,
     });
     tileIntro.hexCollOff.set(hex.id, { x: 0, z: 0 });
   });
@@ -4838,11 +4842,11 @@ function animate() {
     const rawP = Math.min(1, tileIntro.t / tileIntro.duration);
     // Ease-in-out cubic
     const eP = rawP < 0.5 ? 4*rawP*rawP*rawP : 1 - Math.pow(-2*rawP+2,3)/2;
-    // Overshoot spring in final 22%: tiles nudge past target then settle
+    // Tiny overshoot spring in final 15%: tiles just barely nudge past target
     let finalP = eP;
-    if (rawP > 0.78 && rawP < 1) {
-      const sp = (rawP - 0.78) / 0.22;
-      finalP = eP + Math.sin(sp * Math.PI * 2.5) * 0.12 * (1 - sp);
+    if (rawP > 0.85 && rawP < 1) {
+      const sp = (rawP - 0.85) / 0.15;
+      finalP = eP + Math.sin(sp * Math.PI * 2.0) * 0.025 * (1 - sp);
     }
     // Y rise: tiles emerge from below water over the first 25% of the anim
     const yRise = rawP < 0.25 ? (rawP / 0.25) - 1 : 0;
@@ -4879,7 +4883,7 @@ function animate() {
           if (coffA) { coffA.x -= nx * impulse; coffA.z -= nz * impulse; }
           if (coffB) { coffB.x += nx * impulse; coffB.z += nz * impulse; }
           // Water splash at collision midpoint (throttled)
-          if (Math.random() < delta * 4) {
+          if (Math.random() < delta * 12) {
             spawnWaterRing((posA.x + posB.x) * 0.5, (posA.z + posB.z) * 0.5);
           }
         }
@@ -4902,7 +4906,7 @@ function animate() {
     });
 
     // Trigger shake at the START of overshoot (when tiles first arrive at target)
-    if (!tileIntro.shakeTriggered && rawP >= 0.78) {
+    if (!tileIntro.shakeTriggered && rawP >= 0.85) {
       tileIntro.shakeTriggered = true;
       hexIds.forEach(hid => {
         const meshes = boardGroup.children.filter(c => (c.userData.hexId ?? c.userData.tokenHexId) === hid);
@@ -4913,12 +4917,12 @@ function animate() {
           m.userData._shakeNX = (Math.random() - 0.5);
           m.userData._shakeNZ = (Math.random() - 0.5);
         });
-        if (meshes.length) hexShakes.push({ meshes, t: 0, duration: 0.65, amp: 0.06, rotAmp: 0.14 });
+        if (meshes.length) hexShakes.push({ meshes, t: 0, duration: 0.45, amp: 0.015, rotAmp: 0.04 });
       });
     }
 
     // Random ambient splashes while tiles are in motion
-    if (rawP < 0.80 && Math.random() < delta * 8) {
+    if (rawP < 0.80 && Math.random() < delta * 24) {
       const pos = hexPositions.get(hexIds[Math.floor(Math.random() * hexIds.length)]);
       if (pos) spawnWaterRing(pos.x, pos.z);
     }
