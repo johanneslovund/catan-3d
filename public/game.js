@@ -288,6 +288,23 @@ scene.add(boardGroup, buildGroup, robberGroup, markerGroup);
 // Tile intro fly-in + independent bobbing
 let _introDone = false;
 let _vertexFadeIn = null; // { t, duration } — fade-in state for vertex markers after intro
+let _markerGlowTex = null;
+function markerGlowTex() {
+  if (_markerGlowTex) return _markerGlowTex;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  grad.addColorStop(0,    'rgba(255,220,80,1)');
+  grad.addColorStop(0.30, 'rgba(255,180,30,0.75)');
+  grad.addColorStop(0.65, 'rgba(255,130,0,0.3)');
+  grad.addColorStop(1,    'rgba(255,100,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  _markerGlowTex = new THREE.CanvasTexture(canvas);
+  return _markerGlowTex;
+}
 const tileBobPhases = new Map(); // hexId → float phase offset
 const waterRings    = [];        // { mesh, t, duration }
 const tileIntro = { active: false, t: 0, duration: 4.0, hexOffsets: new Map(), hexes: [], hexCollOff: new Map(), shakeTriggered: false };
@@ -2125,12 +2142,12 @@ function showVertexMarkers(ids, append = false) {
     const m = new THREE.Mesh(geo, mat);
     m.userData = { type:'vertexMarker', vertexId:vid, markerType:'vertex', baseY: maxTop + 0.17 };
     m.position.set(v.x, maxTop + 0.17 + SCENE_PARAMS.vertexMarkerY, v.z);
-    // Golden outer glow — back-face sphere with additive blending
-    const glowGeo = new THREE.SphereGeometry(0.30, 8, 8);
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd060, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide });
-    const glow = new THREE.Mesh(glowGeo, glowMat);
-    glow.userData = { markerGlow: true, glowBase: startOpacity };
-    m.add(glow);
+    // Golden bloom — camera-facing sprite with additive blending (works regardless of bloom pass state)
+    const spriteMat = new THREE.SpriteMaterial({ map: markerGlowTex(), color: 0xffd060, transparent: true, opacity: isFirstSetupTower ? 0 : 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.scale.set(0.9, 0.9, 0.9);
+    sprite.userData = { markerGlow: true };
+    m.add(sprite);
     markerGroup.add(m);
   });
 }
@@ -2151,10 +2168,11 @@ function showEdgeMarkers(ids, append = false) {
     m.userData = { type:'edgeMarker', edgeId:eid, markerType:'edge', baseY: edgeBaseY };
     m.position.set((v1.x+v2.x)/2, edgeBaseY + SCENE_PARAMS.edgeMarkerY, (v1.z+v2.z)/2);
     m.rotation.y = Math.atan2(-dz, dx);
-    // Golden outer glow — slightly larger box with additive blending
-    const glowGeo = new THREE.BoxGeometry(len*0.72, 0.22, 0.38);
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffd060, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false });
+    // Golden bloom — flat plane along edge with additive blending (camera-agnostic bloom look)
+    const glowGeo = new THREE.PlaneGeometry(len * 0.85, 0.55);
+    const glowMat = new THREE.MeshBasicMaterial({ map: markerGlowTex(), color: 0xffd060, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.rotation.x = -Math.PI / 2; // lay flat along the edge
     glow.userData = { markerGlow: true };
     m.add(glow);
     markerGroup.add(m);
@@ -5246,9 +5264,12 @@ function animate() {
     });
   }
 
-  // Marker glow pulsation
+  // Marker glow pulsation — scale by fade-in progress so glow is hidden during intro
   if (markerGroup.children.length) {
-    const glowOpacity = 0.22 + Math.sin(t * 2.8) * 0.18; // 0.04–0.40
+    const fadeFactor = _vertexFadeIn
+      ? Math.min(1, _vertexFadeIn.t / _vertexFadeIn.duration)
+      : (markerGroup.userData.pendingFadeIn ? 0 : 1);
+    const glowOpacity = (0.30 + Math.sin(t * 2.8) * 0.20) * fadeFactor; // 0.10–0.50 pulsating
     markerGroup.children.forEach(marker => {
       marker.children.forEach(child => {
         if (child.userData.markerGlow && child.material) child.material.opacity = glowOpacity;
