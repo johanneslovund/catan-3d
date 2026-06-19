@@ -6773,10 +6773,8 @@ function animate() {
   updateVoicePlayers();
   _lobbyUpdateVoiceRings();
   composer.render();
-  if (typeof _is2D !== 'undefined' && _is2D) _drawRobberOverlay();
+  if (_is2D && typeof _drawRobberOverlay === "function") _drawRobberOverlay();
 }
-animate();
-
 // ─── 2D Mode: top-down camera + robber overlay ────────────────────────────────
 
 const _robberImg2D = new Image();
@@ -6823,7 +6821,7 @@ function _set2DVisibility(visible) {
 }
 
 // ── 2D / 3D toggle ────────────────────────────────────────────────────────────
-let _is2D = false;
+var _is2D = false;
 const _btn2d = document.getElementById('btn2dToggle');
 
 let _3dCamPos    = null;
@@ -6878,3 +6876,5 @@ function toggle2D() {
 
 _btn2d.addEventListener('click', toggle2D);
 window.addEventListener('resize', () => { if (_is2D) _resizeOverlay(); });
+
+animate();
