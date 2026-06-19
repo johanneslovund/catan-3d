@@ -1074,11 +1074,11 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   /* Row 2: main action button */
   #mainActionFloat {
     position: static; transform: none; order: 0;
-    width: 100%; align-items: stretch;
+    width: 100%; align-items: center;
   }
   #mainActionBtn {
-    width: 100%; min-width: unset;
-    padding: 10px 16px; font-size: 1.1rem;
+    width: auto; min-width: unset;
+    padding: 10px 24px; font-size: 1.1rem;
     border-radius: 14px;
   }
   #turnTimerBar { margin-top: 2px; }
@@ -1116,9 +1116,10 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   /* ── Modals ── */
   .modal-card { width: 92vw; max-width: 92vw; }
 
-  /* ── Chat/Log overlays ── */
+  /* ── Chat/Log/Vol overlays ── */
   #mobileChatOverlay,
-  #mobileLogOverlay {
+  #mobileLogOverlay,
+  #mobileVolOverlay {
     position: fixed; inset: 0; z-index: 500;
     background: rgba(0,0,0,0.6);
     backdrop-filter: blur(4px);
@@ -1126,16 +1127,28 @@ input[type="text"]::placeholder { color: var(--text-muted); }
     align-items: flex-end;
   }
   #mobileChatOverlay.open,
-  #mobileLogOverlay.open { display: flex !important; }
+  #mobileLogOverlay.open,
+  #mobileVolOverlay.open { display: flex !important; }
 
   #mobileChatInner,
-  #mobileLogInner {
+  #mobileLogInner,
+  #mobileVolInner {
     width: 100%; max-height: 65vh;
     background: rgba(10,12,20,0.98);
     border-top: 1px solid var(--glass-border);
     display: flex; flex-direction: column;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
+  }
+  .mob-vol-body { display: flex; flex-direction: column; gap: 0; padding: 6px 0 12px; }
+  .mob-vol-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  .mob-vol-label { font-size: .85rem; color: var(--text); min-width: 62px; }
+  .mob-vol-row input[type=range] {
+    flex: 1; height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,.2);
   }
   #mobileChatMessages, #mobileLogMessages {
     flex: 1; overflow-y: auto; padding: 10px 14px;

@@ -76,7 +76,7 @@
     <div class="mob-top-right">
       <button class="icon-btn" id="mBtnLog">📋</button>
       <button class="icon-btn" id="mBtnChat">💬</button>
-      <button class="icon-btn" id="mBtnMic">🎤</button>
+      <button class="icon-btn" id="mBtnVol">🔊</button>
     </div>
   </div>
 
@@ -110,6 +110,38 @@
         <button id="mBtnLogClose">✕</button>
       </div>
       <div id="mobileLogMessages"></div>
+    </div>
+  </div>
+
+  <!-- Mobile volume overlay (hidden by default) -->
+  <div id="mobileVolOverlay" style="display:none">
+    <div id="mobileVolInner">
+      <div class="mob-chat-header">
+        <span>🔊 Volume</span>
+        <button id="mBtnVolClose">✕</button>
+      </div>
+      <div class="mob-vol-body">
+        <div class="mob-vol-row">
+          <span class="mob-vol-label">🎤 Mic</span>
+          <button id="mVolMicMute" class="mic-btn on">🎤</button>
+          <input id="mVolMicVol" type="range" min="0" max="1" step="0.05" value="1"/>
+        </div>
+        <div class="mob-vol-row">
+          <span class="mob-vol-label">🎵 Music</span>
+          <button id="mVolMusicMute" class="mic-btn on">🔊</button>
+          <input id="mVolMusicVol" type="range" min="0" max="0.25" step="0.005" value="0.08"/>
+        </div>
+        <div class="mob-vol-row">
+          <span class="mob-vol-label">🔔 SFX</span>
+          <button id="mVolSfxMute" class="mic-btn on">🔊</button>
+          <input id="mVolSfxVol" type="range" min="0" max="1" step="0.05" value="0.5"/>
+        </div>
+        <div class="mob-vol-row">
+          <span class="mob-vol-label">💀 Voice</span>
+          <button id="mVolVoMute" class="mic-btn on">🔊</button>
+          <input id="mVolVoVol" type="range" min="0" max="1" step="0.05" value="1"/>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -694,7 +726,7 @@
         <div id="buildConfirmCard">
           <div id="buildConfirmMsg"></div>
           <div class="build-confirm-row">
-            <button id="btnBuildConfirmYes" class="btn btn-primary">Build</button>
+            <button id="btnBuildConfirmYes" class="btn btn-primary">Confirm</button>
             <button id="btnBuildConfirmNo" class="btn btn-secondary">Cancel</button>
           </div>
         </div>

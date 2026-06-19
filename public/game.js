@@ -2250,10 +2250,11 @@ const mouse = new THREE.Vector2(-9999,-9999);
 let pendingBuildAction = null;
 let pendingMarkerMesh = null;
 
-function showBuildConfirm(label, onConfirm, markerMesh) {
+function showBuildConfirm(label, onConfirm, markerMesh, btnLabel) {
   pendingBuildAction = onConfirm;
   pendingMarkerMesh = markerMesh ?? null;
   document.getElementById('buildConfirmMsg').textContent = label;
+  document.getElementById('btnBuildConfirmYes').textContent = btnLabel ?? 'Build';
   document.getElementById('btnBuildConfirmYes').disabled = !onConfirm;
   document.getElementById('buildConfirm').style.display = 'flex';
 }
@@ -2326,7 +2327,7 @@ renderer.domElement.addEventListener('click', e => {
     };
     if (victims.length <= 1) {
       const steal = victims.length ? victims[0].id : null;
-      showBuildConfirm('Move robber here?', () => doRobber(steal), hitMesh);
+      showBuildConfirm('Move robber here?', () => doRobber(steal), hitMesh, 'Place Robber');
     } else {
       showStealPicker(victims, doRobber, hitMesh);
     }
@@ -3539,9 +3540,68 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
   logOverlay?.addEventListener('click', e => {
     if (e.target === logOverlay) logOverlay.classList.remove('open');
   });
-  document.getElementById('mBtnMic')?.addEventListener('click', () => {
-    if (typeof voiceChat !== 'undefined') voiceChat.toggleMute?.();
+  // Volume overlay
+  const volOverlay = document.getElementById('mobileVolOverlay');
+  document.getElementById('mBtnVol')?.addEventListener('click', () => {
+    volOverlay?.classList.toggle('open');
   });
+  document.getElementById('mBtnVolClose')?.addEventListener('click', () => {
+    volOverlay?.classList.remove('open');
+  });
+  volOverlay?.addEventListener('click', e => {
+    if (e.target === volOverlay) volOverlay.classList.remove('open');
+  });
+
+  // Mic row
+  const mVolMicMute = document.getElementById('mVolMicMute');
+  mVolMicMute?.addEventListener('click', () => {
+    if (typeof voiceChat !== 'undefined') voiceChat.toggleMute?.();
+    const muted = voiceChat?.isMuted?.() ?? false;
+    mVolMicMute.textContent = muted ? '🔇' : '🎤';
+    mVolMicMute.classList.toggle('off', muted);
+    mVolMicMute.classList.toggle('on', !muted);
+  });
+  const mVolMicVol = document.getElementById('mVolMicVol');
+  mVolMicVol?.addEventListener('input', () => {
+    if (typeof voiceChat !== 'undefined') voiceChat.setVolume?.(parseFloat(mVolMicVol.value));
+  });
+
+  // Music row — mirrors the settings panel audio row
+  function wireMobAudioRow(muteId, volId, getMuted, setMuted, getVol, setVol, onApply) {
+    const btn = document.getElementById(muteId);
+    const sld = document.getElementById(volId);
+    if (!btn || !sld) return;
+    sld.value = getVol();
+    btn.addEventListener('click', () => {
+      setMuted(!getMuted());
+      btn.textContent = getMuted() ? '🔇' : '🔊';
+      btn.classList.toggle('off', getMuted());
+      btn.classList.toggle('on', !getMuted());
+      onApply();
+    });
+    sld.addEventListener('input', () => {
+      setVol(parseFloat(sld.value));
+      onApply();
+    });
+  }
+  wireMobAudioRow(
+    'mVolMusicMute', 'mVolMusicVol',
+    () => AUDIO.musicMuted,  v => { AUDIO.musicMuted = v; },
+    () => AUDIO.musicVolume, v => { AUDIO.musicVolume = v; },
+    () => AUDIO.applyMusicVolume?.()
+  );
+  wireMobAudioRow(
+    'mVolSfxMute', 'mVolSfxVol',
+    () => AUDIO.sfxMuted,  v => { AUDIO.sfxMuted = v; },
+    () => AUDIO.sfxVolume, v => { AUDIO.sfxVolume = v; },
+    applyAudioParams
+  );
+  wireMobAudioRow(
+    'mVolVoMute', 'mVolVoVol',
+    () => AUDIO.voMuted,  v => { AUDIO.voMuted = v; },
+    () => AUDIO.voVolume, v => { AUDIO.voVolume = v; },
+    () => {}
+  );
 })();
 
 // Settings panel — password protected, desktop only
