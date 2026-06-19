@@ -3899,6 +3899,8 @@ socket.on('lobbyUpdate', data => {
   const hasBots = data.players.some(p => p.isBot);
   document.getElementById('btnRemoveBot').style.opacity = hasBots ? '1' : '0.4';
   document.getElementById('btnAddBot').style.opacity = data.players.length < 4 ? '1' : '0.4';
+  _lobbyPlayers = data.players;
+  _lobbyRenderVoice();
   // Sync settings checkboxes
   const chk = document.getElementById('chkHideBankCards');
   if (chk) chk.checked = !!(data.settings?.hideBankCards);
@@ -4243,7 +4245,121 @@ socket.on('gameError', msg => {
   }
 });
 
+// ─── Lobby chat + voice ───────────────────────────────────────────────────────
+let _lobbyVoiceActive = false;
+let _lobbyPlayers = [];  // latest lobby player list
+
+function _lobbyAddChat(msg) {
+  const box = document.getElementById('lobbyChatMessages');
+  if (!box) return;
+  const div = document.createElement('div');
+  if (msg.system) {
+    div.className = 'lc-sys';
+    div.textContent = msg.text;
+  } else {
+    div.className = 'lc-msg';
+    div.innerHTML = `<span class="lc-name" style="color:${msg.color}">${escapeHtml(msg.name)}:</span>${escapeHtml(msg.text)}`;
+  }
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function _lobbyRenderVoice() {
+  const container = document.getElementById('lobbyVoiceUsers');
+  if (!container) return;
+  container.innerHTML = '';
+  _lobbyPlayers.forEach(p => {
+    if (p.isBot) return;
+    const el = document.createElement('div');
+    el.className = 'lobby-voice-user';
+    const isSelf = p.id === myId;
+    const peerMuted = !isSelf && (voiceChat.peers[p.id]?.muted ?? false);
+    el.innerHTML = `
+      <span class="lv-ring" id="lv-ring-${p.id}" style="background:${p.color}"></span>
+      <span>${escapeHtml(p.name)}${isSelf ? ' (you)' : ''}</span>
+      ${!isSelf ? `<button class="lv-mute-btn" data-pid="${p.id}" title="${peerMuted ? 'Unmute' : 'Mute'}">${peerMuted ? '🔇' : '🔊'}</button>` : ''}
+    `;
+    el.querySelector('.lv-mute-btn')?.addEventListener('click', function() {
+      const pid = this.dataset.pid;
+      const nowMuted = !voiceChat.peers[pid]?.muted;
+      voiceChat.mutePeer(pid, nowMuted);
+      _lobbyRenderVoice();
+    });
+    container.appendChild(el);
+  });
+}
+
+// Update voice rings in lobby from analyser
+function _lobbyUpdateVoiceRings() {
+  if (!_lobbyVoiceActive) return;
+  // Self ring via local analyser
+  const selfRing = document.getElementById(`lv-ring-${myId}`);
+  if (selfRing && voiceChat.localAnalyser && voiceChat.micOn && !voiceChat.selfMuted) {
+    const arr = new Uint8Array(voiceChat.localAnalyser.frequencyBinCount);
+    voiceChat.localAnalyser.getByteFrequencyData(arr);
+    const pct = arr.reduce((a,b)=>a+b,0)/arr.length/2.55;
+    selfRing.classList.toggle('talking', pct > 8);
+  }
+  // Peer rings
+  Object.entries(voiceChat.peers).forEach(([pid, peer]) => {
+    const ring = document.getElementById(`lv-ring-${pid}`);
+    if (!ring || !peer.analyser) return;
+    const arr = new Uint8Array(peer.analyser.frequencyBinCount);
+    peer.analyser.getByteFrequencyData(arr);
+    const pct = arr.reduce((a,b)=>a+b,0)/arr.length/2.55;
+    ring.classList.toggle('talking', pct > 8);
+  });
+}
+
+// Lobby mic button
+document.getElementById('lobbyMicBtn')?.addEventListener('click', async function() {
+  if (!voiceChat.micOn) {
+    this.textContent = '⏳ Connecting…';
+    this.disabled = true;
+    await voiceChat.enableMic();
+    this.disabled = false;
+    if (voiceChat.micOn) {
+      voiceChat.selfMuted = false;
+      voiceChat.localStream?.getAudioTracks().forEach(t => { t.enabled = true; });
+      _lobbyVoiceActive = true;
+      this.textContent = '🎤 Live';
+      this.className = 'lobby-mic-btn active';
+      _lobbyAddChat({ system: true, text: 'You joined voice.' });
+    } else {
+      this.textContent = '🔇 Muted';
+      this.className = 'lobby-mic-btn muted';
+    }
+  } else if (!voiceChat.selfMuted) {
+    voiceChat.selfMuted = true;
+    voiceChat.localStream?.getAudioTracks().forEach(t => { t.enabled = false; });
+    this.textContent = '🔇 Muted';
+    this.className = 'lobby-mic-btn muted';
+  } else {
+    voiceChat.selfMuted = false;
+    voiceChat.localStream?.getAudioTracks().forEach(t => { t.enabled = true; });
+    this.textContent = '🎤 Live';
+    this.className = 'lobby-mic-btn active';
+  }
+});
+
+// Lobby text chat send
+function _sendLobbyChat() {
+  const input = document.getElementById('lobbyChatInput');
+  const text = input?.value?.trim();
+  if (!text) return;
+  socket.emit('chatMessage', { text });
+  input.value = '';
+}
+document.getElementById('lobbyChatSend')?.addEventListener('click', _sendLobbyChat);
+document.getElementById('lobbyChatInput')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') _sendLobbyChat();
+});
+
 socket.on('chatMessage', msg => {
+  // Render in lobby chat if we're still in the lobby
+  const inLobby = document.getElementById('lobby')?.style.display !== 'none';
+  if (inLobby) _lobbyAddChat(msg);
+
   addChatMessage(msg);
   // Mirror to mobile chat
   const mob = document.getElementById('mobileChatMessages');
@@ -6654,6 +6770,7 @@ function animate() {
 
   updateDiceAnim(delta);
   updateVoicePlayers();
+  _lobbyUpdateVoiceRings();
   composer.render();
 }
 animate();

@@ -110,6 +110,23 @@
     <button id="btnStart" class="btn btn-primary" style="display:none">Start Game</button>
     <p id="waitingHint" class="hint">Waiting for host to start…</p>
     <button id="btnLeaveWaiting" class="btn btn-secondary" style="display:none;margin-top:8px">← Back</button>
+
+    <!-- Lobby communication panel -->
+    <div id="lobbyChatVoice">
+      <!-- Voice row -->
+      <div id="lobbyVoiceRow">
+        <button id="lobbyMicBtn" class="lobby-mic-btn muted" title="Unmute mic">🔇 Muted</button>
+        <div id="lobbyVoiceUsers"></div>
+      </div>
+      <!-- Text chat -->
+      <div id="lobbyChatBox">
+        <div id="lobbyChatMessages"></div>
+        <div id="lobbyChatInputRow">
+          <input id="lobbyChatInput" type="text" placeholder="Say something…" maxlength="200" autocomplete="off"/>
+          <button id="lobbyChatSend">↑</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
