@@ -1004,6 +1004,17 @@ io.on('connection', socket => {
     }
   });
 
+  socket.on('checkRejoin', ({ roomId, name }) => {
+    const game = rooms[roomId];
+    if (!game || game.status === 'lobby' || game.status === 'game_over') return socket.emit('rejoinInfo', null);
+    const dc = game.disconnectedBots?.[name];
+    if (dc && game.players.find(p => p.id === dc.botId)) {
+      socket.emit('rejoinInfo', { roomId, name });
+    } else {
+      socket.emit('rejoinInfo', null);
+    }
+  });
+
   socket.on('getLobbies', () => {
     const list = Object.entries(rooms)
       .filter(([, g]) => g.status === 'lobby' && !g.isPrivate)

@@ -28,6 +28,10 @@
       <label>Your Name</label>
       <input id="playerName" type="text" maxlength="16" placeholder="Enter name…"/>
     </div>
+    <div id="rejoinBanner" style="display:none;background:rgba(39,174,96,0.15);border:1px solid rgba(39,174,96,0.4);border-radius:12px;padding:10px 14px;text-align:center;font-size:.85rem">
+      <div style="font-weight:600;margin-bottom:6px">You were disconnected from a game</div>
+      <button id="btnRejoin" class="btn btn-primary" style="width:auto;padding:6px 20px">Rejoin Game</button>
+    </div>
     <div class="divider">Create</div>
     <label class="private-toggle">
       <input type="checkbox" id="chkPrivate"/>
@@ -64,10 +68,6 @@
     </div>
     <div id="gameSettings" style="display:none;margin:10px 0;padding:8px 10px;background:rgba(255,255,255,0.06);border-radius:8px;font-size:.85rem">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="chkPrivateRoom" style="width:16px;height:16px;cursor:pointer">
-        <span>Private lobby</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:6px">
         <input type="checkbox" id="chkHideBankCards" style="width:16px;height:16px;cursor:pointer">
         <span>Hide bank card counts</span>
       </label>

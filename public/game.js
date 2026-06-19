@@ -2365,7 +2365,7 @@ function enterBuildMode(mode) {
   document.getElementById('btnCancel').style.display='block';
 }
 
-function exitBuildMode() {
+function exitBuildMode(reapplyPassive = true) {
   buildMode = null;
   passiveRoadMarkers   = false;
   passiveVertexMarkers = false;
@@ -2373,12 +2373,14 @@ function exitBuildMode() {
   document.getElementById('buildMode').style.display='none';
   document.getElementById('btnCancel').style.display='none';
   hideBuildConfirm();
-  // Re-apply passive markers if still applicable
-  const anyPassive = (_canAffordRoad || _canAffordSettle) && gameState?.diceRolled;
-  if (anyPassive) {
-    passiveRoadMarkers   = _canAffordRoad;
-    passiveVertexMarkers = _canAffordSettle;
-    refreshPassiveMarkers();
+  // Re-apply passive markers if still applicable (skip after successful build — server will update)
+  if (reapplyPassive) {
+    const anyPassive = (_canAffordRoad || _canAffordSettle) && gameState?.diceRolled;
+    if (anyPassive) {
+      passiveRoadMarkers   = _canAffordRoad;
+      passiveVertexMarkers = _canAffordSettle;
+      refreshPassiveMarkers();
+    }
   }
 }
 
@@ -2434,7 +2436,7 @@ function hideBuildConfirm() {
 document.getElementById('btnBuildConfirmYes').addEventListener('click', () => {
   if (pendingBuildAction) pendingBuildAction();
   hideBuildConfirm();
-  exitBuildMode();
+  exitBuildMode(false); // skip passive re-apply; server will send updated state
 });
 document.getElementById('btnBuildConfirmNo').addEventListener('click', () => {
   hideBuildConfirm();
@@ -3293,6 +3295,8 @@ function fadeOutLobbyScreens(onDone) {
 
 socket.on('joinedRoom', data => {
   myId = data.playerId; roomId = data.roomId;
+  // Persist for rejoin detection on refresh/disconnect
+  try { localStorage.setItem('ti_roomId', roomId); localStorage.setItem('ti_name', document.getElementById('playerName').value.trim() || ''); } catch(e) {}
   if (_joiningRoom) {
     _joiningRoom = false;
     const btnJoin = document.getElementById('btnJoin');
@@ -3300,6 +3304,25 @@ socket.on('joinedRoom', data => {
     document.getElementById('lobbyError').textContent = '';
     document.getElementById('lobby').style.display = 'none';
     document.getElementById('waiting').style.display = 'flex';
+  }
+});
+
+// Check for rejoin opportunity on connect
+socket.on('connect', () => {
+  try {
+    const savedRoom = localStorage.getItem('ti_roomId');
+    const savedName = localStorage.getItem('ti_name');
+    if (savedRoom && savedName) socket.emit('checkRejoin', { roomId: savedRoom, name: savedName });
+  } catch(e) {}
+});
+
+let _rejoinData = null;
+socket.on('rejoinInfo', info => {
+  _rejoinData = info;
+  const banner = document.getElementById('rejoinBanner');
+  if (banner) banner.style.display = info ? 'block' : 'none';
+  if (info && document.getElementById('playerName').value === '') {
+    document.getElementById('playerName').value = info.name;
   }
 });
 
@@ -3331,8 +3354,6 @@ socket.on('lobbyUpdate', data => {
   // Sync settings checkboxes
   const chk = document.getElementById('chkHideBankCards');
   if (chk) chk.checked = !!(data.settings?.hideBankCards);
-  const chkPriv = document.getElementById('chkPrivateRoom');
-  if (chkPriv) chkPriv.checked = !!data.isPrivate;
 });
 
 document.getElementById('btnAddBot').addEventListener('click', () => {
@@ -3342,9 +3363,6 @@ document.getElementById('btnAddBot').addEventListener('click', () => {
 document.getElementById('btnRemoveBot').addEventListener('click', () => socket.emit('removeBot'));
 document.getElementById('chkHideBankCards').addEventListener('change', e => {
   socket.emit('setGameSetting', { key: 'hideBankCards', value: e.target.checked });
-});
-document.getElementById('chkPrivateRoom').addEventListener('change', e => {
-  socket.emit('setPrivate', { isPrivate: e.target.checked });
 });
 
 socket.on('gameUpdate', state => {
@@ -3542,6 +3560,7 @@ socket.on('gameUpdate', state => {
   }
 
   if (state.status==='game_over'&&state.winner&&gameState?.status!=='game_over') {
+    try { localStorage.removeItem('ti_roomId'); localStorage.removeItem('ti_name'); } catch(e) {}
     const w = state.players.find(p=>p.id===state.winner);
     document.getElementById('gameOverTitle').textContent = state.winner===myId ? '🏆 You Win!' : `${w?.name} Wins!`;
     document.getElementById('gameOverMsg').textContent = `Final VP: ${state.players.map(p=>`${p.name} ${p.vp}`).join(', ')}`;
@@ -3705,6 +3724,14 @@ socket.on('lobbyList', list => {
 
 // Request lobby list on load
 socket.emit('getLobbies');
+
+document.getElementById('btnRejoin').addEventListener('click', () => {
+  if (!_rejoinData) return;
+  document.getElementById('playerName').value = _rejoinData.name;
+  document.getElementById('lobbyError').textContent = 'Rejoining…';
+  _joiningRoom = true;
+  socket.emit('joinRoom', { roomId: _rejoinData.roomId, name: _rejoinData.name });
+});
 
 // Lobby
 document.getElementById('btnCreate').addEventListener('click', () => {
