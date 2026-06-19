@@ -4030,6 +4030,7 @@ socket.on('gameUpdate', state => {
   }
 
   gameState = state;
+  if (typeof _2D !== 'undefined') _2D.drawBoard();
   if (wasNull) {
     // Skip toasts for existing log entries on initial load
     lastLogLength = (state.log || []).length;
@@ -4046,6 +4047,7 @@ socket.on('gameUpdate', state => {
     renderBoard(state);
     fadeOutLobbyScreens(() => {
       document.getElementById('game').style.display='flex';
+      document.getElementById('btn2dToggle').style.display = 'block';
       resize();
     });
   }
@@ -6774,3 +6776,361 @@ function animate() {
   composer.render();
 }
 animate();
+
+// ─── 2D Board View ────────────────────────────────────────────────────────────
+
+const _2D = (() => {
+  const canvas = document.getElementById('canvas2d');
+  const ctx    = canvas.getContext('2d');
+
+  // World→screen transform
+  let _pan  = { x: 0, y: 0 };
+  let _zoom = 1;
+  let _drag = null;  // { startX, startY, panX, panY } during mouse drag
+
+  const TILE_2D_COLORS = {
+    forest:    '#2e7d32',
+    pasture:   '#8bc34a',
+    fields:    '#f9a825',
+    hills:     '#bf360c',
+    mountains: '#78909c',
+    desert:    '#c8b560',
+  };
+  const TILE_2D_BORDER = {
+    forest:    '#1b5e20',
+    pasture:   '#558b2f',
+    fields:    '#e65100',
+    hills:     '#8d1a00',
+    mountains: '#455a64',
+    desert:    '#a08c30',
+  };
+  const TILE_2D_ICON = {
+    forest:    '🌲',
+    pasture:   '🐑',
+    fields:    '🌾',
+    hills:     '🧱',
+    mountains: '⛰️',
+    desert:    '🌵',
+  };
+  const PORT_2D_COLORS = {
+    wood:'#6b9b37', sheep:'#8bc34a', wheat:'#f9a825',
+    brick:'#bf360c', ore:'#78909c', any:'#ccc',
+  };
+
+  // World-space hex radius matches 3D HEX_R=1.2
+  const W_R = 1.2;
+
+  function worldToScreen(wx, wz) {
+    const cx = canvas.width  / 2 + _pan.x;
+    const cy = canvas.height / 2 + _pan.y;
+    const SCALE = Math.min(canvas.width, canvas.height) / 7.0 * _zoom;
+    return { x: cx + wx * SCALE, y: cy + wz * SCALE };
+  }
+
+  function screenToWorld(sx, sy) {
+    const cx = canvas.width  / 2 + _pan.x;
+    const cy = canvas.height / 2 + _pan.y;
+    const SCALE = Math.min(canvas.width, canvas.height) / 7.0 * _zoom;
+    return { x: (sx - cx) / SCALE, z: (sy - cy) / SCALE };
+  }
+
+  function hexPoints(cx, cy, r) {
+    const pts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI / 180 * (60 * i - 30);
+      pts.push({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+    }
+    return pts;
+  }
+
+  function drawHexPath(pts) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < 6; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+  }
+
+  function drawBoard() {
+    if (!gameState?.board) return;
+    const { hexes, vertices, edges, ports } = gameState.board;
+    const SCALE = Math.min(canvas.width, canvas.height) / 7.0 * _zoom;
+    const r = W_R * SCALE;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Ocean background
+    ctx.fillStyle = '#1a6fa8';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // ── Hexes ──
+    hexes.forEach(hex => {
+      const { x: sx, y: sy } = worldToScreen(hex.x, hex.z);
+      const pts = hexPoints(sx, sy, r * 0.98);
+
+      // Fill
+      ctx.fillStyle = TILE_2D_COLORS[hex.type] || '#888';
+      drawHexPath(pts);
+      ctx.fill();
+
+      // Border
+      ctx.strokeStyle = TILE_2D_BORDER[hex.type] || '#444';
+      ctx.lineWidth = Math.max(1.5, r * 0.04);
+      drawHexPath(pts);
+      ctx.stroke();
+
+      // Icon
+      const iconSize = Math.max(10, r * 0.48);
+      ctx.font = `${iconSize}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(TILE_2D_ICON[hex.type] || '', sx, sy - r * 0.18);
+
+      // Number token
+      if (hex.number) {
+        const isRed = hex.number === 6 || hex.number === 8;
+        const tr = r * 0.30;
+        ctx.beginPath();
+        ctx.arc(sx, sy + r * 0.20, tr, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,252,240,0.93)';
+        ctx.fill();
+        ctx.strokeStyle = isRed ? '#c0392b' : '#7a6030';
+        ctx.lineWidth = Math.max(1, r * 0.025);
+        ctx.stroke();
+
+        const numSize = Math.max(8, r * 0.26);
+        ctx.font = `bold ${numSize}px sans-serif`;
+        ctx.fillStyle = isRed ? '#c0392b' : '#1a1000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(hex.number), sx, sy + r * 0.20);
+
+        // Pip dots
+        const pips = [2,12].includes(hex.number) ? 1 : [3,11].includes(hex.number) ? 2 :
+                     [4,10].includes(hex.number) ? 3 : [5,9].includes(hex.number) ? 4 : 5;
+        const pipR = Math.max(1, r * 0.028);
+        const pipGap = pipR * 2.4;
+        const startX = sx - (pips - 1) * pipGap / 2;
+        for (let i = 0; i < pips; i++) {
+          ctx.beginPath();
+          ctx.arc(startX + i * pipGap, sy + r * 0.20 + tr * 0.68, pipR, 0, Math.PI * 2);
+          ctx.fillStyle = isRed ? '#c0392b' : '#7a6030';
+          ctx.fill();
+        }
+      }
+    });
+
+    // Robber
+    if (gameState.robberHex != null) {
+      const rHex = hexes[gameState.robberHex];
+      if (rHex) {
+        const { x: sx, y: sy } = worldToScreen(rHex.x, rHex.z);
+        const rs = Math.max(10, r * 0.32);
+        ctx.font = `${rs}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🦹', sx, sy - r * 0.55);
+      }
+    }
+
+    // ── Ports ──
+    ports?.forEach(port => {
+      const v1 = vertices[port.vertices[0]], v2 = vertices[port.vertices[1]];
+      if (!v1 || !v2) return;
+      const p1 = worldToScreen(v1.x, v1.z);
+      const p2 = worldToScreen(v2.x, v2.z);
+      const mx = (p1.x + p2.x) / 2;
+      const my = (p1.y + p2.y) / 2;
+      // Draw edge highlight
+      ctx.strokeStyle = PORT_2D_COLORS[port.type] || '#ccc';
+      ctx.lineWidth = Math.max(3, r * 0.12);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      // Label
+      const label = port.type === 'any' ? '3:1' : `2:1`;
+      const resTxt = port.type === 'any' ? '?' : (RES_EMOJI[port.type] || '');
+      const labelSize = Math.max(8, r * 0.22);
+      ctx.font = `bold ${labelSize}px sans-serif`;
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = Math.max(1, r * 0.04);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // Push label slightly outward from board center
+      const cx2 = canvas.width / 2 + _pan.x;
+      const cy2 = canvas.height / 2 + _pan.y;
+      const dx = mx - cx2, dy = my - cy2;
+      const ld = Math.sqrt(dx*dx+dy*dy) || 1;
+      const lx = mx + (dx/ld)*r*0.45;
+      const ly = my + (dy/ld)*r*0.45;
+      if (resTxt) {
+        ctx.font = `${Math.max(9, r * 0.25)}px serif`;
+        ctx.strokeText(resTxt, lx, ly - labelSize * 0.55);
+        ctx.fillText(resTxt, lx, ly - labelSize * 0.55);
+        ctx.font = `bold ${labelSize * 0.8}px sans-serif`;
+        ctx.strokeText(label, lx, ly + labelSize * 0.55);
+        ctx.fillText(label, lx, ly + labelSize * 0.55);
+      } else {
+        ctx.font = `bold ${labelSize}px sans-serif`;
+        ctx.strokeText(label, lx, ly);
+        ctx.fillText(label, lx, ly);
+      }
+    });
+
+    // ── Roads ──
+    edges.forEach(e => {
+      if (!e.road) return;
+      const player = gameState.players.find(p => p.id === e.road.playerId);
+      if (!player) return;
+      const v1 = vertices[e.vertices[0]], v2 = vertices[e.vertices[1]];
+      if (!v1 || !v2) return;
+      const p1 = worldToScreen(v1.x, v1.z);
+      const p2 = worldToScreen(v2.x, v2.z);
+      ctx.strokeStyle = player.color;
+      ctx.lineWidth = Math.max(3, r * 0.14);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+    });
+
+    // ── Buildings ──
+    vertices.forEach(v => {
+      if (!v.building) return;
+      const player = gameState.players.find(p => p.id === v.building.playerId);
+      if (!player) return;
+      const { x: sx, y: sy } = worldToScreen(v.x, v.z);
+      const isCity = v.building.type === 'city';
+      const br = isCity ? r * 0.20 : r * 0.14;
+
+      // Outer glow / border
+      ctx.beginPath();
+      if (isCity) {
+        // Pentagon-ish: just use a slightly larger square with rounded corners
+        const s = br;
+        ctx.roundRect(sx - s, sy - s * 1.3, s * 2, s * 2.2, s * 0.35);
+      } else {
+        ctx.arc(sx, sy, br * 1.35, 0, Math.PI * 2);
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fill();
+
+      ctx.beginPath();
+      if (isCity) {
+        const s = br * 0.88;
+        ctx.roundRect(sx - s, sy - s * 1.3, s * 2, s * 2.2, s * 0.35);
+      } else {
+        ctx.arc(sx, sy, br, 0, Math.PI * 2);
+      }
+      ctx.fillStyle = player.color;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = Math.max(1, r * 0.025);
+      ctx.stroke();
+
+      // City dot indicator
+      if (isCity) {
+        const iconS = Math.max(7, br * 1.1);
+        ctx.font = `${iconS}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff';
+        ctx.fillText('🏰', sx, sy - br * 0.1);
+      }
+    });
+  }
+
+  function resize() {
+    const wrap = document.getElementById('view2d');
+    if (!wrap || wrap.style.display === 'none') return;
+    canvas.width  = wrap.clientWidth  || window.innerWidth;
+    canvas.height = wrap.clientHeight || window.innerHeight;
+    drawBoard();
+  }
+
+  // Pan + zoom
+  canvas.addEventListener('mousedown', e => {
+    _drag = { startX: e.clientX, startY: e.clientY, panX: _pan.x, panY: _pan.y };
+  });
+  canvas.addEventListener('mousemove', e => {
+    if (!_drag) return;
+    _pan.x = _drag.panX + e.clientX - _drag.startX;
+    _pan.y = _drag.panY + e.clientY - _drag.startY;
+    drawBoard();
+  });
+  canvas.addEventListener('mouseup',    () => { _drag = null; });
+  canvas.addEventListener('mouseleave', () => { _drag = null; });
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    _zoom = Math.min(4, Math.max(0.35, _zoom * factor));
+    drawBoard();
+  }, { passive: false });
+
+  // Touch pan/zoom
+  let _touches = [];
+  canvas.addEventListener('touchstart', e => {
+    _touches = Array.from(e.touches);
+    _drag = _touches.length === 1
+      ? { startX: _touches[0].clientX, startY: _touches[0].clientY, panX: _pan.x, panY: _pan.y }
+      : null;
+  }, { passive: true });
+  canvas.addEventListener('touchmove', e => {
+    const ts = Array.from(e.touches);
+    if (ts.length === 1 && _drag) {
+      _pan.x = _drag.panX + ts[0].clientX - _drag.startX;
+      _pan.y = _drag.panY + ts[0].clientY - _drag.startY;
+    } else if (ts.length === 2 && _touches.length === 2) {
+      const d0 = Math.hypot(_touches[0].clientX-_touches[1].clientX, _touches[0].clientY-_touches[1].clientY);
+      const d1 = Math.hypot(ts[0].clientX-ts[1].clientX, ts[0].clientY-ts[1].clientY);
+      if (d0 > 0) _zoom = Math.min(4, Math.max(0.35, _zoom * (d1 / d0)));
+    }
+    _touches = ts;
+    drawBoard();
+  }, { passive: true });
+
+  window.addEventListener('resize', resize);
+
+  return { drawBoard, resize };
+})();
+
+// ── 2D / 3D toggle ────────────────────────────────────────────────────────────
+let _is2D = false;
+const _btn2d = document.getElementById('btn2dToggle');
+
+function toggle2D() {
+  _is2D = !_is2D;
+  const view2d = document.getElementById('view2d');
+  const threeCanvas = renderer.domElement;
+
+  view2d.style.display    = _is2D ? 'flex'  : 'none';
+  threeCanvas.style.visibility = _is2D ? 'hidden' : 'visible';
+  _btn2d.textContent      = _is2D ? '3D' : '2D';
+  _btn2d.classList.toggle('active', _is2D);
+
+  if (_is2D) {
+    _2D.resize();
+    _2D.drawBoard();
+  }
+}
+
+_btn2d.addEventListener('click', toggle2D);
+
+// Show toggle once the game is in play
+const _orig_gameUpdate = socket.listeners('gameUpdate')[0];
+socket.on('gameUpdate', () => {
+  if (gameState?.status === 'playing') {
+    _btn2d.style.display = 'block';
+  }
+});
+
+// Redraw 2D when state changes (if active)
+const _orig_draw2d = _2D.drawBoard.bind(_2D);
+_2D.drawBoard = function() {
+  if (document.getElementById('view2d')?.style.display !== 'none') _orig_draw2d();
+};

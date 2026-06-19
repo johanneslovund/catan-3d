@@ -329,6 +329,43 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .icon-btn:hover { background: var(--glass-hi); color: var(--text); }
 .icon-btn.active { background: var(--glass-md); color: #fff; }
 
+/* ── 2D board view ───────────────────────────────────────────────────────────── */
+#view2d {
+  position: absolute;
+  inset: 0;
+  background: #1a6fa8;
+  z-index: 20;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#canvas2d {
+  display: block;
+  touch-action: none;
+}
+.btn-2d-toggle {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  background: rgba(20,30,55,0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: #fff;
+  font-size: .82rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  padding: 6px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn-2d-toggle:hover { background: rgba(40,55,100,0.92); }
+.btn-2d-toggle.active { background: rgba(60,120,220,0.7); border-color: rgba(100,170,255,0.45); }
+
 /* ── Right side bar ──────────────────────────────────────────────────────────── */
 #rightSideBar {
   display: none; /* shown via mobile media query */
