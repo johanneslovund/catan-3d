@@ -133,10 +133,11 @@
 <!-- ── GAME ── -->
 <div id="game" style="display:none">
 
+  <!-- Exit game button -->
+  <button id="btnExitGame" style="position:absolute;top:10px;left:10px;z-index:35;background:rgba(20,30,55,0.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.18);color:#fff;font-size:.78rem;font-weight:600;letter-spacing:.04em;padding:6px 14px;border-radius:20px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='rgba(180,30,30,0.85)'" onmouseout="this.style.background='rgba(20,30,55,0.82)'">Exit Game</button>
+
   <!-- 2D/3D toggle button -->
   <button id="btn2dToggle" class="btn-2d-toggle" title="Switch to 2D view" style="display:none">2D</button>
-  <!-- Overlay for 2D-only elements (robber image). pointer-events:none so clicks pass through to Three.js -->
-  <canvas id="overlay2d" style="display:none;position:absolute;inset:0;pointer-events:none;z-index:16;"></canvas>
 
   <!-- Mobile-only top bar (hidden on desktop) -->
   <div id="mobileTopBar">
@@ -759,6 +760,22 @@
         </div>
       </div><!-- /settings-cat-body CAMERA -->
 
+      <div class="settings-section-label collapsible" style="margin-top:10px">BUILDING STROKE</div>
+      <div class="settings-cat-body">
+        <div class="tile-slider" data-param="outline" data-type="thickness">
+          <label><span class="tile-icon">✏️</span> Thickness</label>
+          <div class="slider-row"><input type="range" min="0.5" max="8.0" step="0.1" value="1.5"/><span class="slider-val">1.50</span></div>
+        </div>
+        <div class="tile-slider" data-param="outline" data-type="glow">
+          <label><span class="tile-icon">✨</span> Glow</label>
+          <div class="slider-row"><input type="range" min="0" max="4.0" step="0.05" value="0.5"/><span class="slider-val">0.50</span></div>
+        </div>
+        <div class="tile-slider" data-param="outline" data-type="strength">
+          <label><span class="tile-icon">🎨</span> Saturation</label>
+          <div class="slider-row"><input type="range" min="1" max="30" step="0.5" value="6.0"/><span class="slider-val">6.00</span></div>
+        </div>
+      </div><!-- /settings-cat-body BUILDING STROKE -->
+
       <div class="settings-section-label collapsible" style="margin-top:10px">TILE BOBBING</div>
       <div class="settings-cat-body">
         <div class="tile-slider" data-param="bob" data-type="enabled">
@@ -902,6 +919,8 @@
   <div id="centerArea">
     <div id="canvasWrapper">
       <canvas id="c"></canvas>
+      <!-- 2D tile overlay — sits above Three.js canvas, below all UI (z-index 5 < buildMode 10 < logToasts 25) -->
+      <canvas id="overlay2d" style="display:none;position:absolute;inset:0;pointer-events:none;z-index:5;"></canvas>
 
       <!-- Floating game log toasts -->
       <div id="logToastArea"></div>
@@ -1051,16 +1070,16 @@
       <!-- Right: build shortcuts -->
       <div id="buildShortcuts">
         <button class="shortcut-btn" id="btnRoad">
-          <span class="sc-icon">🛤</span><span class="sc-lbl">Road</span>
+          <span class="sc-icon"><img src="images/Road icon.png" class="piece-icon" alt="road"></span><span class="sc-lbl">Road</span>
         </button>
         <button class="shortcut-btn" id="btnSettle">
-          <span class="sc-icon">🗼</span><span class="sc-lbl">Tower</span>
+          <span class="sc-icon"><img src="Icons/Tower Icon.png" class="piece-icon" alt="tower"></span><span class="sc-lbl">Tower</span>
         </button>
         <button class="shortcut-btn" id="btnCity">
-          <span class="sc-icon">🏯</span><span class="sc-lbl">Castle</span>
+          <span class="sc-icon"><img src="Icons/Castle Icon.png" class="piece-icon" alt="castle"></span><span class="sc-lbl">Castle</span>
         </button>
         <button class="shortcut-btn" id="btnDevBuy">
-          <span class="sc-icon">📜</span><span class="sc-lbl">Dev Card</span>
+          <span class="sc-icon"><img src="Icons/Dev card icon.png" class="piece-icon" alt="dev card"></span><span class="sc-lbl">Dev Card</span>
         </button>
         <button class="shortcut-btn" id="btnDevPlay">
           <span class="sc-icon">▶</span><span class="sc-lbl">Play Card</span>
@@ -1147,6 +1166,7 @@
       </div>
       <div id="musicControls">
         <button id="btnMusicMute" class="mic-btn on" title="Mute music">🔊</button>
+        <input id="musicVolume" type="range" min="0" max="0.25" step="0.005" value="0.03" title="Music volume" style="width:72px;accent-color:#6af;cursor:pointer;vertical-align:middle"/>
       </div>
     </div>
 

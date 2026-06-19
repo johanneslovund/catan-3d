@@ -28,8 +28,18 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background: url('images/Background.png') center center / cover no-repeat;
+  background: url('images/Background.png') center 30% / cover no-repeat;
   transition: opacity 0.55s ease;
+}
+/* Adaptive vertical framing by viewport aspect ratio */
+@media (max-aspect-ratio: 1/1) {
+  #lobby, #waiting { background-position: center center; }
+}
+@media (min-aspect-ratio: 2/1) {
+  #lobby, #waiting { background-position: center 45%; }
+}
+@media (min-aspect-ratio: 3/1) {
+  #lobby, #waiting { background-position: center 55%; }
 }
 #lobby.fading-out, #waiting.fading-out { opacity: 0; pointer-events: none; }
 
@@ -332,10 +342,10 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 /* ── 2D/3D toggle button ─────────────────────────────────────────────────────── */
 .btn-2d-toggle {
   position: absolute;
-  top: 14px;
+  top: 10px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 30;
+  z-index: 35;
   background: rgba(20,30,55,0.82);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -501,7 +511,8 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 
 /* Build mode overlay */
 #buildMode {
-  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+  z-index: 10;
   background: rgba(231,76,60,.75);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -512,7 +523,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   box-shadow: 0 2px 12px rgba(0,0,0,.4);
 }
 .cancel-overlay-btn {
-  position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 88px; left: 50%; transform: translateX(-50%);
   z-index: 20;
   background: rgba(0,0,0,.35);
   backdrop-filter: blur(10px);
@@ -526,7 +537,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 
 /* Game log toast area */
 #logToastArea {
-  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
   z-index: 25; display: flex; flex-direction: column; align-items: center;
   gap: 6px; pointer-events: none; width: max-content; max-width: 440px;
 }
@@ -897,7 +908,8 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   box-shadow: 0 6px 18px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.12);
 }
 .shortcut-btn:disabled { opacity: .30; cursor: not-allowed; }
-.sc-icon { font-size: 1.5rem; }
+.sc-icon { font-size: 1.5rem; display: flex; align-items: center; justify-content: center; }
+.sc-icon img.piece-icon { width: 28px; height: 28px; }
 .sc-lbl  { font-size: .72rem; font-weight: 700; color: rgba(255,255,255,0.75); letter-spacing: .02em; }
 
 /* Card collection animation */
@@ -1493,6 +1505,144 @@ img.piece-icon {
   /* ── Prevent canvas overflow ── */
   #canvasWrapper { overflow: hidden; }
   #canvasWrapper canvas { touch-action: none; }
+
+  /* ── Exit game button: tuck inside mobileTopBar area ── */
+  #btnExitGame {
+    top: 4px !important; left: 6px !important;
+    padding: 5px 10px !important; font-size: .72rem !important;
+    border-radius: 14px !important;
+    z-index: 30 !important;
+  }
+
+  /* ── 2D/3D toggle: shift down below mobileTopBar ── */
+  .btn-2d-toggle {
+    top: 48px;
+    font-size: .75rem;
+    padding: 5px 13px;
+  }
+
+  /* ── Settings panel: full-width, left: 0 (no leftBar on mobile) ── */
+  #settingsPanel {
+    left: 0;
+    width: min(280px, 100vw);
+    z-index: 200;
+  }
+
+  /* ── Right side bar: less padding, tighter ── */
+  #canvasWrapper { padding-right: 44px; }
+  #rightSideBar { gap: 2px; padding: 6px 3px; }
+  .rsb-btn {
+    width: 38px; height: 38px; font-size: 1rem;
+    min-height: 38px;
+  }
+
+  /* ── Touch targets: larger hit areas ── */
+  .icon-btn { width: 42px; height: 42px; border-radius: 10px; }
+
+  /* ── Log toasts: below top bar + player cards ── */
+  #logToastArea {
+    top: 134px; /* 40px mobileTopBar + 86px player cards + 8px gap */
+    max-width: 88vw;
+  }
+  #logToastArea .log-toast { font-size: .78rem; padding: 5px 14px; }
+
+  /* ── Trade incoming: avoid right side bar ── */
+  #tradeIncoming {
+    top: 8px; right: 50px; width: calc(100vw - 58px); max-width: 320px;
+  }
+
+  /* ── Build confirm: center vertically in canvas area ── */
+  #buildConfirm { padding-top: 20vh; }
+
+  /* ── Dice overlay: full width ── */
+  #diceOverlay { width: 92vw; }
+  #dicePopNum { font-size: 4rem; }
+
+  /* ── Modal cards: full width ── */
+  .modal-card { padding: 18px 16px; }
+  .trade-card { min-width: unset; }
+
+  /* ── Camera preset popup: ensure not clipped ── */
+  #cameraPresetPopup { min-width: 110px; }
+  .cam-preset-btn { font-size: .78rem; padding: 8px 10px; }
+
+  /* ── Build shortcuts: larger touch areas ── */
+  .shortcut-btn { padding: 8px 4px; min-height: 52px; }
+  .sc-icon { font-size: 1.2rem; }
+
+  /* ── Resource bar: slightly tighter ── */
+  .res-bar-chip .rbc-icon { font-size: 1.1rem; }
+  .res-bar-chip .rbc-count { font-size: .78rem; }
+
+  /* ── Main action button: reasonable size ── */
+  #mainActionBtn { font-size: 1.1rem; padding: 12px 28px; }
+
+  /* ── Emoji grid: fewer columns on mobile ── */
+  #emojiGrid { grid-template-columns: repeat(6, 1fr); gap: 5px; }
+  .emoji-btn { font-size: 1.3rem; padding: 5px; }
+  .emoji-modal-card { max-width: min(320px, 92vw); }
+
+  /* ── Lobby card: constrain width for small phones ── */
+  .lobby-card { width: min(380px, calc(100vw - 16px)); }
+
+  /* ── Trade panel popup: avoid edge clipping ── */
+  #tradePanelPopup { left: 4px; right: 4px; bottom: 100px; }
+}
+
+/* ── Extra-small phones (max 480px) ───────────────────────────────────── */
+@media (max-width: 480px) {
+
+  /* Even tighter lobby card */
+  .lobby-card { padding: 22px 14px; width: calc(100vw - 12px); border-radius: 14px; }
+  .lobby-card h1 { font-size: 1.5rem; }
+  .lobby-card h2 { font-size: 1.1rem; }
+
+  /* Emoji grid: 5 columns */
+  #emojiGrid { grid-template-columns: repeat(5, 1fr); }
+
+  /* Avatar picker: smaller preview */
+  .avatar-preview { width: 48px; height: 48px; font-size: 1.35rem; }
+  .avatar-opt-btn { width: 36px; height: 36px; font-size: 1rem; }
+
+  /* Settings panel: fill width on very small phones */
+  #settingsPanel { width: 100vw; }
+
+  /* Player cards: narrower */
+  .mob-player-card { min-width: 72px; }
+  .mob-card-name { font-size: .62rem; }
+
+  /* Main action btn: full width */
+  #mainActionBtn { width: 100%; font-size: 1rem; padding: 10px 16px; }
+
+  /* Build shortcuts: 4 across */
+  .shortcut-btn { padding: 6px 2px; }
+  .sc-icon { font-size: 1rem; }
+  .sc-lbl { font-size: .5rem; }
+
+  /* Resource icons smaller */
+  .res-bar-chip .rbc-icon { font-size: 1rem; }
+  #myResourceBar { gap: 2px; padding: 4px 6px; }
+
+  /* 2D/3D toggle: a bit smaller */
+  .btn-2d-toggle { font-size: .7rem; padding: 4px 10px; top: 46px; }
+
+  /* Exit button: smallest */
+  #btnExitGame { font-size: .65rem !important; padding: 4px 8px !important; }
+
+  /* Log toasts: smaller text */
+  #logToastArea .log-toast { font-size: .72rem; padding: 4px 12px; }
+
+  /* Trade incoming: full width minus sidebar */
+  #tradeIncoming { right: 46px; width: calc(100vw - 54px); }
+  .trade-incoming-card { padding: 10px 12px; }
+
+  /* Modal card: tighter */
+  .modal-card { padding: 14px 12px; border-radius: 14px; }
+
+  /* Mobile top bar: tighter bank display */
+  #mobileTopBar { padding: 0 6px; }
+  #mobileBankBar .bc-icon { font-size: .8rem; }
+  #mobileBankBar .bc-count { font-size: .7rem; }
 }
 
 /* ── Dark text for light-colored player badges/avatars ── */

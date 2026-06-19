@@ -1,15 +1,36 @@
 'use strict';
-const express = require('express');
-const http = require('http');
+const express    = require('express');
+const http       = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
+const path       = require('path');
+const compression = require('compression');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const PORT = process.env.PORT || 3001;
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(compression());
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '1h',
+  setHeaders(res, filePath) {
+    // Long-lived cache for immutable assets; short for HTML/JS
+    if (/\.(mp3|aac|wav|ogg|png|jpg|jpeg|webp|glb|gltf)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    } else if (/\.(js|css)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+    }
+  }
+}));
+
+const fs = require('fs');
+app.get('/api/voice-files', (_req, res) => {
+  const dir = path.join(__dirname, 'public', 'voice over');
+  try {
+    const files = fs.readdirSync(dir).filter(f => /\.(mp3|aac|wav|ogg)$/i.test(f));
+    res.json(files);
+  } catch { res.json([]); }
+});
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1167,6 +1188,7 @@ io.on('connection', socket => {
     const game = rooms[info.roomId];
     if (!game || game.players[0].id !== socket.id) return;
     if (game.players.length < 1) return socket.emit('gameError', 'No players in room');
+    if (game.players.length < 2) createBot(game, 'medium');
 
     game.board = generateBoard();
     game.devDeck = shuffle([...DEV_DECK]);

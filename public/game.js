@@ -5,6 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -369,6 +370,46 @@ scene.add(ground);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 
+// One outline pass per player color
+const _PIECE_COLORS = ['#e74c3c', '#3498db', '#ffffff', '#2ecc71'];
+const _outlinePasses = _PIECE_COLORS.map(col => {
+  const pass = new OutlinePass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera
+  );
+  pass.edgeStrength   = 6.0;
+  pass.edgeGlow       = 0.0; // no bleed — closest building always wins
+  pass.edgeThickness  = 1.5;
+  pass.pulsePeriod    = 0;
+  pass.visibleEdgeColor.set(col);
+  pass.hiddenEdgeColor.set('#000000');
+  pass.selectedObjects = [];
+  composer.addPass(pass);
+  return { pass, color: col };
+});
+
+// Single outline pass for all 3D port icon objects (white glow)
+const _PORT_OUTLINE_COLORS = {
+  sheep:    '#7edc5a',
+  brick:    '#e8732a',
+  ore:      '#9baab8',
+  wood:     '#4a2d0e',
+  wheat:    '#f5c842',
+  any:      '#ffffff',
+};
+const _portOutlinePass = new OutlinePass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera
+);
+_portOutlinePass.edgeStrength  = 10.0;
+_portOutlinePass.edgeGlow      = 0.8;
+_portOutlinePass.edgeThickness = 2.5;
+_portOutlinePass.pulsePeriod   = 0;
+_portOutlinePass.visibleEdgeColor.set('#ffffff');
+_portOutlinePass.hiddenEdgeColor.set('#ffffff');
+_portOutlinePass.selectedObjects = [];
+composer.addPass(_portOutlinePass);
+// Keep _portOutlinePasses as a shim so existing callers work unchanged
+const _portOutlinePasses = [{ pass: _portOutlinePass, type: '_all' }];
+
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LIGHT_PARAMS.bloomStr, 0.5, 0.85);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -562,12 +603,16 @@ let _robberVoEnabled = false;
 let _robberVoPlaying = false;
 let _robberVoTimer = null;
 let _robberVoAudio = null; // current playing Audio element for live volume updates
-const VO_FILES = [
+let VO_FILES = [
   'Ej hekje leire.mp3','e det mulig.mp3','ej hekje kønn.mp3','ej vil ha leire.mp3',
   'live ville aldri lagt røvern der.mp3','sett han der du.mp3','kor dum gjeng det an å bli.mp3',
   'du kan ikkje meine ditta.mp3','ej flira.mp3','no begynne du å bli farlig.mp3',
   'jaujau.mp3','jaja gg\'s.mp3','hallo gjeng an å bruke haude.mp3','embargo.mp3',
 ];
+// Load full list from server (includes all newly added files)
+fetch('/api/voice-files').then(r => r.json()).then(files => {
+  if (files && files.length > 0) VO_FILES = files;
+}).catch(() => {});
 
 // Drop animations: pieces falling from sky onto the board
 const dropAnims = []; // { mesh, targetY, t, onLand }
@@ -2083,6 +2128,7 @@ function renderBoard(state) {
       makeOutlineText('2:1', 0.16, 0.05, 0xffffff, 0xffffff, textScale, textY);
     }
 
+    iconGroup.userData.portType = resType;
     portGroup.add(iconGroup);
     if (!boardGroup.userData.portIcons) boardGroup.userData.portIcons = [];
     boardGroup.userData.portIcons.push(iconGroup);
@@ -2178,6 +2224,13 @@ function renderBoard(state) {
       _pendingIntroHexes = state.board.hexes;
     }
   }
+
+  // Collect all 3D port icon meshes into the single port outline pass
+  const _portIconMeshes = [];
+  (boardGroup.userData.portIcons ?? []).forEach(ig => {
+    ig.traverse(m => { if (m.isMesh) _portIconMeshes.push(m); });
+  });
+  _portOutlinePass.selectedObjects = _portIconMeshes;
 }
 
 // ─── Tile intro fly-in animation ──────────────────────────────────────────────
@@ -2537,6 +2590,33 @@ function applyLightParams() {
   saturationPass.uniforms.uWarmth.value     = LIGHT_PARAMS.warmth;
 }
 
+function updateOutlinePasses(state) {
+  if (!state) { _outlinePasses.forEach(o => { o.pass.selectedObjects = []; }); return; }
+  const colorMap = {};
+  _PIECE_COLORS.forEach(c => { colorMap[c] = []; });
+
+  buildGroup.children.forEach(obj => {
+    // Buildings
+    const pid = obj.userData.buildingPlayerId;
+    if (pid) {
+      const p = state.players.find(pl => pl.id === pid);
+      if (p && colorMap[p.color] !== undefined) colorMap[p.color].push(obj);
+      return;
+    }
+    // Roads — matched by edgeId → road.playerId
+    const eid = obj.userData.edgeId;
+    if (eid !== undefined && state.board) {
+      const edge = state.board.edges[eid];
+      if (edge?.road) {
+        const p = state.players.find(pl => pl.id === edge.road.playerId);
+        if (p && colorMap[p.color] !== undefined) colorMap[p.color].push(obj);
+      }
+    }
+  });
+
+  _outlinePasses.forEach(o => { o.pass.selectedObjects = colorMap[o.color] || []; });
+}
+
 // ─── Building rendering ───────────────────────────────────────────────────────
 function renderBuildings(state) {
   clearGroup(buildGroup);
@@ -2568,10 +2648,12 @@ function renderBuildings(state) {
     mesh.userData.buildingPlayerId = v.building.playerId;
     mesh.userData.baseScale = mesh.scale.x;
     mesh.userData.vertexId = v.id;
+    mesh.renderOrder = 2; // renders on top of roads (renderOrder 1)
     mesh.traverse(c => {
       c.userData.buildingType = type;
       c.userData.buildingPlayerId = v.building.playerId;
       c.userData.vertexId = v.id;
+      c.renderOrder = 2;
     });
     buildGroup.add(mesh);
   });
@@ -2596,7 +2678,8 @@ function renderBuildings(state) {
       road = makeRoad(v1, v2, col, roadY);
     }
     road.userData.edgeId = e.id;
-    road.traverse(c => { c.userData.edgeId = e.id; });
+    road.renderOrder = 1;
+    road.traverse(c => { c.userData.edgeId = e.id; c.renderOrder = 1; });
     buildGroup.add(road);
   });
 
@@ -2604,6 +2687,8 @@ function renderBuildings(state) {
   _mySettlements = buildGroup.children.filter(
     m => m.userData.buildingType === 'settlement' && m.userData.buildingPlayerId === myId
   );
+
+  updateOutlinePasses(state);
 
   // Robber lives in robberGroup (persists across renderBuildings for movement animation)
   // Only rebuild when not mid-movement
@@ -2896,7 +2981,7 @@ function enterBuildMode(mode) {
   document.getElementById('buildMode').innerHTML =
     mode==='settlement' ? '<img src="Icons/Tower Icon.png" class="piece-icon" alt="tower"> Click a yellow spot to place tower' :
     mode==='city'       ? '<img src="Icons/Castle Icon.png" class="piece-icon" alt="castle"> Click a yellow spot to upgrade to castle' :
-    mode==='road'       ? '🛣 Click a yellow edge to place road' :
+    mode==='road'       ? '<img src="images/Road icon.png" class="piece-icon" alt="road"> Click a yellow edge to place road' :
                           '💀 Click a tile to move the robber';
   document.getElementById('btnCancel').style.display='block';
 }
@@ -3122,6 +3207,21 @@ const ROBBER_VO = [
   'sett han der du.mp3',
   'skjerpe dej laurits.mp3',
   'ødelagt klokke.mp3',
+  'buldre da.mp3',
+  'det forandrer sagen.mp3',
+  'ditta skal ej huske på.mp3',
+  'du kan ikkje meine ditta.mp3',
+  'en gang til så blir det embargo.mp3',
+  'live skal bli mor.mp3',
+  'mango chuckney kyllingwok.mp3',
+  'no klikka det snart.mp3',
+  'om det ikkje va embargo før.mp3',
+  'siste gangen ej spela med doke.mp3',
+  'sparke en død hest.mp3',
+  'snakk om å sparke en død hest.mp3',
+  'stikk heim he tidligvakt.mp3',
+  'vinterdekk på opelen.mp3',
+  'ggs for lenge sia.mp3',
 ];
 function playRobberVO() {
   const clip = ROBBER_VO[Math.floor(Math.random() * ROBBER_VO.length)];
@@ -3893,7 +3993,7 @@ socket.on('lobbyUpdate', data => {
   document.getElementById('botControls').style.display = isHost ? 'flex' : 'none';
   document.getElementById('waitingHint').style.display = isHost ? 'none' : 'block';
   const btnLeave = document.getElementById('btnLeaveWaiting');
-  if (btnLeave) btnLeave.style.display = isHost ? 'none' : 'block';
+  if (btnLeave) btnLeave.style.display = 'block';
   const settingsEl = document.getElementById('gameSettings');
   if (settingsEl) settingsEl.style.display = isHost ? 'block' : 'none';
   const hasBots = data.players.some(p => p.isBot);
@@ -4464,6 +4564,13 @@ document.getElementById('btnLeaveWaiting').addEventListener('click', () => {
   document.getElementById('btnLeaveWaiting').style.display = 'none';
 });
 
+document.getElementById('btnExitGame')?.addEventListener('click', () => {
+  if (!confirm('Exit to lobby?')) return;
+  socket.emit('leaveRoom');
+  document.getElementById('game').style.display = 'none';
+  document.getElementById('lobby').style.display = 'flex';
+});
+
 // Game (btnRoll/btnEndTurn handled dynamically by mainActionBtn)
 document.getElementById('btnSettle').addEventListener('click', () => enterBuildMode('settlement'));
 document.getElementById('btnCity').addEventListener('click',   () => enterBuildMode('city'));
@@ -4793,6 +4900,11 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
       } else if (param === 'robber') {
         ROBBER_PARAMS[type] = v;
         if (gameState) renderBuildings(gameState);
+        return;
+      } else if (param === 'outline') {
+        if (type === 'thickness') { _outlinePasses.forEach(o => { o.pass.edgeThickness = v; }); }
+        else if (type === 'glow')  { _outlinePasses.forEach(o => { o.pass.edgeGlow = v; }); }
+        else if (type === 'strength') { _outlinePasses.forEach(o => { o.pass.edgeStrength = v; }); }
         return;
       } else if (param === 'building') {
         if (type === 'colorTint') SCENE_PARAMS.buildingColorTint = v;
@@ -5751,6 +5863,8 @@ function resize() {
   renderer.setSize(w, h);
   composer.setSize(w, h);
   bloom.resolution.set(w, h);
+  _outlinePasses.forEach(o => o.pass.resolution.set(w, h));
+  _portOutlinePass.resolution.set(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -6062,7 +6176,8 @@ function animate() {
     if (cp >= 1) {
       cameraIntro.active = false;
       controls.enabled = true;
-      camera.position.set(0, 16, 0.1);
+      camera.position.set(0, 16, 0);
+      camera.up.set(0, 1, 0);
       controls.target.set(0, 0, 0);
       controls.update();
       bloom.strength = 0.0;
@@ -6196,6 +6311,10 @@ function animate() {
 
   // Port + boat rise after intro ends
   const portRise = boardGroup.userData.portRise;
+  if (portRise && portRise.t === 0) {
+    // Hide port outlines until ports have fully surfaced
+    _portOutlinePass.selectedObjects = [];
+  }
   if (portRise) {
     portRise.t += delta;
     const rp = Math.min(1, portRise.t / portRise.duration);
@@ -6253,6 +6372,12 @@ function animate() {
           if (m.userData.markerType === 'vertex') m.position.y = m.userData.baseY + SCENE_PARAMS.vertexMarkerY;
         });
       }
+      // Restore port outlines now that ports are above water
+      const _risenPortMeshes = [];
+      (boardGroup.userData.portIcons ?? []).forEach(ig => {
+        ig.traverse(m => { if (m.isMesh) _risenPortMeshes.push(m); });
+      });
+      _portOutlinePass.selectedObjects = _risenPortMeshes;
     }
   }
 
@@ -6537,8 +6662,18 @@ function animate() {
 
   // Port icons — slow Y rotation + gentle float
   if (boardGroup.userData.portIcons) {
+    // Face icons toward the camera, locked to a horizontal plane (no tilt).
+    // Use the Low Angle preset direction as the reference up-view angle.
+    const _lowAngleDir = new THREE.Vector3(0, 5, 12).normalize();
     boardGroup.userData.portIcons.forEach((ig, i) => {
-      ig.rotation.y = t * 0.5 + i * 0.9;
+      // Billboard: face the camera but only rotate around Y (keep upright)
+      const worldPos = new THREE.Vector3();
+      ig.getWorldPosition(worldPos);
+      const toCam = camera.position.clone().sub(worldPos);
+      toCam.y = 0; // lock to horizontal plane
+      if (toCam.lengthSq() > 0.0001) {
+        ig.rotation.y = Math.atan2(toCam.x, toCam.z);
+      }
       ig.position.y = SCENE_PARAMS.portIconY + Math.sin(t * 1.1 + i * 1.3) * 0.05;
     });
   }
@@ -6772,8 +6907,9 @@ function animate() {
   updateDiceAnim(delta);
   updateVoicePlayers();
   _lobbyUpdateVoiceRings();
+
   composer.render();
-  if (_is2D && typeof _drawRobberOverlay === "function") _drawRobberOverlay();
+  if (_is2D) _draw2DBoard();
 }
 // ─── 2D Mode: top-down camera + robber overlay ────────────────────────────────
 
@@ -6788,28 +6924,414 @@ function _resizeOverlay() {
   _overlay2d.height = renderer.domElement.clientHeight || window.innerHeight;
 }
 
-function _drawRobberOverlay() {
+const _2D_TILE_COLORS = {
+  forest:'#2d6e2a', pasture:'#78b84a', fields:'#d4a017',
+  hills:'#b5451b', mountains:'#78909c', desert:'#c9b98a', water:'#1a6fa8'
+};
+const _2D_TILE_BORDER = {
+  forest:'#1a4a18', pasture:'#4a8a20', fields:'#9a7010',
+  hills:'#7a2a0a', mountains:'#4a6070', desert:'#9a8a60', water:'#0a4a78'
+};
+const _2D_PORT_COLORS = {
+  wood:'#6b9b37', sheep:'#a8d570', wheat:'#f5c842', brick:'#c0522a', ore:'#8899aa', any:'#e8dcc8'
+};
+const _2D_PORT_ICONS = { wood:'🪵', sheep:'🐑', wheat:'🌾', brick:'🧱', ore:'🪨' };
+const _2D_NUMBER_HOT = new Set([6,8]);
+
+// Pre-built 64×64 pattern source canvases (created once, scaled per zoom via ctx.scale)
+const _2D_PAT_SRC = (() => {
+  const S = 64;
+  function make(type) {
+    const pc = document.createElement('canvas'); pc.width = S; pc.height = S;
+    const px = pc.getContext('2d');
+    const base = _2D_TILE_COLORS[type] || '#888';
+    px.fillStyle = base; px.fillRect(0,0,S,S);
+    if (type === 'forest') {
+      const positions = [[14,16],[42,36],[28,8],[8,44],[50,50],[36,56],[20,30],[54,18]];
+      positions.forEach(([x,y]) => {
+        px.fillStyle='rgba(0,80,0,0.30)'; px.beginPath(); px.arc(x,y,9,0,Math.PI*2); px.fill();
+        px.fillStyle='rgba(0,50,0,0.20)'; px.beginPath(); px.arc(x,y,5,0,Math.PI*2); px.fill();
+      });
+    } else if (type === 'pasture') {
+      px.strokeStyle='rgba(120,200,50,0.45)'; px.lineWidth=2;
+      [[10,52],[22,42],[36,56],[50,42],[60,54],[6,28],[18,20],[34,30],[48,22],[60,30]].forEach(([x,y])=>{
+        px.beginPath(); px.moveTo(x,y); px.lineTo(x+3,y-12); px.lineTo(x+6,y); px.stroke();
+      });
+    } else if (type === 'fields') {
+      px.strokeStyle='rgba(140,90,0,0.28)'; px.lineWidth=1.5;
+      for(let y=5;y<S;y+=10){ px.beginPath(); px.moveTo(0,y); px.lineTo(S,y); px.stroke(); }
+      px.strokeStyle='rgba(180,130,20,0.18)'; px.lineWidth=1;
+      for(let x=8;x<S;x+=16){ px.beginPath(); px.moveTo(x,0); px.lineTo(x,S); px.stroke(); }
+    } else if (type === 'hills') {
+      px.fillStyle='rgba(0,0,0,0.14)';
+      [[0,0,32,11],[32,11,32,11],[0,22,32,11],[32,33,32,11],[0,44,32,11],[32,55,32,11]].forEach(([x,y,w,h])=>{
+        px.fillRect(x+1,y+1,w-2,h-2);
+      });
+      px.strokeStyle='rgba(80,20,0,0.20)'; px.lineWidth=1;
+      for(let r=0;r<S;r+=11){
+        const off=r%22===0?0:32;
+        px.beginPath(); px.moveTo(0,r); px.lineTo(S,r); px.stroke();
+        px.beginPath(); px.moveTo(off,r); px.lineTo(off,r+11); px.stroke();
+        px.beginPath(); px.moveTo(off+32,r); px.lineTo(off+32,r+11); px.stroke();
+      }
+    } else if (type === 'mountains') {
+      px.strokeStyle='rgba(40,60,80,0.30)'; px.lineWidth=2;
+      [[4,58,20,26],[20,26,36,48],[36,48,52,20],[52,20,62,40],[8,44,26,54]].forEach(([x1,y1,x2,y2])=>{
+        px.beginPath(); px.moveTo(x1,y1); px.lineTo(x2,y2); px.stroke();
+      });
+    } else if (type === 'desert') {
+      px.strokeStyle='rgba(150,110,40,0.22)'; px.lineWidth=1.5;
+      for(let y=8;y<S;y+=14){
+        px.beginPath();
+        for(let x=0;x<=S;x+=4) { const yy=y+Math.sin(x*0.25)*3; x===0?px.moveTo(x,yy):px.lineTo(x,yy); }
+        px.stroke();
+      }
+    }
+    return pc;
+  }
+  const types = ['forest','pasture','fields','hills','mountains','desert'];
+  const out = {};
+  types.forEach(t => { out[t] = make(t); });
+  return out;
+})();
+
+function _w2c(wx, wz) {
+  const v = new THREE.Vector3(wx, 0, wz).project(camera);
+  return [(v.x*0.5+0.5)*_overlay2d.width, (v.y*-0.5+0.5)*_overlay2d.height];
+}
+
+function _hexPts(hex) {
+  const pts = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI/3)*i;
+    pts.push(_w2c(hex.x + Math.cos(a)*HEX_R, hex.z + Math.sin(a)*HEX_R));
+  }
+  return pts;
+}
+
+let _2dLastDraw = 0;
+function _draw2DBoard() {
+  const now = performance.now();
+  if (now - _2dLastDraw < 33) return; // cap at ~30fps
+  _2dLastDraw = now;
   _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
   if (!_is2D || !gameState?.board) return;
+  // (no early return for diceAnim — tiles stay visible; dice hole punched below)
+  const W = _overlay2d.width, H = _overlay2d.height;
+  const ctx = _overlayCtx;
+
+  // Hex pixel radius — recomputed each frame so it tracks zoom
+  const anyHex = gameState.board.hexes.find(h=>h.type!=='water');
+  let hexPxR = H * 0.06;
+  if (anyHex) {
+    const [cx] = _w2c(anyHex.x, anyHex.z);
+    const [ex] = _w2c(anyHex.x + HEX_R, anyHex.z);
+    hexPxR = Math.abs(ex - cx);
+  }
+
+  // Helper: draw the hex path (does NOT call beginPath)
+  function hexPath(pts) {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i=1;i<6;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+  }
+
+  // Draw water/port hexes first, then land hexes on top
+  const sorted = [...gameState.board.hexes].sort((a,b) => (a.type==='water'?-1:1));
+
+  ctx.globalAlpha = 0.50;
+  sorted.forEach(hex => {
+    const pts = _hexPts(hex);
+
+    // Flat color fill — no texture
+    hexPath(pts);
+    ctx.fillStyle = _2D_TILE_COLORS[hex.type] || '#888';
+    ctx.fill();
+
+    if (hex.type !== 'water') {
+      // Subtle bevel for slight depth
+      ctx.save();
+      hexPath(pts); ctx.clip();
+      const bw = hexPxR * 0.18;
+      ctx.lineWidth = bw;
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.beginPath();
+      ctx.moveTo(pts[5][0],pts[5][1]); ctx.lineTo(pts[0][0],pts[0][1]);
+      ctx.lineTo(pts[1][0],pts[1][1]); ctx.lineTo(pts[2][0],pts[2][1]);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+      ctx.beginPath();
+      ctx.moveTo(pts[2][0],pts[2][1]); ctx.lineTo(pts[3][0],pts[3][1]);
+      ctx.lineTo(pts[4][0],pts[4][1]); ctx.lineTo(pts[5][0],pts[5][1]);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Border
+    hexPath(pts);
+    ctx.strokeStyle = _2D_TILE_BORDER[hex.type] || '#555';
+    ctx.lineWidth = Math.max(1, hexPxR * 0.06);
+    ctx.stroke();
+  });
+  ctx.globalAlpha = 1.0;
+
+  // Number tokens
+  gameState.board.hexes.forEach(hex => {
+    if (!hex.number) return;
+    const [cx,cy] = _w2c(hex.x, hex.z);
+    const hot = _2D_NUMBER_HOT.has(hex.number);
+    const r = hexPxR * 0.30;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.fillStyle = hot ? '#c0392b' : '#f5e6c8'; ctx.fill();
+    ctx.strokeStyle = '#7a5a30'; ctx.lineWidth = Math.max(1, r*0.1); ctx.stroke();
+    ctx.fillStyle = hot ? '#fff' : '#2c1a00';
+    ctx.font = `bold ${Math.round(r*1.1)}px sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(hex.number, cx, cy);
+  });
+
+  // Colonist-style ports
+  if (gameState.board.ports) {
+    const bCx = W/2, bCy = H/2; // canvas center (approximates board center)
+    gameState.board.ports.forEach(port => {
+      const v1 = gameState.board.vertices[port.vertices[0]];
+      const v2 = gameState.board.vertices[port.vertices[1]];
+      if (!v1||!v2) return;
+      const [x1,y1] = _w2c(v1.x, v1.z);
+      const [x2,y2] = _w2c(v2.x, v2.z);
+      const mx=(x1+x2)/2, my=(y1+y2)/2;
+      // Outward from board center
+      const od = Math.hypot(mx-bCx, my-bCy)||1;
+      const nx=(mx-bCx)/od, ny=(my-bCy)/od;
+      const pier = hexPxR*0.7;
+      const dx = mx+nx*pier, dy = my+ny*pier; // dock badge center
+
+      // Pier lines to each vertex
+      ctx.strokeStyle = '#6b4c1a'; ctx.lineWidth = Math.max(2, hexPxR*0.06); ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(dx,dy); ctx.lineTo(x1,y1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(dx,dy); ctx.lineTo(x2,y2); ctx.stroke();
+
+      // Vertex dots (shows which spots have port access)
+      [x1,y1,x2,y2].forEach((_, i, a) => {
+        if (i%2!==0) return;
+        const [vx,vy]=[a[i],a[i+1]];
+        ctx.beginPath(); ctx.arc(vx,vy, hexPxR*0.09,0,Math.PI*2);
+        ctx.fillStyle='#6b4c1a'; ctx.fill();
+      });
+
+      // Badge background (no stroke on outer circle)
+      const br = hexPxR*0.32;
+      ctx.beginPath(); ctx.arc(dx,dy,br,0,Math.PI*2);
+      ctx.fillStyle='#2a1a00'; ctx.fill();
+
+      // Badge inner color
+      ctx.beginPath(); ctx.arc(dx,dy,br*0.80,0,Math.PI*2);
+      ctx.fillStyle=_2D_PORT_COLORS[port.type]||'#ddd'; ctx.fill();
+
+      // Ratio text + icon
+      const ratio = port.type==='any'?'3:1':'2:1';
+      ctx.save();
+      // 3:1 (any port) gets black text on light bg; 2:1 resource ports get white with shadow
+      const isAny = port.type === 'any';
+      ctx.fillStyle = isAny ? '#000' : '#fff';
+      ctx.shadowColor = isAny ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.95)';
+      ctx.shadowBlur = Math.max(3, br * 0.22);
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      if (isAny) {
+        ctx.font=`bold ${Math.round(br*0.72)}px sans-serif`;
+        ctx.fillText(ratio, dx, dy);
+      } else {
+        ctx.font=`bold ${Math.round(br*0.72)}px sans-serif`;
+        ctx.fillText(ratio, dx, dy - br*0.18);
+        const icon = _2D_PORT_ICONS[port.type]||'';
+        ctx.font=`${Math.round(br*0.52)}px sans-serif`;
+        ctx.fillText(icon, dx, dy + br*0.46);
+      }
+      ctx.restore();
+    });
+  }
+
+  // Player color lookup
+  const _pidColor = {};
+  (gameState.players || []).forEach(p => { _pidColor[p.id] = p.color || '#e74c3c'; });
+
+  // Roads
+  if (gameState.board.edges) {
+    gameState.board.edges.forEach(e => {
+      if (!e.road) return;
+      const v1 = gameState.board.vertices[e.vertices[0]];
+      const v2 = gameState.board.vertices[e.vertices[1]];
+      if (!v1||!v2) return;
+      const [x1,y1] = _w2c(v1.x, v1.z);
+      const [x2,y2] = _w2c(v2.x, v2.z);
+      const col = _pidColor[e.road.playerId] || '#e74c3c';
+      const lw = Math.max(2, hexPxR*0.13);
+      // Outline
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+      ctx.strokeStyle='rgba(0,0,0,0.55)'; ctx.lineWidth=lw+Math.max(2,hexPxR*0.07);
+      ctx.lineCap='round'; ctx.stroke();
+      // Fill
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+      ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.stroke();
+    });
+  }
+
+  // Simplified 2D building shapes
+  if (gameState.board.vertices) {
+    gameState.board.vertices.forEach(v => {
+      if (!v.building) return;
+      const [px, py] = _w2c(v.x, v.z);
+      const col = _pidColor[v.building.playerId] || '#e74c3c';
+      const isCity = v.building.type === 'city';
+      const s = hexPxR * (isCity ? 0.30 : 0.22);
+
+      ctx.save();
+      // Drop shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur = s * 0.6;
+      ctx.shadowOffsetY = s * 0.2;
+
+      if (isCity) {
+        // City: larger filled square with notch (castle silhouette)
+        ctx.fillStyle = col;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = Math.max(1.5, s * 0.18);
+        // Main body
+        ctx.beginPath();
+        ctx.rect(px - s, py - s * 0.7, s * 2, s * 1.4);
+        ctx.fill(); ctx.stroke();
+        // Two battlements on top
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.rect(px - s, py - s * 1.2, s * 0.7, s * 0.55); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.rect(px + s * 0.3, py - s * 1.2, s * 0.7, s * 0.55); ctx.fill(); ctx.stroke();
+      } else {
+        // Settlement: pentagon (house shape)
+        ctx.fillStyle = col;
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = Math.max(1.5, s * 0.18);
+        ctx.beginPath();
+        ctx.moveTo(px,       py - s * 1.1);  // roof peak
+        ctx.lineTo(px + s,   py - s * 0.2);  // roof right
+        ctx.lineTo(px + s,   py + s * 0.8);  // base right
+        ctx.lineTo(px - s,   py + s * 0.8);  // base left
+        ctx.lineTo(px - s,   py - s * 0.2);  // roof left
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+      }
+      ctx.restore();
+    });
+  }
+
+  // Hex markers — red robber-placement overlays
+  if (typeof markerGroup !== 'undefined') {
+    markerGroup.children.forEach(m => {
+      if (!m.visible) return;
+      if (m.userData.type !== 'hexMarker') return;
+      const h = gameState.board.hexes[m.userData.hexId];
+      if (!h) return;
+      const pts = _hexPts(h);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i=1;i<6;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,40,0,0.30)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,80,0,0.70)';
+      ctx.lineWidth = Math.max(2, hexPxR * 0.08);
+      ctx.stroke();
+    });
+  }
+
+  // Vertex/edge markers (drawn on canvas so they're above the 2D tiles)
+  if (typeof markerGroup !== 'undefined') {
+    markerGroup.children.forEach(m => {
+      if (!m.visible) return;
+      if (m.userData.vertexId !== undefined) {
+        const v = gameState.board.vertices[m.userData.vertexId];
+        if (!v) return;
+        const [px,py] = _w2c(v.x, v.z);
+        const r = hexPxR * 0.2;
+        ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
+        ctx.fillStyle = 'rgba(255,215,0,0.92)'; ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5,r*0.2); ctx.stroke();
+      } else if (m.userData.edgeId !== undefined) {
+        const e = gameState.board.edges[m.userData.edgeId];
+        if (!e) return;
+        const v1 = gameState.board.vertices[e.vertices[0]];
+        const v2 = gameState.board.vertices[e.vertices[1]];
+        if (!v1||!v2) return;
+        const [x1,y1] = _w2c(v1.x, v1.z);
+        const [x2,y2] = _w2c(v2.x, v2.z);
+        const r = hexPxR * 0.16;
+        ctx.beginPath(); ctx.arc((x1+x2)/2,(y1+y2)/2,r,0,Math.PI*2);
+        ctx.fillStyle = 'rgba(255,215,0,0.92)'; ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5,r*0.2); ctx.stroke();
+      }
+    });
+  }
+
+  // Robber
   const rHex = gameState.board.hexes[gameState.robberHex];
-  if (!rHex) return;
+  if (rHex) {
+    const [px,py] = _w2c(rHex.x, rHex.z);
+    const size = hexPxR * 1.1;
+    if (_robberImg2D.complete && _robberImg2D.naturalWidth > 0) {
+      ctx.drawImage(_robberImg2D, px - size/2, py - size*0.85, size, size*1.2);
+    } else {
+      ctx.fillStyle = '#1a1a1a'; ctx.beginPath();
+      ctx.arc(px, py-size*0.15, size*0.4, 0, Math.PI*2); ctx.fill();
+    }
+  }
 
-  // Project world pos → NDC → canvas pixels
-  const v = new THREE.Vector3(rHex.x, HEX_H / 2 + 0.05, rHex.z).project(camera);
-  const px = (v.x *  0.5 + 0.5) * _overlay2d.width;
-  const py = (v.y * -0.5 + 0.5) * _overlay2d.height;
-
-  const size = _overlay2d.height * 0.075;
-  if (_robberImg2D.complete && _robberImg2D.naturalWidth > 0) {
-    _overlayCtx.drawImage(_robberImg2D, px - size / 2, py - size * 0.9, size, size * 1.2);
+  // Punch a transparent hole where the 3D dice are so they show through the canvas
+  if (typeof diceAnim !== 'undefined' && diceGroup.visible) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    [die1, die2].forEach(die => {
+      const sp = die.position.clone().project(camera);
+      const sx = ( sp.x * 0.5 + 0.5) * W;
+      const sy = (-sp.y * 0.5 + 0.5) * H;
+      const r = hexPxR * 1.2;
+      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,1)'; ctx.fill();
+    });
+    ctx.restore();
   }
 }
 
 // Objects to hide when entering 2D mode
 function _set2DVisibility(visible) {
-  // Hide 3D GLB tile models, sheep, camel (all have userData.hexId)
+  // Keep 3D tiles visible in 2D (canvas overlay sits on top at 80% opacity)
+  // Only de-reflectivize tokens in 2D, restore in 3D
   boardGroup.children.forEach(child => {
-    if (child.userData.hexId !== undefined) child.visible = visible;
+    // De-reflectivize tokens in 2D, restore in 3D
+    if (child.userData.tokenHexId !== undefined) {
+      child.traverse(m => {
+        if (m.material) {
+          if (!visible) {
+            // entering 2D: store original values, flatten material
+            if (m.material.envMapIntensity !== undefined) {
+              m.userData._origEnv = m.material.envMapIntensity;
+              m.userData._origMet = m.material.metalness;
+              m.userData._origEmi = m.material.emissiveIntensity;
+              m.material.envMapIntensity = 0;
+              m.material.metalness = 0.05;
+              m.material.emissiveIntensity = 0;
+              m.material.needsUpdate = true;
+            }
+          } else {
+            // exiting 2D: restore
+            if (m.userData._origEnv !== undefined) {
+              m.material.envMapIntensity = m.userData._origEnv;
+              m.material.metalness = m.userData._origMet;
+              m.material.emissiveIntensity = m.userData._origEmi;
+              m.material.needsUpdate = true;
+            }
+          }
+        }
+      });
+    }
   });
   // Hide lava meshes
   (boardGroup.userData.lavaMeshes || []).forEach(m => { m.visible = visible; });
@@ -6818,6 +7340,9 @@ function _set2DVisibility(visible) {
   if (clouds) clouds.visible = visible;
   // Hide 3D robber (replaced by robber.png overlay in 2D)
   robberGroup.visible = visible;
+  // Hide 3D port groups in 2D (drawn as colonist-style 2D instead)
+  (boardGroup.userData.portGroups ?? []).forEach(pg => { pg.visible = visible; });
+  (boardGroup.userData.portRoads  ?? []).forEach(r  => { r.visible  = visible; });
 }
 
 // ── 2D / 3D toggle ────────────────────────────────────────────────────────────
@@ -6837,16 +7362,22 @@ function toggle2D() {
     _3dCamPos    = camera.position.clone();
     _3dCamTarget = controls.target.clone();
 
+    // Derive 2D height from current 3D distance so zoom level stays consistent
+    const dist3d = _3dCamPos.distanceTo(_3dCamTarget);
+    const height2d = Math.max(8, Math.min(35, dist3d * 0.72));
+
     camera.up.set(0, 0, -1);
     controls.enableRotate = false;
     controls.maxPolarAngle = 0.001;
     controls.minDistance = 5;
     controls.maxDistance = 35;
-    camera.position.set(controls.target.x, 22, controls.target.z);
+    camera.position.set(controls.target.x, height2d, controls.target.z);
     controls.target.set(controls.target.x, 0, controls.target.z);
     controls.update();
 
     _set2DVisibility(false);
+    _outlinePasses.forEach(o => { o.pass.enabled = false; });
+    _portOutlinePass.enabled = false;
     _resizeOverlay();
     _overlay2d.style.display = 'block';
 
@@ -6859,13 +7390,16 @@ function toggle2D() {
     controls.minDistance   = _3dMinDist;
     controls.maxDistance   = _3dMaxDist;
 
-    if (_3dCamPos) {
-      camera.position.copy(_3dCamPos);
-      controls.target.copy(_3dCamTarget);
+    // Restore 3D angle/zoom but applied to wherever the user panned in 2D
+    if (_3dCamPos && _3dCamTarget) {
+      const offset = _3dCamPos.clone().sub(_3dCamTarget);
+      camera.position.copy(controls.target).add(offset);
     }
     controls.update();
 
     _set2DVisibility(true);
+    _outlinePasses.forEach(o => { o.pass.enabled = true; });
+    _portOutlinePass.enabled = true;
     _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
     _overlay2d.style.display = 'none';
 
