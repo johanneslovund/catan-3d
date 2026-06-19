@@ -29,7 +29,7 @@ let passiveVertexMarkers = false; // vertex markers shown passively when settlem
 const WATER_PARAMS = {
   waveSpeed: 1.30, waveAmp: 1.30, waveScale: 3.00, foamStr: 0.75, opacity: 0.80,
 };
-const BOB_PARAMS = { enabled: true, amp: 0.04, speed: 0.70 };
+const BOB_PARAMS = { enabled: true, amp: 0.02, speed: 0.70 };
 const LIGHT_PARAMS = {
   timeOfDay: 0.76, sunIntensity: 2.60, ambIntensity: 0.80,
   fillIntensity: 0.50, exposure: 1.00, fogDensity: 0.018, bloomStr: 0.30, bloomRadius: 0.0,
@@ -42,9 +42,9 @@ const CLOUD_PARAMS = {
   height:    -0.45,
   spread:    -0.20,
   scale:      0.50,
-  opacity:    0.02,
+  opacity:    0.10,
   speed:      0.20,
-  amount:     2.40,
+  amount:     1.40,
   brightness: 0.66,
 };
 
@@ -820,7 +820,7 @@ const SCENE_PARAMS = {
   castleSize:      0.83,
   roadY:          -0.63,
   tokenMetalness: 0.88,
-  vertexMarkerY:  -0.76,
+  vertexMarkerY:  -0.62,
   edgeMarkerY:    -0.64,
   hexMarkerY:      0.04,
   buildingColorTint: 1.0,
@@ -1240,7 +1240,7 @@ function renderBoard(state) {
         gl_FragColor = vec4(col, a);
       }`,
     transparent: true,
-    depthWrite: false,
+    depthWrite: true,
     side: THREE.DoubleSide,
   });
   const islandMatBot = new THREE.ShaderMaterial({
@@ -1272,7 +1272,7 @@ function renderBoard(state) {
         gl_FragColor = vec4(col, a);
       }`,
     transparent: true,
-    depthWrite: false,
+    depthWrite: true,
     side: THREE.DoubleSide,
   });
   const islandTop = new THREE.Mesh(islandGeoTop, islandMatTop);
@@ -1558,7 +1558,7 @@ function renderBoard(state) {
         const cy  = baseY + CLOUD_PARAMS.height * (0.8 + rng(seed + ci + 2) * 0.4);
         const sc  = CLOUD_PARAMS.scale * (0.7 + rng(seed + ci + 3) * 0.6);
         const cg  = new THREE.Group();
-        cg.userData = { cloudBase: cy, cloudSeed: seed + ci * 31, cloudIdx: ci };
+        cg.userData = { cloudBase: cy, cloudSeed: seed + ci * 31, cloudIdx: ci, hexId: hex.id, cloudBaseOffX: cx - hex.x, cloudBaseOffZ: cz - hex.z };
         puffOffsets.forEach(([bx,by,bz,bs]) => {
           const m = new THREE.Mesh(new THREE.SphereGeometry(0.9*bs, 7, 5), cloudMat.clone());
           m.position.set(bx, by, bz); m.scale.set(1.6, 0.9, 1.0); cg.add(m);
@@ -5188,13 +5188,18 @@ function animate() {
     });
   }
 
-  // Mountain hex clouds — gentle bob
+  // Mountain hex clouds — gentle bob, sticky to tile Y
   if (boardGroup.userData.mountainClouds) {
     boardGroup.userData.mountainClouds.forEach(cg => {
       const s = cg.userData.cloudSeed ?? 0;
-      cg.position.y = cg.userData.cloudBase + Math.sin(t * 0.4 * CLOUD_PARAMS.speed + s) * 0.06;
+      // Find the tile's current Y offset via the hex cylinder child
+      let tileYOff = 0;
+      if (BOB_PARAMS.enabled && !tileIntro.active && cg.userData.hexId !== undefined) {
+        const phase = tileBobPhases.get(cg.userData.hexId) ?? 0;
+        tileYOff = Math.sin(t * BOB_PARAMS.speed + phase) * BOB_PARAMS.amp;
+      }
+      cg.position.y = cg.userData.cloudBase + tileYOff + Math.sin(t * 0.4 * CLOUD_PARAMS.speed + s) * 0.06;
       cg.position.x += Math.sin(t * 0.12 * CLOUD_PARAMS.speed + s * 0.7) * 0.0008;
-      // sync opacity live
       cg.children.forEach(m => {
         if (m.material) {
           m.material.opacity = CLOUD_PARAMS.opacity;
