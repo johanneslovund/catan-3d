@@ -309,8 +309,9 @@ const ROBBER_PARAMS = {
 
 // ─── Three.js setup ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const _isMobile = window.innerWidth <= 768;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_isMobile, powerPreference: 'high-performance' });
+renderer.setPixelRatio(_isMobile ? Math.min(window.devicePixelRatio, 1) : Math.min(window.devicePixelRatio, 2));
 const MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -383,6 +384,7 @@ const _outlinePasses = _PIECE_COLORS.map(col => {
   pass.visibleEdgeColor.set(col);
   pass.hiddenEdgeColor.set('#000000');
   pass.selectedObjects = [];
+  if (_isMobile) pass.enabled = false; // outlines too expensive on mobile
   composer.addPass(pass);
   return { pass, color: col };
 });
@@ -406,6 +408,7 @@ _portOutlinePass.pulsePeriod   = 0;
 _portOutlinePass.visibleEdgeColor.set('#ffffff');
 _portOutlinePass.hiddenEdgeColor.set('#ffffff');
 _portOutlinePass.selectedObjects = [];
+if (_isMobile) _portOutlinePass.enabled = false;
 composer.addPass(_portOutlinePass);
 // Keep _portOutlinePasses as a shim so existing callers work unchanged
 const _portOutlinePasses = [{ pass: _portOutlinePass, type: '_all' }];
@@ -2225,12 +2228,7 @@ function renderBoard(state) {
     }
   }
 
-  // Collect all 3D port icon meshes into the single port outline pass
-  const _portIconMeshes = [];
-  (boardGroup.userData.portIcons ?? []).forEach(ig => {
-    ig.traverse(m => { if (m.isMesh) _portIconMeshes.push(m); });
-  });
-  _portOutlinePass.selectedObjects = _portIconMeshes;
+  // Keep selectedObjects empty — portRise completion will populate it after icons surface
 }
 
 // ─── Tile intro fly-in animation ──────────────────────────────────────────────
@@ -2869,7 +2867,7 @@ function showVertexMarkers(ids, append = false) {
   ids.forEach(vid => {
     const v = gameState.board.vertices[vid];
     const maxTop = HEX_H / 2;
-    const geo = new THREE.SphereGeometry(0.14, 12, 12);
+    const geo = new THREE.SphereGeometry(0.09, 8, 8);
     const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18, transparent: hideDuringIntro, opacity: hideDuringIntro ? 0 : 1 });
     const m = new THREE.Mesh(geo, mat);
     m.userData = { type:'vertexMarker', vertexId:vid, markerType:'vertex', baseY: maxTop + 0.17 };
@@ -5915,6 +5913,11 @@ function wanderAnimal(s, delta, baseYOffset, bobAmp) {
   s.mesh.position.y = s.surfaceY + baseYOffset + Math.abs(Math.sin(s.bobT)) * bobAmp;
 }
 
+// Pre-allocated vectors to avoid GC pressure in the animate loop
+const _animWorldPos = new THREE.Vector3();
+const _animToCam = new THREE.Vector3();
+const _animSeenHids = new Set();
+
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
@@ -6383,17 +6386,17 @@ function animate() {
 
   // Tile bobbing — independent per-hex sine wave (skip during intro sequences)
   if (BOB_PARAMS.enabled && !tileIntro.active && !tokenIntro.active && !robberDropIntro.active) {
-    const seenHids = new Set();
+    _animSeenHids.clear();
     boardGroup.children.forEach(child => {
       const hid = child.userData.hexId ?? child.userData.tokenHexId;
       if (hid === undefined || child.userData.baseY === undefined) return;
-      if (child.userData.isCamel) return; // camels have their own Y animation in wanderAnimal
-      if (child.userData.isLava) return;  // lava meshes handle their own bobbing
+      if (child.userData.isCamel) return;
+      if (child.userData.isLava) return;
       const phase = tileBobPhases.get(hid) ?? 0;
       child.position.y = child.userData.baseY + Math.sin(t * BOB_PARAMS.speed + phase) * BOB_PARAMS.amp;
-      // Spawn water ring when tile kisses the water surface (downstroke near minimum)
-      if (!seenHids.has(hid) && child.userData.hexId !== undefined) {
-        seenHids.add(hid);
+      // Spawn water ring (desktop only — skip on mobile for perf)
+      if (!_isMobile && !_animSeenHids.has(hid) && child.userData.hexId !== undefined) {
+        _animSeenHids.add(hid);
         const sinVal = Math.sin(t * BOB_PARAMS.speed + phase);
         const spawnRate = delta * 0.55 * WATER_SPRITE_PARAMS.amount * Math.max(0, -sinVal);
         if (Math.random() < spawnRate) {
@@ -6660,19 +6663,14 @@ function animate() {
     });
   }
 
-  // Port icons — slow Y rotation + gentle float
+  // Port icons — billboard toward camera + gentle float
   if (boardGroup.userData.portIcons) {
-    // Face icons toward the camera, locked to a horizontal plane (no tilt).
-    // Use the Low Angle preset direction as the reference up-view angle.
-    const _lowAngleDir = new THREE.Vector3(0, 5, 12).normalize();
     boardGroup.userData.portIcons.forEach((ig, i) => {
-      // Billboard: face the camera but only rotate around Y (keep upright)
-      const worldPos = new THREE.Vector3();
-      ig.getWorldPosition(worldPos);
-      const toCam = camera.position.clone().sub(worldPos);
-      toCam.y = 0; // lock to horizontal plane
-      if (toCam.lengthSq() > 0.0001) {
-        ig.rotation.y = Math.atan2(toCam.x, toCam.z);
+      ig.getWorldPosition(_animWorldPos);
+      _animToCam.copy(camera.position).sub(_animWorldPos);
+      _animToCam.y = 0;
+      if (_animToCam.lengthSq() > 0.0001) {
+        ig.rotation.y = Math.atan2(_animToCam.x, _animToCam.z);
       }
       ig.position.y = SCENE_PARAMS.portIconY + Math.sin(t * 1.1 + i * 1.3) * 0.05;
     });
@@ -7275,9 +7273,13 @@ function _draw2DBoard() {
   const rHex = gameState.board.hexes[gameState.robberHex];
   if (rHex) {
     const [px,py] = _w2c(rHex.x, rHex.z);
-    const size = hexPxR * 1.1;
+    const size = hexPxR * 1.3;
     if (_robberImg2D.complete && _robberImg2D.naturalWidth > 0) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(_robberImg2D, px - size/2, py - size*0.85, size, size*1.2);
+      ctx.restore();
     } else {
       ctx.fillStyle = '#1a1a1a'; ctx.beginPath();
       ctx.arc(px, py-size*0.15, size*0.4, 0, Math.PI*2); ctx.fill();
@@ -7363,8 +7365,9 @@ function toggle2D() {
     _3dCamTarget = controls.target.clone();
 
     // Derive 2D height from current 3D distance so zoom level stays consistent
+    // On mobile use a fixed height that fills the screen nicely
     const dist3d = _3dCamPos.distanceTo(_3dCamTarget);
-    const height2d = Math.max(8, Math.min(35, dist3d * 0.72));
+    const height2d = _isMobile ? 13.5 : Math.max(8, Math.min(35, dist3d * 0.72));
 
     camera.up.set(0, 0, -1);
     controls.enableRotate = false;
