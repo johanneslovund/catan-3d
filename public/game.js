@@ -105,7 +105,7 @@ scene.background = new THREE.Color(0xa8c8d8);
 scene.fog = new THREE.FogExp2(0xb8c8c0, LIGHT_PARAMS.fogDensity);
 
 const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 80);
-camera.position.set(0, 13, 11);
+camera.position.set(0, 22, 0);
 camera.lookAt(0, 0, 0);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -738,6 +738,10 @@ function cloneModel(name, colorHexVal) {
         const tinted = mats.map(m => {
           const nm = m.clone();
           nm.color.setHex(colorHexVal);
+          // Apply building color tint intensity
+          if (SCENE_PARAMS.buildingColorTint !== undefined && SCENE_PARAMS.buildingColorTint < 1) {
+            nm.color.lerp(new THREE.Color(0x888888), 1 - SCENE_PARAMS.buildingColorTint);
+          }
           nm.roughness = 0.65;
           nm.metalness = 0.05;
           // For near-white players add a white emissive overlay so the tint reads clearly over the texture
@@ -810,6 +814,8 @@ const SCENE_PARAMS = {
   vertexMarkerY:  -0.76,
   edgeMarkerY:    -0.64,
   hexMarkerY:      0.04,
+  buildingColorTint: 1.0,
+  buildingColorSaturation: 1.0,
 };
 
 // Per-tile-type number token Y offset (defaults match dialled-in screenshot values)
@@ -1006,30 +1012,45 @@ function tokenScratchTex() {
 function numberTokenTex(num) {
   const red = num === 6 || num === 8;
   return makeCanvasTexture((ctx, w, h) => {
-    // Gold coin face — radial gradient from bright centre to rich gold edge
-    const bg = ctx.createRadialGradient(w*0.42,h*0.38,w*0.04, w/2,h/2,w*0.48);
-    bg.addColorStop(0,   '#fff8d0');
-    bg.addColorStop(0.45,'#f0c040');
-    bg.addColorStop(1,   '#8a5a00');
+    // Chrome/silver coin face — radial gradient from bright silver centre to darker edge
+    const bg = ctx.createRadialGradient(w*0.38,h*0.35,w*0.04, w/2,h/2,w*0.48);
+    bg.addColorStop(0,   '#ffffff');
+    bg.addColorStop(0.3, '#e8e8e8');
+    bg.addColorStop(0.7, '#b0b8c0');
+    bg.addColorStop(1,   '#606870');
     ctx.fillStyle = bg;
-    ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 5;
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 5;
     ctx.beginPath(); ctx.arc(w/2,h/2,w/2-3,0,Math.PI*2); ctx.fill();
     ctx.shadowBlur = 0;
-    // Raised rim ring
-    ctx.strokeStyle = 'rgba(255,230,100,0.55)';
+    // Raised chrome rim highlight
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(w/2,h/2,w/2-5,0,Math.PI*2); ctx.stroke();
-    ctx.strokeStyle = 'rgba(80,40,0,0.4)';
+    ctx.strokeStyle = 'rgba(80,90,100,0.5)';
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(w/2,h/2,w/2-8,0,Math.PI*2); ctx.stroke();
-    // Number
-    ctx.fillStyle = red ? '#8b0000' : '#3a2000';
+    // Number — gradient fill
     ctx.font = `bold ${~~(w*0.4)}px Arial`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (red) {
+      const ng = ctx.createLinearGradient(w/2,h/2-w*0.22,w/2,h/2+w*0.22);
+      ng.addColorStop(0, '#ff4040');
+      ng.addColorStop(1, '#8b0000');
+      ctx.fillStyle = ng;
+    } else {
+      const ng = ctx.createLinearGradient(w/2,h/2-w*0.22,w/2,h/2+w*0.22);
+      ng.addColorStop(0, '#ffffff');
+      ng.addColorStop(1, '#8090a0');
+      ctx.fillStyle = ng;
+    }
+    // Dark outline for readability
+    ctx.strokeStyle = red ? 'rgba(60,0,0,0.7)' : 'rgba(40,50,60,0.7)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(String(num), w/2, h/2 - 3);
     ctx.fillText(String(num), w/2, h/2 - 3);
     // Probability pips
     const pips = num <= 7 ? num - 1 : 13 - num;
-    ctx.fillStyle = red ? '#8b0000' : '#5a3800';
+    ctx.fillStyle = red ? '#cc2020' : '#909faf';
     for (let i = 0; i < pips; i++) {
       ctx.beginPath();
       ctx.arc(w/2 + (i-(pips-1)/2)*9, h*0.77, 3, 0, Math.PI*2);
@@ -1409,14 +1430,13 @@ function renderBoard(state) {
 
     // Number token disc — sits on top of the tile surface
     if (hex.number) {
-      const discGeo = new THREE.CylinderGeometry(HEX_R*0.27, HEX_R*0.27, 0.04, 20);
+      const discGeo = new THREE.CylinderGeometry(HEX_R*0.27, HEX_R*0.265, 0.09, 28);
       const discMat = new THREE.MeshStandardMaterial({
-        color: 0xc8921a,
+        color: 0xe8e8e8,
         map: numberTokenTex(hex.number),
-        roughnessMap: tokenScratchTex(),
-        roughness: 0.22,
-        metalness: SCENE_PARAMS.tokenMetalness,
-        envMapIntensity: 2.0,
+        roughness: 0.08,
+        metalness: 0.95,
+        envMapIntensity: 3.0,
       });
       discMat.userData = { isTokenDisc: true };
       const disc = new THREE.Mesh(discGeo, discMat);
@@ -1801,8 +1821,8 @@ function renderBuildings(state) {
             const a = mixer.clipAction(clip); a.loop = THREE.LoopRepeat; actions[clip.name] = a;
           });
           robberAnim.mixer = mixer; robberAnim.actions = actions;
-          const idleStart = Object.keys(actions).find(n => !MOVING_CLIPS.includes(n)) ?? Object.keys(actions)[0];
-          if (idleStart) { actions[idleStart].play(); robberAnim.currentAction = actions[idleStart]; }
+          // Default: stay still — no animation until clicked
+          robberAnim.triggered = false;
         }
       } else {
         robberMesh = new THREE.Mesh(
@@ -2175,6 +2195,30 @@ renderer.domElement.addEventListener('mousemove', e => {
   if (hits.length) { hits[0].object.material&&(hits[0].object.material.opacity=1); hits[0].object.scale.setScalar(1.3); }
 });
 
+// Click on robber mesh to trigger a one-shot animation
+renderer.domElement.addEventListener('click', e => {
+  if (!robberAnim.mesh || !robberAnim.mixer || robberAnim.active) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = ((e.clientX-rect.left)/rect.width)*2-1;
+  const my = -((e.clientY-rect.top)/rect.height)*2+1;
+  raycaster.setFromCamera({x:mx,y:my}, camera);
+  const hits = raycaster.intersectObjects(robberGroup.children, true);
+  if (!hits.length) return;
+  const allClips = Object.values(robberAnim.actions);
+  if (!allClips.length) return;
+  const clip = allClips[Math.floor(Math.random() * allClips.length)];
+  if (robberAnim.currentAction) robberAnim.currentAction.stop();
+  clip.reset(); clip.loop = THREE.LoopOnce; clip.clampWhenFinished = true; clip.play();
+  robberAnim.currentAction = clip;
+  robberAnim.triggered = true;
+  robberAnim.mixer.addEventListener('finished', function onFinish() {
+    robberAnim.mixer.removeEventListener('finished', onFinish);
+    clip.stop();
+    robberAnim.currentAction = null;
+    robberAnim.triggered = false;
+  });
+});
+
 // Click on a settlement to show upgrade option
 renderer.domElement.addEventListener('click', e => {
   if (!gameState || buildMode) return;
@@ -2469,6 +2513,15 @@ function updateMobilePlayerCards(state) {
       </div>`;
     el.appendChild(card);
   });
+  // Update compact score strip (shown when collapsed)
+  const strip = document.getElementById('mobileScoreStrip');
+  if (strip) {
+    strip.innerHTML = state.players.map(p => {
+      const tc = colorTextClass(p.color);
+      const active = p.id === state.players[state.currentPlayerIndex]?.id ? ' outline: 2px solid #fff;' : '';
+      return `<span class="mob-score-badge ${tc}" style="background:${p.color};${active}">${p.vp}VP</span>`;
+    }).join('');
+  }
 }
 
 function updateBank(state) {
@@ -3336,6 +3389,9 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
   logOverlay?.addEventListener('click', e => {
     if (e.target === logOverlay) logOverlay.classList.remove('open');
   });
+  document.getElementById('mBtnMic')?.addEventListener('click', () => {
+    if (typeof voiceChat !== 'undefined') voiceChat.toggleMute?.();
+  });
 })();
 
 // Settings panel — password protected, desktop only
@@ -3355,6 +3411,17 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
     if (dbg) dbg.style.display = 'flex';
     document.getElementById('btnGetAllRes')?.addEventListener('click', () => socket.emit('debugGetAllRes'), { once: true });
   }
+
+  // Collapsible category toggle
+  document.querySelectorAll('.settings-section-label.collapsible').forEach(lbl => {
+    lbl.addEventListener('click', () => {
+      const body = lbl.nextElementSibling;
+      if (!body || !body.classList.contains('settings-cat-body')) return;
+      const open = body.style.display !== 'none' && body.style.display !== '';
+      body.style.display = open ? 'none' : '';
+      lbl.classList.toggle('open', !open);
+    });
+  });
 
   btnOpen.addEventListener('click', () => {
     if (panel.classList.contains('open')) {
@@ -3418,6 +3485,11 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         if (type === 'opacity' || type === 'speed' || type === 'brightness') return;
       } else if (param === 'robber') {
         ROBBER_PARAMS[type] = v;
+        if (gameState) renderBuildings(gameState);
+        return;
+      } else if (param === 'building') {
+        if (type === 'colorTint') SCENE_PARAMS.buildingColorTint = v;
+        else if (type === 'colorSaturation') SCENE_PARAMS.buildingColorSaturation = v;
         if (gameState) renderBuildings(gameState);
         return;
       } else if (param === 'bank') {
@@ -4214,14 +4286,18 @@ AUDIO.musicMuted  = false;
   };
 
   function onFirstInteract() {
+    document.removeEventListener('click', onFirstInteract);
+    document.removeEventListener('touchstart', onFirstInteract);
+    document.removeEventListener('keydown', onFirstInteract);
+    // Start music immediately, don't wait for voice over
+    startMusic();
+    // Play voice over in parallel (best effort)
     const vo = new Audio('voice over/Ej hekje leire.mp3');
     vo.volume = voVol();
-    vo.play().catch(() => startMusic());
-    vo.addEventListener('ended', startMusic);
-    document.removeEventListener('click', onFirstInteract);
-    document.removeEventListener('keydown', onFirstInteract);
+    vo.play().catch(() => {});
   }
   document.addEventListener('click', onFirstInteract);
+  document.addEventListener('touchstart', onFirstInteract);
   document.addEventListener('keydown', onFirstInteract);
 
   // Legacy music-row controls (kept in right panel for track title display)
@@ -4779,16 +4855,7 @@ function animate() {
       }
     }
 
-    // Cycle idle animations on a timer
-    if (!robberAnim.active && robberAnim.mixer && idleClips.length > 1) {
-      robberAnim.cycleTimer += delta;
-      if (robberAnim.cycleTimer >= robberAnim.cycleInterval) {
-        robberAnim.cycleTimer = 0;
-        robberAnim.cycleInterval = ROBBER_PARAMS.animCycle + Math.random() * ROBBER_PARAMS.animCycle * 0.5;
-        const next = idleClips[Math.floor(Math.random() * idleClips.length)];
-        playClip(next);
-      }
-    }
+    // Idle cycling disabled — robber stays still until clicked
 
     // When active, cycle moving animations too
     if (robberAnim.active && robberAnim.mixer && movingAvail.length > 1) {

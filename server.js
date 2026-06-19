@@ -1343,6 +1343,17 @@ io.on('connection', socket => {
     if (!accept) {
       trade.responses[socket.id] = { name: responder.name, status: 'reject' };
       broadcastState(info.roomId);
+      const excluded = trade.excludedIds || [];
+      const nonProposers = game.players.filter(p => p.id !== trade.fromId && !excluded.includes(p.id));
+      const allRejected = nonProposers.every(p => trade.responses[p.id]?.status === 'reject');
+      if (allRejected && !trade.allRejectedTimer) {
+        trade.allRejectedTimer = setTimeout(() => {
+          if (game.pendingTrade === trade) {
+            game.pendingTrade = null;
+            broadcastState(info.roomId);
+          }
+        }, 10000);
+      }
       return;
     }
 
@@ -1542,7 +1553,75 @@ io.on('connection', socket => {
     const info = playerInfo.get(socket.id);
     if (!info) return;
     const game = rooms[info.roomId];
-    if (!game || game.status !== 'playing') return;
+    if (!game) return;
+
+    // Handle setup phase timer expiry: bot picks placement
+    if (isSetupPhase(game)) {
+      const player = cp(game);
+      if (player.id !== socket.id) return;
+      if (game.setupPhase === 'settlement') {
+        const candidates = validSetupVertices(game);
+        if (candidates.length) {
+          const best = candidates.reduce((a, b) =>
+            scoreBotVertex(game, a.id) >= scoreBotVertex(game, b.id) ? a : b);
+          best.building = { type: 'settlement', playerId: socket.id };
+          game.setupPhase = 'road';
+          game.lastSettlementPlaced = best.id;
+          if (game.setupRound === 2) {
+            const res = {};
+            best.adjacentHexes.forEach(hid => {
+              const r = RESOURCE_FROM_TILE[game.board.hexes[hid]?.type];
+              if (r) res[r] = (res[r] || 0) + 1;
+            });
+            give(player, res);
+          }
+          updateLongestRoad(game);
+          addLog(game, `${player.name} placed a settlement (auto)`);
+          checkVictory(game);
+          broadcastState(info.roomId);
+          // Auto-place road too
+          const lastV = game.board.vertices[game.lastSettlementPlaced];
+          const freeEdges = lastV.adjacentEdges.map(eid => game.board.edges[eid]).filter(e => !e.road);
+          if (freeEdges.length) {
+            let bestEdge = freeEdges[0], bestScore = -1;
+            freeEdges.forEach(e => {
+              const otherId = e.vertices.find(vid => vid !== game.lastSettlementPlaced);
+              const s = scoreBotVertex(game, otherId);
+              if (s > bestScore) { bestScore = s; bestEdge = e; }
+            });
+            bestEdge.road = { playerId: socket.id };
+            updateLongestRoad(game);
+            addLog(game, `${player.name} built a road (auto)`);
+            advanceSetupTurn(game);
+            checkVictory(game);
+            broadcastState(info.roomId);
+            maybeScheduleBot(info.roomId, 500);
+          }
+        }
+      } else {
+        // setupPhase === 'road'
+        const lastV = game.board.vertices[game.lastSettlementPlaced];
+        const freeEdges = lastV ? lastV.adjacentEdges.map(eid => game.board.edges[eid]).filter(e => !e.road) : [];
+        if (freeEdges.length) {
+          let bestEdge = freeEdges[0], bestScore = -1;
+          freeEdges.forEach(e => {
+            const otherId = e.vertices.find(vid => vid !== game.lastSettlementPlaced);
+            const s = scoreBotVertex(game, otherId);
+            if (s > bestScore) { bestScore = s; bestEdge = e; }
+          });
+          bestEdge.road = { playerId: socket.id };
+          updateLongestRoad(game);
+          addLog(game, `${player.name} built a road (auto)`);
+          advanceSetupTurn(game);
+          checkVictory(game);
+          broadcastState(info.roomId);
+          maybeScheduleBot(info.roomId, 500);
+        }
+      }
+      return;
+    }
+
+    if (game.status !== 'playing') return;
     const player = cp(game);
     if (player.id !== socket.id) return;
     if (!game.diceRolled) {
