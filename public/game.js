@@ -13,6 +13,7 @@ import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 // ─── Socket ────────────────────────────────────────────────────────────────────
+console.log('[TantrumIsland] game.js loaded v' + Date.now());
 const socket = window.io();
 window._gameSocket = socket;
 
