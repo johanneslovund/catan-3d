@@ -3291,7 +3291,17 @@ function fadeOutLobbyScreens(onDone) {
   }, 580);
 }
 
-socket.on('joinedRoom', data => { myId = data.playerId; roomId = data.roomId; });
+socket.on('joinedRoom', data => {
+  myId = data.playerId; roomId = data.roomId;
+  if (_joiningRoom) {
+    _joiningRoom = false;
+    const btnJoin = document.getElementById('btnJoin');
+    if (btnJoin) btnJoin.disabled = false;
+    document.getElementById('lobbyError').textContent = '';
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('waiting').style.display = 'flex';
+  }
+});
 
 let _lobbyPlayerCount = 0;
 socket.on('lobbyUpdate', data => {
@@ -3311,6 +3321,8 @@ socket.on('lobbyUpdate', data => {
   document.getElementById('btnStart').style.display = isHost ? 'block' : 'none';
   document.getElementById('botControls').style.display = isHost ? 'flex' : 'none';
   document.getElementById('waitingHint').style.display = isHost ? 'none' : 'block';
+  const btnLeave = document.getElementById('btnLeaveWaiting');
+  if (btnLeave) btnLeave.style.display = isHost ? 'none' : 'block';
   const settingsEl = document.getElementById('gameSettings');
   if (settingsEl) settingsEl.style.display = isHost ? 'block' : 'none';
   const hasBots = data.players.some(p => p.isBot);
@@ -3609,6 +3621,15 @@ function animateResourceGain(gained) {
 socket.on('resourceGain', gained => { animateResourceGain(gained); });
 
 socket.on('gameError', msg => {
+  // If we were in the middle of a join attempt, show error back on the lobby
+  if (_joiningRoom) {
+    _joiningRoom = false;
+    const btnJoin = document.getElementById('btnJoin');
+    if (btnJoin) btnJoin.disabled = false;
+    const errEl = document.getElementById('lobbyError');
+    if (errEl) errEl.textContent = '⚠ ' + msg;
+    return;
+  }
   const waitEl = document.getElementById('waitingHint');
   if (document.getElementById('waiting')?.style.display !== 'none' && waitEl) {
     waitEl.style.color='#f88'; waitEl.textContent='⚠ '+msg; waitEl.style.display='block'; return;
@@ -3652,17 +3673,26 @@ document.getElementById('btnCreate').addEventListener('click', () => {
   document.getElementById('lobby').style.display='none';
   document.getElementById('waiting').style.display='flex';
 });
+let _joiningRoom = false;
 document.getElementById('btnJoin').addEventListener('click', () => {
   const name=document.getElementById('playerName').value.trim();
   const code=document.getElementById('roomCodeInput').value.trim().toUpperCase();
   if (!name) { document.getElementById('lobbyError').textContent='Enter your name first'; return; }
   if (!code) { document.getElementById('lobbyError').textContent='Enter a room code'; return; }
-  document.getElementById('lobbyError').textContent='';
+  document.getElementById('lobbyError').textContent='Joining…';
+  document.getElementById('btnJoin').disabled = true;
+  _joiningRoom = true;
   socket.emit('joinRoom',{roomId:code, name});
-  document.getElementById('lobby').style.display='none';
-  document.getElementById('waiting').style.display='flex';
 });
 document.getElementById('btnStart').addEventListener('click', () => socket.emit('startGame'));
+document.getElementById('btnLeaveWaiting').addEventListener('click', () => {
+  socket.emit('leaveRoom');
+  document.getElementById('waiting').style.display = 'none';
+  document.getElementById('lobby').style.display = 'flex';
+  document.getElementById('waitingHint').style.color = '';
+  document.getElementById('waitingHint').textContent = 'Waiting for host to start…';
+  document.getElementById('btnLeaveWaiting').style.display = 'none';
+});
 
 // Game (btnRoll/btnEndTurn handled dynamically by mainActionBtn)
 document.getElementById('btnSettle').addEventListener('click', () => enterBuildMode('settlement'));

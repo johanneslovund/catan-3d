@@ -1023,6 +1023,19 @@ io.on('connection', socket => {
     joinRoom(socket, roomId, name, false);
   });
 
+  socket.on('leaveRoom', () => {
+    const info = playerInfo.get(socket.id);
+    if (!info) return;
+    const game = rooms[info.roomId];
+    if (game && game.status === 'lobby') {
+      game.players = game.players.filter(p => p.id !== socket.id);
+      socket.leave(info.roomId);
+      playerInfo.delete(socket.id);
+      if (!game.players.length) delete rooms[info.roomId];
+      else broadcastLobby(info.roomId);
+    }
+  });
+
   socket.on('startGame', () => {
     const info = playerInfo.get(socket.id);
     if (!info) return;
