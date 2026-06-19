@@ -1819,10 +1819,10 @@ function startTileIntro(hexes) {
   _waterIntroSound.play().catch(() => {});
 }
 
-function spawnWaterRing(x, z) {
+function spawnWaterRing(x, z, color = 0x90ecff) {
   const geo = new THREE.RingGeometry(0.05, 0.25, 28);
   const mat = new THREE.MeshBasicMaterial({
-    color: 0x90ecff, transparent: true, opacity: 0.65, depthWrite: false, side: THREE.DoubleSide,
+    color, transparent: true, opacity: 0.65, depthWrite: false, side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.rotation.x = -Math.PI / 2;
@@ -2134,15 +2134,10 @@ function showVertexMarkers(ids, append = false) {
     const v = gameState.board.vertices[vid];
     const maxTop = HEX_H / 2;
     const geo = new THREE.SphereGeometry(0.14, 12, 12);
-    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18, transparent: true, opacity: hideDuringIntro ? 0 : 1 });
+    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18, transparent: hideDuringIntro, opacity: hideDuringIntro ? 0 : 1 });
     const m = new THREE.Mesh(geo, mat);
     m.userData = { type:'vertexMarker', vertexId:vid, markerType:'vertex', baseY: maxTop + 0.17 };
     m.position.set(v.x, maxTop + 0.17 + SCENE_PARAMS.vertexMarkerY, v.z);
-    const spriteMat = new THREE.SpriteMaterial({ map: markerGlowTex(), color: 0xffd060, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(0.9, 0.9, 0.9);
-    sprite.userData = { markerGlow: true };
-    m.add(sprite);
     markerGroup.add(m);
   });
 }
@@ -3297,12 +3292,15 @@ socket.on('gameUpdate', state => {
     s.volume = sfxVol(); s.play().catch(() => {});
   }
 
-  // Game start fanfare — first time status leaves lobby/waiting
+  // Game start fanfare + board render — first time status leaves lobby
   const isSetupStatus = st => st === 'setup_forward' || st === 'setup_backward';
   if (!wasNull && prevStatus === 'lobby' && (isSetupStatus(state.status) || state.status === 'playing')) {
     _gameStartSound.currentTime = 0;
     _gameStartSound.volume = sfxVol();
     _gameStartSound.play().catch(() => {});
+    // Re-render board with actual hexes and start the tile intro
+    _introDone = false;
+    renderBoard(state);
   }
 
   // Setup phase: play click sound when it becomes MY turn to place a settlement
@@ -4926,8 +4924,8 @@ function animate() {
           if (coffA) { coffA.x -= nx * impulse; coffA.z -= nz * impulse; }
           if (coffB) { coffB.x += nx * impulse; coffB.z += nz * impulse; }
           // Water splash at collision midpoint (throttled)
-          if (Math.random() < delta * 12) {
-            spawnWaterRing((posA.x + posB.x) * 0.5, (posA.z + posB.z) * 0.5);
+          if (Math.random() < delta * 30) {
+            spawnWaterRing((posA.x + posB.x) * 0.5, (posA.z + posB.z) * 0.5, 0xffffff);
           }
         }
       }
@@ -4964,10 +4962,10 @@ function animate() {
       });
     }
 
-    // Random ambient splashes while tiles are in motion
-    if (rawP < 0.80 && Math.random() < delta * 24) {
+    // Random ambient splashes while tiles are in motion (white during intro)
+    if (rawP < 0.80 && Math.random() < delta * 60) {
       const pos = hexPositions.get(hexIds[Math.floor(Math.random() * hexIds.length)]);
-      if (pos) spawnWaterRing(pos.x, pos.z);
+      if (pos) spawnWaterRing(pos.x, pos.z, 0xffffff);
     }
 
     if (tileIntro.t >= tileIntro.duration) {
@@ -4977,10 +4975,12 @@ function animate() {
           child.position.set(child.userData.baseX, child.userData.baseY, child.userData.baseZ);
         }
       });
-      // Snap vertex markers to full opacity
+      // Snap vertex markers to fully opaque (remove transparent flag so they never pulse)
       if (markerGroup.userData.pendingAppear) {
         markerGroup.userData.pendingAppear = false;
-        markerGroup.children.forEach(m => { if (m.material) m.material.opacity = 1; });
+        markerGroup.children.forEach(m => {
+          if (m.material) { m.material.transparent = false; m.material.opacity = 1; }
+        });
       }
       // Begin port + boat rise from below water
       boardGroup.userData.portRise = { t: 0, duration: 1.8 };
