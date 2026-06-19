@@ -95,10 +95,17 @@ function hexesAdjacent(a, b) {
 }
 
 function numberPlacementValid(hexes) {
-  const redHexes = hexes.filter(h => h.number === 6 || h.number === 8);
-  for (let i = 0; i < redHexes.length; i++) {
-    for (let j = i + 1; j < redHexes.length; j++) {
-      if (hexesAdjacent(redHexes[i], redHexes[j])) return false;
+  const numbered = hexes.filter(h => h.number !== null);
+  for (let i = 0; i < numbered.length; i++) {
+    for (let j = i + 1; j < numbered.length; j++) {
+      if (!hexesAdjacent(numbered[i], numbered[j])) continue;
+      const a = numbered[i].number, b = numbered[j].number;
+      // No two identical numbers adjacent
+      if (a === b) return false;
+      // No 6 adjacent to 8 (or vice versa)
+      if ((a === 6 || a === 8) && (b === 6 || b === 8)) return false;
+      // No 11 adjacent to 12 (or vice versa)
+      if ((a === 11 || a === 12) && (b === 11 || b === 12)) return false;
     }
   }
   return true;
@@ -122,7 +129,7 @@ function generateBoard() {
     let ni = 0;
     baseHexes.forEach(h => { h.number = h.type === 'desert' ? null : nums[ni++]; });
     attempts++;
-  } while (!numberPlacementValid(baseHexes) && attempts < 200);
+  } while (!numberPlacementValid(baseHexes) && attempts < 5000);
 
   const hexes = baseHexes;
 

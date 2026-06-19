@@ -30,7 +30,7 @@ const WATER_PARAMS = {
   waveSpeed: 1.30, waveAmp: 1.30, waveScale: 3.00, foamStr: 0.75, opacity: 0.80,
 };
 const BOB_PARAMS = { enabled: true, amp: 0.02, speed: 0.70 };
-const WATER_SPRITE_PARAMS = { amount: 1.0, size: 0.035, opacity: 0.55 };
+const WATER_SPRITE_PARAMS = { amount: 5.0, size: 0.04, opacity: 1.00 };
 const LIGHT_PARAMS = {
   timeOfDay: 0.76, sunIntensity: 2.60, ambIntensity: 0.80,
   fillIntensity: 0.50, exposure: 1.00, fogDensity: 0.018, bloomStr: 0.30, bloomRadius: 0.0,
@@ -42,8 +42,8 @@ const CLOUD_PARAMS = {
   enabled:    1,
   height:    -0.45,
   spread:    -0.20,
-  scale:      0.50,
-  opacity:    0.10,
+  scale:      0.35,
+  opacity:    0.18,
   speed:      0.20,
   amount:     1.20,
   brightness: 0.66,
@@ -290,6 +290,19 @@ scene.add(boardGroup, buildGroup, robberGroup, markerGroup);
 let _introDone = false;
 let _modelsReady = false;
 let _pendingIntroHexes = null;
+// Page must be fully loaded before the intro can fire
+let _pageReady = document.readyState === 'complete';
+if (!_pageReady) {
+  window.addEventListener('load', () => {
+    _pageReady = true;
+    // If intro was waiting on page load, fire it now (models and font must also be ready)
+    if (_pendingIntroHexes && _modelsReady && _fontReady) {
+      const hexes = _pendingIntroHexes;
+      _pendingIntroHexes = null;
+      startTileIntro(hexes);
+    }
+  }, { once: true });
+}
 const cameraIntro = { active: false, t: 0, duration: 5.0 };
 let _markerGlowTex = null;
 function markerGlowTex() {
@@ -692,10 +705,17 @@ MeshoptDecoder.ready.then(() => {
 
 // Font for 3D port labels and token numbers — loaded once at startup
 let _portFont = null;
+let _fontReady = false;
 new FontLoader().load('https://unpkg.com/three@0.158.0/examples/fonts/helvetiker_bold.typeface.json', font => {
   _portFont = font;
-  // Re-render board if already loaded so port text and 3D tokens appear
+  _fontReady = true;
   if (gameState) renderBoard(gameState);
+  // If intro was waiting on font, fire it now
+  if (_pendingIntroHexes && _modelsReady && _pageReady) {
+    const hexes = _pendingIntroHexes;
+    _pendingIntroHexes = null;
+    startTileIntro(hexes);
+  }
 });
 
 // Drop .glb files in public/models/ with these exact names:
@@ -756,13 +776,14 @@ async function preloadModels() {
   // Re-render board so models that weren't ready on first render (e.g. sheep) now appear
   if (gameState) {
     renderBoard(gameState);
-    renderBuildings(gameState);
-    // Start deferred intro now that models are loaded
-    if (_pendingIntroHexes) {
+    // Start deferred intro before renderBuildings so markers see tileIntro.active = true.
+    // Also gate on _pageReady — if page isn't loaded yet, window.load handler will fire it.
+    if (_pendingIntroHexes && _pageReady && _fontReady) {
       const hexes = _pendingIntroHexes;
       _pendingIntroHexes = null;
       startTileIntro(hexes);
     }
+    renderBuildings(gameState);
   }
 }
 
@@ -849,7 +870,7 @@ const SCENE_PARAMS = {
   settlementY:    -0.60,
   castleY:        -0.14,
   castleSize:      0.83,
-  roadY:          -0.63,
+  roadY:          -0.57,
   tokenMetalness: 0.88,
   vertexMarkerY:  -0.62,
   edgeMarkerY:    -0.64,
@@ -865,11 +886,12 @@ const SCENE_PARAMS = {
 };
 
 const CAMERA_PRESETS = {
-  'Default':   { pos: [0, 13, 11],  target: [0, 0, 0] },
-  'Top-Down':  { pos: [0, 22, 0.1], target: [0, 0, 0] },
-  'Low Angle': { pos: [0, 5, 14],   target: [0, 0, 0] },
-  'Side':      { pos: [14, 8, 0],   target: [0, 0, 0] },
-  'Corner':    { pos: [10, 12, 10], target: [0, 0, 0] },
+  'Default':      { pos: [0, 13, 11],  target: [0, 0, 0] },
+  'Top-Down':     { pos: [0, 16, 0.1], target: [0, 0, 0] },
+  'Low Angle':    { pos: [0, 5, 12],   target: [0, 0, 0] },
+  'Long Angle':   { pos: [0, 8, 19],   target: [0, 0, 0] },
+  'Side':         { pos: [14, 8, 0],   target: [0, 0, 0] },
+  'Corner':       { pos: [10, 12, 10], target: [0, 0, 0] },
 };
 function applyCameraPreset(name) {
   const p = CAMERA_PRESETS[name];
@@ -1072,6 +1094,39 @@ function tokenScratchTex() {
   return _tokenScratchTex;
 }
 
+let _tokenAlbedoTex = null;
+function tokenAlbedoTex() {
+  if (_tokenAlbedoTex) return _tokenAlbedoTex;
+  const sz = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = sz;
+  const ctx = canvas.getContext('2d');
+  // Rich gold base gradient
+  const bg = ctx.createRadialGradient(sz*0.42, sz*0.38, sz*0.04, sz/2, sz/2, sz*0.5);
+  bg.addColorStop(0,   '#ffe97a');
+  bg.addColorStop(0.4, '#d4a020');
+  bg.addColorStop(1,   '#7a4800');
+  ctx.fillStyle = bg;
+  ctx.beginPath(); ctx.arc(sz/2, sz/2, sz/2, 0, Math.PI*2); ctx.fill();
+  // Visible scratches on the gold surface
+  const rng = (n) => Math.random() * n;
+  for (let i = 0; i < 28; i++) {
+    const x0 = rng(sz), y0 = rng(sz);
+    const angle = rng(Math.PI * 0.4) - Math.PI * 0.2;
+    const len = 6 + rng(sz * 0.45);
+    const w = 0.3 + rng(0.6);
+    const bright = Math.random() > 0.45;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0 + Math.cos(angle)*len, y0 + Math.sin(angle)*len);
+    ctx.strokeStyle = bright ? `rgba(255,230,120,${0.25+rng(0.35)})` : `rgba(60,30,0,${0.18+rng(0.22)})`;
+    ctx.lineWidth = w;
+    ctx.stroke();
+  }
+  _tokenAlbedoTex = new THREE.CanvasTexture(canvas);
+  return _tokenAlbedoTex;
+}
+
 function numberTokenTex(num) {
   const red = num === 6 || num === 8;
   return makeCanvasTexture((ctx, w, h) => {
@@ -1092,17 +1147,23 @@ function numberTokenTex(num) {
     ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(w/2,h/2,w/2-8,0,Math.PI*2); ctx.stroke();
     // Number — chrome silver for normal, shiny red metallic for 6/8
-    ctx.font = `bold ${~~(w*0.4)}px Arial`;
+    const twoDigit = num >= 10;
+    const fontSize = twoDigit ? ~~(w*0.30) : ~~(w*0.40);
+    ctx.font = `bold ${fontSize}px Arial`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // Center number+pips block vertically: number sits above mid, pips below
+    const pips = num <= 7 ? num - 1 : 13 - num;
+    const pipRow = h * (pips > 0 ? 0.76 : 0.5);
+    const numY = pips > 0 ? h * (twoDigit ? 0.40 : 0.38) : h * 0.5;
     if (red) {
-      const ng = ctx.createLinearGradient(w/2,h/2-w*0.22,w/2,h/2+w*0.22);
+      const ng = ctx.createLinearGradient(w/2,numY-w*0.22,w/2,numY+w*0.22);
       ng.addColorStop(0, '#ff6060');
       ng.addColorStop(0.5, '#cc0000');
       ng.addColorStop(1, '#7a0000');
       ctx.fillStyle = ng;
       ctx.strokeStyle = 'rgba(40,0,0,0.8)';
     } else {
-      const ng = ctx.createLinearGradient(w/2,h/2-w*0.22,w/2,h/2+w*0.22);
+      const ng = ctx.createLinearGradient(w/2,numY-w*0.22,w/2,numY+w*0.22);
       ng.addColorStop(0, '#ffffff');
       ng.addColorStop(0.4, '#d8e0e8');
       ng.addColorStop(1, '#7090a8');
@@ -1110,14 +1171,13 @@ function numberTokenTex(num) {
       ctx.strokeStyle = 'rgba(30,50,70,0.7)';
     }
     ctx.lineWidth = 3;
-    ctx.strokeText(String(num), w/2, h/2 - 3);
-    ctx.fillText(String(num), w/2, h/2 - 3);
+    ctx.strokeText(String(num), w/2, numY);
+    ctx.fillText(String(num), w/2, numY);
     // Probability pips — chrome or red
-    const pips = num <= 7 ? num - 1 : 13 - num;
     ctx.fillStyle = red ? '#cc2020' : '#a0b8cc';
     for (let i = 0; i < pips; i++) {
       ctx.beginPath();
-      ctx.arc(w/2 + (i-(pips-1)/2)*9, h*0.77, 3, 0, Math.PI*2);
+      ctx.arc(w/2 + (i-(pips-1)/2)*9, pipRow, 3, 0, Math.PI*2);
       ctx.fill();
     }
   }, 128, 128);
@@ -1423,6 +1483,7 @@ function renderBoard(state) {
         sheep.scale.setScalar(sc);
         sheep.position.set(sx, surfaceY + SCENE_PARAMS.sheepY, sz);
         sheep.rotation.y = Math.random() * Math.PI * 2;
+        sheep.userData.hexId = hex.id;
         boardGroup.add(sheep);
         // Pick random wander target within hex
         const ta = Math.random() * Math.PI * 2;
@@ -1462,6 +1523,7 @@ function renderBoard(state) {
         camel.scale.setScalar(sc);
         camel.position.set(cx, surfaceY + SCENE_PARAMS.camelY, cz);
         camel.rotation.y = Math.random() * Math.PI * 2;
+        camel.userData.hexId = hex.id;
         boardGroup.add(camel);
         const ta = Math.random() * Math.PI * 2;
         const tr = (0.1 + Math.random() * 0.5) * HEX_R;
@@ -1487,10 +1549,9 @@ function renderBoard(state) {
       // Gold coin disc
       const discGeo = new THREE.CylinderGeometry(HEX_R*0.27, HEX_R*0.265, 0.09, 28);
       const discMat = new THREE.MeshStandardMaterial({
-        color: 0xd4aa30,
+        color: 0xffffff,
+        map: tokenAlbedoTex(),
         roughnessMap: tokenScratchTex(),
-        normalMap: tokenScratchTex(),
-        normalScale: new THREE.Vector2(0.9, 0.9),
         roughness: SCENE_PARAMS.tokenRoughness ?? 0.18,
         metalness: SCENE_PARAMS.tokenMetalness ?? 0.92,
         envMapIntensity: 2.5,
@@ -1713,7 +1774,10 @@ function renderBoard(state) {
       roadMesh.position.set((dx+vx.x)/2, roadY, (dz+vx.z)/2);
       roadMesh.rotation.y = Math.atan2(-rdz, rdx);
       roadMesh.castShadow = true;
+      roadMesh.userData.portRoadBaseY = roadY;
       boardGroup.add(roadMesh);
+      if (!boardGroup.userData.portRoads) boardGroup.userData.portRoads = [];
+      boardGroup.userData.portRoads.push(roadMesh);
     });
   });
 
@@ -1778,10 +1842,10 @@ function renderBoard(state) {
     if (!tileBobPhases.has(hid)) tileBobPhases.set(hid, Math.random() * Math.PI * 2);
   });
 
-  // First-time intro animation — defer until models are ready
+  // First-time intro animation — defer until models, font, and page are all ready
   if (!_introDone) {
     _introDone = true;
-    if (_modelsReady) {
+    if (_modelsReady && _pageReady && _fontReady) {
       startTileIntro(state.board.hexes);
     } else {
       _pendingIntroHexes = state.board.hexes;
@@ -1828,14 +1892,34 @@ function startTileIntro(hexes) {
     child.position.y = child.userData.baseY - 1.2;
   });
 
-  // Submerge ports and boats so they rise after intro
+  // Submerge ports, dock roads, and boats at opacity 0 so they rise+fade after intro
   boardGroup.userData._portRiseOff = -2.5;
   boardGroup.userData.portRise = null;
-  (boardGroup.userData.portGroups ?? []).forEach(pg => { pg.position.y = pg.userData.baseY - 2.5; });
-  (boardGroup.userData.boats ?? []).forEach(b => { b.mesh.position.y = SCENE_PARAMS.boatY - 2.5; });
+  (boardGroup.userData.portGroups ?? []).forEach(pg => {
+    pg.position.y = pg.userData.baseY - 2.5;
+    pg.traverse(c => { if (c.isMesh && c.material) { c.material.transparent = true; c.material.opacity = 0; c.material.needsUpdate = true; } });
+  });
+  (boardGroup.userData.portRoads ?? []).forEach(r => {
+    r.position.y = r.userData.portRoadBaseY - 2.5;
+    r.material.transparent = true; r.material.opacity = 0; r.material.needsUpdate = true;
+  });
+  (boardGroup.userData.boats ?? []).forEach(b => {
+    b.mesh.position.y = SCENE_PARAMS.boatY - 2.5;
+    b.mesh.traverse(c => { if (c.isMesh && c.material) { c.material.transparent = true; c.material.opacity = 0; c.material.needsUpdate = true; } });
+  });
+  // Defensively hide any markers already in markerGroup (covers all timing paths)
+  if (markerGroup.children.length) {
+    markerGroup.userData.pendingAppear = true;
+    markerGroup.children.forEach(m => {
+      if (m.material) { m.material.transparent = true; m.material.opacity = 0; }
+      if (m.userData.markerType === 'vertex') {
+        m.position.y = (m.userData.baseY ?? 0) + SCENE_PARAMS.vertexMarkerY - 2.5;
+      }
+    });
+  }
 
-  // Set camera to 45° angle; animation to top-down starts after tiles settle
-  camera.position.set(0, 12, 13);
+  // Set camera to Long Angle; animation to top-down starts after tiles settle
+  camera.position.set(0, 8, 19);
   controls.target.set(0, 0, 0);
   controls.update();
   controls.enabled = false;
@@ -2157,8 +2241,8 @@ function showVertexMarkers(ids, append = false) {
   if (!append) clearGroup(markerGroup);
   if (!gameState) return;
 
-  // Hide all markers during tile intro; they snap to full opacity when intro ends
-  const hideDuringIntro = tileIntro.active;
+  // Hide all markers during tile intro (or while intro is pending model load)
+  const hideDuringIntro = tileIntro.active || _pendingIntroHexes !== null;
   if (hideDuringIntro) markerGroup.userData.pendingAppear = true;
 
   ids.forEach(vid => {
@@ -2419,7 +2503,7 @@ renderer.domElement.addEventListener('click', e => {
 });
 
 renderer.domElement.addEventListener('mousemove', e => {
-  if (!buildMode) return;
+  if (!buildMode || markerGroup.userData.pendingAppear) return;
   const rect = canvas.getBoundingClientRect();
   mouse.x = ((e.clientX-rect.left)/rect.width)*2-1;
   mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
@@ -3196,6 +3280,17 @@ function sendChat() {
 }
 
 // ─── Socket events ────────────────────────────────────────────────────────────
+
+function fadeOutLobbyScreens(onDone) {
+  const els = ['lobby', 'waiting'].map(id => document.getElementById(id)).filter(el => el && el.style.display !== 'none');
+  if (!els.length) { onDone(); return; }
+  els.forEach(el => el.classList.add('fading-out'));
+  setTimeout(() => {
+    els.forEach(el => { el.style.display = 'none'; el.classList.remove('fading-out'); });
+    onDone();
+  }, 580);
+}
+
 socket.on('joinedRoom', data => { myId = data.playerId; roomId = data.roomId; });
 
 let _lobbyPlayerCount = 0;
@@ -3351,12 +3446,18 @@ socket.on('gameUpdate', state => {
   if (wasNull) {
     // Skip toasts for existing log entries on initial load
     lastLogLength = (state.log || []).length;
-    _introDone = false; // allow intro on fresh game load
+    if (state.status === 'lobby') {
+      // Pre-render board silently in the background while players wait in lobby.
+      // _introDone stays true so renderBoard builds the scene without scheduling intro.
+      _introDone = true;
+    } else {
+      _introDone = false; // allow intro on fresh game load / rejoin running game
+    }
     renderBoard(state);
-    document.getElementById('lobby').style.display='none';
-    document.getElementById('waiting').style.display='none';
-    document.getElementById('game').style.display='flex';
-    resize();
+    fadeOutLobbyScreens(() => {
+      document.getElementById('game').style.display='flex';
+      resize();
+    });
   }
   if (newDice) {
     triggerDiceRoll(state.dice[0], state.dice[1]);
@@ -4912,27 +5013,24 @@ function animate() {
     }
   }
 
-  // Camera intro: 7s wait after tile intro, then 5s ease to zoomed top-down
-  if (cameraIntro.waiting && !tileIntro.active) {
-    cameraIntro.waitT = (cameraIntro.waitT ?? 0) + delta;
-    if (cameraIntro.waitT >= 7.0) {
-      cameraIntro.waiting = false;
-      cameraIntro.active = true;
-      cameraIntro.t = 0;
-    }
+  // Camera intro: start when tiles collide (shakeTriggered at ~85% of tile intro), 5s ease-in-out to zoomed top-down
+  if (cameraIntro.waiting && tileIntro.shakeTriggered) {
+    cameraIntro.waiting = false;
+    cameraIntro.active = true;
+    cameraIntro.t = 0;
   }
   if (cameraIntro.active) {
     cameraIntro.t += delta;
     const cp = Math.min(1, cameraIntro.t / cameraIntro.duration);
-    const ce = 1 - Math.pow(1 - cp, 3); // ease-out cubic
+    const ce = cp * cp * (3 - 2 * cp); // smooth step (ease-in-out)
     camera.position.x = 0;
-    camera.position.y = 12 + ce * (17 - 12);  // 17 = zoomed-in top-down height
-    camera.position.z = 13 + ce * (0.1 - 13);
+    camera.position.y = 8 + ce * (16 - 8);
+    camera.position.z = 19 + ce * (0.1 - 19);
     camera.lookAt(0, 0, 0);
     if (cp >= 1) {
       cameraIntro.active = false;
       controls.enabled = true;
-      camera.position.set(0, 17, 0.1);
+      camera.position.set(0, 16, 0.1);
       controls.target.set(0, 0, 0);
       controls.update();
       bloom.strength = 0.0;
@@ -5065,10 +5163,21 @@ function animate() {
   if (portRise) {
     portRise.t += delta;
     const rp = Math.min(1, portRise.t / portRise.duration);
-    // ease-out cubic
-    const re = 1 - Math.pow(1 - rp, 3);
+    const re = 1 - Math.pow(1 - rp, 3); // ease-out cubic
     const riseOff = (1 - re) * -2.5;
     boardGroup.userData._portRiseOff = riseOff;
+    // Fade in over first 1 second
+    const fadeP = Math.min(1, portRise.t / 1.0);
+    (boardGroup.userData.portGroups ?? []).forEach(pg => {
+      pg.traverse(c => { if (c.isMesh && c.material) c.material.opacity = fadeP; });
+    });
+    (boardGroup.userData.portRoads ?? []).forEach(r => {
+      r.position.y = r.userData.portRoadBaseY + riseOff;
+      r.material.opacity = fadeP;
+    });
+    (boardGroup.userData.boats ?? []).forEach(b => {
+      b.mesh.traverse(c => { if (c.isMesh && c.material) c.material.opacity = fadeP; });
+    });
     // Spawn water splashes as ports/boats emerge
     if (rp < 0.85 && Math.random() < delta * 40) {
       const pgs = boardGroup.userData.portGroups ?? [];
@@ -5077,25 +5186,35 @@ function animate() {
         spawnWaterRing(pg.position.x, pg.position.z, 0xffffff);
       }
     }
-    // Animate vertex markers up with ports
+    // Animate vertex markers up and fade in with ports
     if (markerGroup.userData.pendingAppear) {
       markerGroup.children.forEach(m => {
         if (m.userData.markerType === 'vertex') {
           m.position.y = m.userData.baseY + SCENE_PARAMS.vertexMarkerY + riseOff;
         }
+        if (m.material) m.material.opacity = fadeP;
       });
     }
     if (rp >= 1) {
       boardGroup.userData._portRiseOff = 0;
       boardGroup.userData.portRise = null;
-      // Snap vertex markers fully opaque at rise end
+      // Restore port/boat/dock-road materials to fully opaque
+      (boardGroup.userData.portGroups ?? []).forEach(pg => {
+        pg.traverse(c => { if (c.isMesh && c.material) { c.material.transparent = false; c.material.opacity = 1; } });
+      });
+      (boardGroup.userData.portRoads ?? []).forEach(r => {
+        r.position.y = r.userData.portRoadBaseY;
+        r.material.transparent = false; r.material.opacity = 1;
+      });
+      (boardGroup.userData.boats ?? []).forEach(b => {
+        b.mesh.traverse(c => { if (c.isMesh && c.material) { c.material.transparent = false; c.material.opacity = 1; } });
+      });
+      // Snap vertex markers fully opaque
       if (markerGroup.userData.pendingAppear) {
         markerGroup.userData.pendingAppear = false;
         markerGroup.children.forEach(m => {
           if (m.material) { m.material.transparent = false; m.material.opacity = 1; }
-          if (m.userData.markerType === 'vertex') {
-            m.position.y = m.userData.baseY + SCENE_PARAMS.vertexMarkerY;
-          }
+          if (m.userData.markerType === 'vertex') m.position.y = m.userData.baseY + SCENE_PARAMS.vertexMarkerY;
         });
       }
     }
@@ -5143,10 +5262,19 @@ function animate() {
         const nx = m.userData._shakeNX || 0;
         const nz = m.userData._shakeNZ || 0;
         m.position.y = m.userData._shakeBaseY + yShake;
-        // Impact side dips: rx = -nz*rot, rz = nx*rot
         m.rotation.x = m.userData._shakeBaseRX - nz * rotShake;
         m.rotation.z = m.userData._shakeBaseRZ + nx * rotShake;
       });
+      // Burst of water sprites during the impact wave (first third of shake)
+      if (p < 0.35 && Math.random() < delta * 180 * WATER_SPRITE_PARAMS.amount) {
+        const m = hs.meshes[0];
+        if (m) {
+          const ox = (Math.random() - 0.5) * HEX_R * 1.6;
+          const oz = (Math.random() - 0.5) * HEX_R * 1.6;
+          spawnWaterRing((m.userData.baseX ?? m.position.x) + ox,
+                         (m.userData.baseZ ?? m.position.z) + oz);
+        }
+      }
     }
   }
 

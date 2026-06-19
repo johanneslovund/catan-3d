@@ -29,7 +29,9 @@ body {
   justify-content: center;
   height: 100vh;
   background: url('images/Background.png') center center / cover no-repeat;
+  transition: opacity 0.55s ease;
 }
+#lobby.fading-out, #waiting.fading-out { opacity: 0; pointer-events: none; }
 
 .lobby-card {
   background: rgba(255,255,255,0.04);
@@ -118,13 +120,16 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 
 /* Left icon bar */
 #leftBar {
-  width: 48px; flex-shrink: 0;
+  position: absolute;
+  left: 0; top: 0; height: 100%;
+  width: 48px;
   background: transparent;
-  border-right: none;
   display: flex; flex-direction: column; align-items: center;
   padding: 14px 0; gap: 6px;
-  z-index: 5;
+  z-index: 50;
+  pointer-events: none;
 }
+#leftBar > * { pointer-events: auto; }
 .icon-btn {
   width: 36px; height: 36px; border-radius: 8px;
   background: none; border: none; color: var(--text-mid); font-size: 1rem;
