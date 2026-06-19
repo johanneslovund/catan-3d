@@ -287,6 +287,7 @@ scene.add(boardGroup, buildGroup, robberGroup, markerGroup);
 
 // Tile intro fly-in + independent bobbing
 let _introDone = false;
+let _vertexFadeIn = null; // { t, duration } — fade-in state for vertex markers after intro
 const tileBobPhases = new Map(); // hexId → float phase offset
 const waterRings    = [];        // { mesh, t, duration }
 const tileIntro = { active: false, t: 0, duration: 4.0, hexOffsets: new Map(), hexes: [], hexCollOff: new Map(), shakeTriggered: false };
@@ -2102,12 +2103,25 @@ function tileTopY(hexType) {
 function showVertexMarkers(ids, append = false) {
   if (!append) clearGroup(markerGroup);
   if (!gameState) return;
+
+  // Detect first player's first tower placement during the intro animation
+  const isFirstSetupTower = tileIntro.active &&
+    gameState.status === 'setup_forward' &&
+    gameState.setupTurnIndex === 0 &&
+    gameState.setupPhase === 'settlement' &&
+    gameState.players[gameState.currentPlayerIndex]?.id === myId;
+
+  if (isFirstSetupTower) {
+    markerGroup.userData.pendingFadeIn = true;
+    _vertexFadeIn = null;
+  }
+
   ids.forEach(vid => {
     const v = gameState.board.vertices[vid];
-    // Place marker above the highest adjacent tile surface
     const maxTop = HEX_H / 2;
     const geo = new THREE.SphereGeometry(0.14, 12, 12);
-    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18 });
+    const startOpacity = isFirstSetupTower ? 0 : 1;
+    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18, transparent: true, opacity: startOpacity });
     const m = new THREE.Mesh(geo, mat);
     m.userData = { type:'vertexMarker', vertexId:vid, markerType:'vertex', baseY: maxTop + 0.17 };
     m.position.set(v.x, maxTop + 0.17 + SCENE_PARAMS.vertexMarkerY, v.z);
@@ -4937,7 +4951,22 @@ function animate() {
           child.position.set(child.userData.baseX, child.userData.baseY, child.userData.baseZ);
         }
       });
+      // Start vertex marker fade-in if markers were deferred during intro
+      if (markerGroup.userData.pendingFadeIn) {
+        markerGroup.userData.pendingFadeIn = false;
+        _vertexFadeIn = { t: 0, duration: 3.0 };
+      }
     }
+  }
+
+  // Vertex marker fade-in after intro
+  if (_vertexFadeIn) {
+    _vertexFadeIn.t += delta;
+    const opacity = Math.min(1, _vertexFadeIn.t / _vertexFadeIn.duration);
+    markerGroup.children.forEach(m => {
+      if (m.userData.markerType === 'vertex' && m.material) m.material.opacity = opacity;
+    });
+    if (_vertexFadeIn.t >= _vertexFadeIn.duration) _vertexFadeIn = null;
   }
 
   // Tile bobbing — independent per-hex sine wave (skip during intro)
