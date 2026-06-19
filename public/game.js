@@ -287,6 +287,7 @@ scene.add(boardGroup, buildGroup, robberGroup, markerGroup);
 
 // Tile intro fly-in + independent bobbing
 let _introDone = false;
+const cameraIntro = { active: false, t: 0, duration: 12.0 };
 let _markerGlowTex = null;
 function markerGlowTex() {
   if (_markerGlowTex) return _markerGlowTex;
@@ -1475,6 +1476,8 @@ function renderBoard(state) {
       const discMat = new THREE.MeshStandardMaterial({
         color: 0xd4aa30,
         roughnessMap: tokenScratchTex(),
+        normalMap: tokenScratchTex(),
+        normalScale: new THREE.Vector2(0.9, 0.9),
         roughness: SCENE_PARAMS.tokenRoughness ?? 0.18,
         metalness: SCENE_PARAMS.tokenMetalness ?? 0.92,
         envMapIntensity: 2.5,
@@ -1813,6 +1816,14 @@ function startTileIntro(hexes) {
   boardGroup.userData.portRise = null;
   (boardGroup.userData.portGroups ?? []).forEach(pg => { pg.position.y = pg.userData.baseY - 2.5; });
   (boardGroup.userData.boats ?? []).forEach(b => { b.mesh.position.y = SCENE_PARAMS.boatY - 2.5; });
+
+  // Start camera animation from 45° angle to top-down over 12 seconds
+  camera.position.set(0, 12, 13);
+  controls.target.set(0, 0, 0);
+  controls.update();
+  controls.enabled = false;
+  cameraIntro.active = true;
+  cameraIntro.t = 0;
 
   _waterIntroSound.currentTime = 0;
   _waterIntroSound.volume = 0.55;
@@ -4877,6 +4888,22 @@ function animate() {
     }
   }
 
+  // Camera intro: animate from 45° to top-down over 12s
+  if (cameraIntro.active) {
+    cameraIntro.t += delta;
+    const cp = Math.min(1, cameraIntro.t / cameraIntro.duration);
+    const ce = 1 - Math.pow(1 - cp, 3); // ease-out cubic
+    camera.position.x = 0;
+    camera.position.y = 12 + ce * (22 - 12);
+    camera.position.z = 13 + ce * (0.1 - 13);
+    camera.lookAt(0, 0, 0);
+    if (cp >= 1) {
+      cameraIntro.active = false;
+      controls.enabled = true;
+      applyCameraPreset('Top-Down');
+    }
+  }
+
   // Tile intro fly-in animation
   if (tileIntro.active) {
     tileIntro.t += delta;
@@ -4929,6 +4956,24 @@ function animate() {
           }
         }
       }
+    }
+
+    // Bank island avoidance — push tiles away from the bank island
+    const bank = boardGroup.userData.bankIsland;
+    if (bank) {
+      const bankClearR = bank.r + HEX_R * 1.1;
+      hexIds.forEach(hid => {
+        const pos = hexPositions.get(hid);
+        if (!pos) return;
+        const bdx = pos.x - bank.x, bdz = pos.z - bank.z;
+        const bd2 = bdx * bdx + bdz * bdz;
+        if (bd2 < bankClearR * bankClearR && bd2 > 0.001) {
+          const bd = Math.sqrt(bd2);
+          const impulse = (bankClearR - bd) * 0.06;
+          const coff = tileIntro.hexCollOff.get(hid);
+          if (coff) { coff.x += (bdx / bd) * impulse; coff.z += (bdz / bd) * impulse; }
+        }
+      });
     }
 
     // Decay collision offsets toward zero
@@ -4995,6 +5040,14 @@ function animate() {
     // ease-out cubic
     const re = 1 - Math.pow(1 - rp, 3);
     boardGroup.userData._portRiseOff = (1 - re) * -2.5;
+    // Spawn water splashes as ports/boats emerge (heaviest near the surface)
+    if (rp < 0.85 && Math.random() < delta * 40) {
+      const pgs = boardGroup.userData.portGroups ?? [];
+      if (pgs.length) {
+        const pg = pgs[Math.floor(Math.random() * pgs.length)];
+        spawnWaterRing(pg.position.x, pg.position.z, 0xffffff);
+      }
+    }
     if (rp >= 1) { boardGroup.userData._portRiseOff = 0; boardGroup.userData.portRise = null; }
   }
 
