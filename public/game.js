@@ -313,8 +313,8 @@ const _isMobile = window.innerWidth <= 768;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_isMobile, powerPreference: 'high-performance' });
 renderer.setPixelRatio(_isMobile ? Math.min(window.devicePixelRatio, 1) : Math.min(window.devicePixelRatio, 2));
 const MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = !_isMobile;
+renderer.shadowMap.type = THREE.BasicShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = LIGHT_PARAMS.exposure * 0.38;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -348,8 +348,8 @@ scene.add(ambient);
 
 const sun = new THREE.DirectionalLight(0xffe8c0, LIGHT_PARAMS.sunIntensity);
 sun.position.set(8, 20, 6);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.castShadow = !_isMobile;
+sun.shadow.mapSize.set(_isMobile ? 512 : 1024, _isMobile ? 512 : 1024);
 sun.shadow.camera.near = 0.5;
 sun.shadow.camera.far = 60;
 sun.shadow.camera.left = -16; sun.shadow.camera.right = 16;
@@ -414,6 +414,7 @@ composer.addPass(_portOutlinePass);
 const _portOutlinePasses = [{ pass: _portOutlinePass, type: '_all' }];
 
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LIGHT_PARAMS.bloomStr, 0.5, 0.85);
+if (_isMobile) bloom.enabled = false;
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -5933,8 +5934,14 @@ const _animWorldPos = new THREE.Vector3();
 const _animToCam = new THREE.Vector3();
 const _animSeenHids = new Set();
 
+// Mobile frame throttle: skip every other frame to target ~30fps
+let _mobileFrameSkip = false;
 function animate() {
   requestAnimationFrame(animate);
+  if (_isMobile) {
+    _mobileFrameSkip = !_mobileFrameSkip;
+    if (_mobileFrameSkip) return;
+  }
   const delta = clock.getDelta();
   t += delta;
 
@@ -5981,10 +5988,12 @@ function animate() {
     });
   }
 
-  // Sheep wandering update
+  // Sheep/camel wandering — skip on mobile
+  if (!_isMobile) {
   for (let i = 0; i < camelList.length; i++) wanderAnimal(camelList[i], delta, SCENE_PARAMS.camelY, 0.012);
+  }
 
-  sheepList.forEach(s => {
+  if (!_isMobile) sheepList.forEach(s => {
     const dx = s.tx - s.mesh.position.x;
     const dz = s.tz - s.mesh.position.z;
     const dist2 = dx*dx + dz*dz;
@@ -6688,13 +6697,13 @@ function animate() {
       if (_animToCam.lengthSq() > 0.0001) {
         ig.rotation.y = Math.atan2(_animToCam.x, _animToCam.z);
       }
-      ig.position.y = SCENE_PARAMS.portIconY + Math.sin(t * 1.1 + i * 1.3) * 0.05;
+      if (!_isMobile) ig.position.y = SCENE_PARAMS.portIconY + Math.sin(t * 1.1 + i * 1.3) * 0.05;
     });
   }
 
-  // Marker glow pulsation — hidden during intro
-  if (markerGroup.children.length && !markerGroup.userData.pendingAppear) {
-    const glowOpacity = 0.30 + Math.sin(t * 2.8) * 0.20; // 0.10–0.50
+  // Marker glow pulsation — skip on mobile
+  if (!_isMobile && markerGroup.children.length && !markerGroup.userData.pendingAppear) {
+    const glowOpacity = 0.30 + Math.sin(t * 2.8) * 0.20;
     markerGroup.children.forEach(marker => {
       marker.children.forEach(child => {
         if (child.userData.markerGlow && child.material) child.material.opacity = glowOpacity;
@@ -6702,10 +6711,8 @@ function animate() {
     });
   }
 
-  // Mountain hex clouds — gentle bob, sticky to tile Y
-  // ── Lava pulse animation ─────────────────────────────────────────────────────
   // ── Lava pulse + steam ───────────────────────────────────────────────────────
-  if (boardGroup.userData.lavaMeshes) {
+  if (!_isMobile && boardGroup.userData.lavaMeshes) {
     boardGroup.userData.lavaMeshes.forEach(m => {
       const phase = m.userData.lavaPhase ?? 0;
       const pulse = Math.sin(t * 3.1 + phase);

@@ -1630,8 +1630,8 @@ img.piece-icon {
   .mob-player-card { min-width: 72px; }
   .mob-card-name { font-size: .62rem; }
 
-  /* Main action btn: full width */
-  #mainActionBtn { width: 100%; font-size: 1rem; padding: 10px 16px; }
+  /* Main action btn: auto width */
+  #mainActionBtn { width: auto; font-size: 1rem; padding: 10px 20px; }
 
   /* Build shortcuts: 4 across */
   .shortcut-btn { padding: 6px 2px; }
