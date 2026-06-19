@@ -6773,7 +6773,7 @@ function animate() {
   updateVoicePlayers();
   _lobbyUpdateVoiceRings();
   composer.render();
-  if (_is2D) _drawRobberOverlay();
+  if (typeof _is2D !== 'undefined' && _is2D) _drawRobberOverlay();
 }
 animate();
 
