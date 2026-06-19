@@ -1762,17 +1762,20 @@ function startTileIntro(hexes) {
   tileIntro.hexCollOff = new Map();
   tileIntro.shakeTriggered = false;
 
-  // Each tile starts between 1 and 22 units from its final position,
-  // in the outward direction from the board center (circle collapsing inward)
+  // Tiles push outward proportionally to their distance from center,
+  // so the board shape is preserved and collapses inward without overlaps.
+  // Center (dist≈0) → 0.3 units; outer ring (dist≈max) → 2.0 units.
+  const maxHexDist = HEX_R * Math.sqrt(3) * 2; // ≈4.16, outer ring radius
   hexes.forEach(hex => {
-    const baseAngle = (hex.x === 0 && hex.z === 0)
-      ? Math.random() * Math.PI * 2
+    const hexDist = Math.sqrt(hex.x * hex.x + hex.z * hex.z);
+    const t = maxHexDist > 0 ? Math.min(1, hexDist / maxHexDist) : 0;
+    const scatter = 0.3 + t * 1.7; // 0.3 (center) to 2.0 (outer ring)
+    const angle = (hex.x === 0 && hex.z === 0)
+      ? Math.PI / 4 // center tile has no outward direction; pick arbitrary
       : Math.atan2(hex.z, hex.x);
-    const angle = baseAngle + (Math.random() - 0.5) * 0.25;
-    const r = 1 + Math.random() * 21; // 1–22 units from final position
     tileIntro.hexOffsets.set(hex.id, {
-      x0: Math.cos(angle) * r,
-      z0: Math.sin(angle) * r,
+      x0: Math.cos(angle) * scatter,
+      z0: Math.sin(angle) * scatter,
     });
     tileIntro.hexCollOff.set(hex.id, { x: 0, z: 0 });
   });
