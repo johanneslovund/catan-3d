@@ -3279,11 +3279,6 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
     });
   }
 
-  // Mobile settings — reuse the existing settings panel
-  document.getElementById('mBtnSettings')?.addEventListener('click', () => {
-    document.getElementById('settingsPanel').classList.toggle('open');
-  });
-
   // Mobile chat overlay
   const chatOverlay = document.getElementById('mobileChatOverlay');
   document.getElementById('mBtnChat')?.addEventListener('click', () => {
@@ -3332,19 +3327,40 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
   });
 })();
 
-// Settings panel — tile height sliders
+// Settings panel — password protected, desktop only
 (function () {
+  const SETTINGS_PW = 'nussetussa123';
   const panel = document.getElementById('settingsPanel');
-  document.getElementById('btnGetAllRes')?.addEventListener('click', () => socket.emit('debugGetAllRes'));
-
   const btnOpen = document.getElementById('btnSettings');
   const btnClose = document.getElementById('btnSettingsClose');
 
+  function isUnlocked() { return sessionStorage.getItem('settingsUnlocked') === '1'; }
+
+  function openSettings() {
+    panel.classList.add('open');
+    btnOpen.classList.add('active');
+    // Show +Res debug button once unlocked
+    const dbg = document.getElementById('btnGetAllRes');
+    if (dbg) dbg.style.display = 'flex';
+    document.getElementById('btnGetAllRes')?.addEventListener('click', () => socket.emit('debugGetAllRes'), { once: true });
+  }
+
   btnOpen.addEventListener('click', () => {
-    const opening = !panel.classList.contains('open');
-    panel.classList.toggle('open');
-    btnOpen.classList.toggle('active', opening);
+    if (panel.classList.contains('open')) {
+      panel.classList.remove('open');
+      btnOpen.classList.remove('active');
+      return;
+    }
+    if (isUnlocked()) { openSettings(); return; }
+    const pw = prompt('Enter settings password:');
+    if (pw === SETTINGS_PW) {
+      sessionStorage.setItem('settingsUnlocked', '1');
+      openSettings();
+    } else if (pw !== null) {
+      alert('Incorrect password.');
+    }
   });
+
   btnClose.addEventListener('click', () => {
     panel.classList.remove('open');
     btnOpen.classList.remove('active');

@@ -68,13 +68,12 @@
   <!-- Mobile-only top bar (hidden on desktop) -->
   <div id="mobileTopBar">
     <div class="mob-top-left">
-      <button class="icon-btn" id="mBtnSettings">⚙</button>
-      <button class="icon-btn" id="mBtnInfo">ℹ</button>
+      <div id="mobBankLabel">BANK</div>
+      <div id="mobileBankBar"></div>
     </div>
-    <div id="mobileBankBar"></div>
     <div class="mob-top-right">
-      <button class="icon-btn" id="mBtnChat">💬</button>
       <button class="icon-btn" id="mBtnLog">📋</button>
+      <button class="icon-btn" id="mBtnChat">💬</button>
     </div>
   </div>
 
@@ -110,13 +109,10 @@
     </div>
   </div>
 
-  <!-- Left icon bar -->
+  <!-- Left icon bar (desktop only — single gear, password protected) -->
   <div id="leftBar">
     <button class="icon-btn" id="btnSettings" title="Settings">⚙</button>
-    <button class="icon-btn" title="Rulebook">📖</button>
-    <button class="icon-btn" id="btnFullscreen" title="Fullscreen">⛶</button>
-    <button class="icon-btn" title="Info">ℹ</button>
-    <button class="icon-btn" id="btnGetAllRes" title="Get all resources (debug)" style="font-size:.65rem;padding:4px 6px">+Res</button>
+    <button class="icon-btn" id="btnGetAllRes" title="Get all resources (debug)" style="font-size:.65rem;padding:4px 6px;display:none">+Res</button>
   </div>
 
   <!-- Settings panel -->
