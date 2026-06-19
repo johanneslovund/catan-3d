@@ -654,7 +654,11 @@ function updateDiceAnim(delta) {
 
 // ─── Model loader ─────────────────────────────────────────────────────────────
 const gltfLoader = new GLTFLoader();
-gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+// MeshoptDecoder must be ready before any compressed GLB loads
+MeshoptDecoder.ready.then(() => {
+  gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+  preloadModels(); // move initial load to after decoder is ready
+});
 
 // Font for 3D port labels — loaded once at startup
 let _portFont = null;
@@ -749,7 +753,7 @@ function cloneModel(name, colorHexVal) {
   return clone;
 }
 
-preloadModels();
+// preloadModels() is called after MeshoptDecoder.ready (see model loader section above)
 
 // ─── Shared textures ──────────────────────────────────────────────────────────
 const texLoader = new THREE.TextureLoader();
@@ -1774,7 +1778,9 @@ function renderBuildings(state) {
         robberMesh.position.set(0, 0, 0);
         const box = new THREE.Box3().setFromObject(robberMesh);
         const size = new THREE.Vector3(); box.getSize(size);
-        robberMesh.scale.setScalar((0.34 / (size.y || 1)) * ROBBER_PARAMS.scale);
+        // Clamp size.y — quantized/optimized GLBs can report tiny extents
+        const sizeY = Math.max(size.y, 0.25);
+        robberMesh.scale.setScalar((0.34 / sizeY) * ROBBER_PARAMS.scale);
         // Apply material overrides
         robberMesh.traverse(c => {
           if (!c.isMesh || !c.material) return;
@@ -2039,6 +2045,34 @@ function exitBuildMode() {
   }
 }
 
+// ─── Touch support ─────────────────────────────────────────────────────────────
+let _touchStart = null;
+let _touchStartTime = 0;
+
+renderer.domElement.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    _touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    _touchStartTime = Date.now();
+  } else {
+    _touchStart = null; // multi-touch = pinch, not a tap
+  }
+}, { passive: true });
+
+renderer.domElement.addEventListener('touchend', e => {
+  if (!_touchStart || e.changedTouches.length !== 1) return;
+  const dx = e.changedTouches[0].clientX - _touchStart.x;
+  const dy = e.changedTouches[0].clientY - _touchStart.y;
+  const dt = Date.now() - _touchStartTime;
+  if (Math.sqrt(dx*dx + dy*dy) < 12 && dt < 350) {
+    // Tap — fire a synthetic click so raycasting handlers run
+    const touch = e.changedTouches[0];
+    renderer.domElement.dispatchEvent(new MouseEvent('click', {
+      clientX: touch.clientX, clientY: touch.clientY, bubbles: true
+    }));
+  }
+  _touchStart = null;
+}, { passive: true });
+
 // ─── Raycaster / click ────────────────────────────────────────────────────────
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2(-9999,-9999);
@@ -2265,7 +2299,9 @@ function updateUI(state) {
 
   updateMainAction(state, isMyTurn, isSetup, isRobber, isPlaying, me);
   updateBank(state);
+  updateMobileBank(state);
   updatePlayersList(state);
+  updateMobilePlayerCards(state);
   updateSelfPlayer(state, me);
   updatePieces(state, me);
   updateTradeIncoming(state);
@@ -2374,6 +2410,56 @@ function updateMainAction(state, isMyTurn, isSetup, isRobber, isPlaying, me) {
     btn.style.background = '#555';
     btn.disabled = true;
   }
+}
+
+function updateMobileBank(state) {
+  const el = document.getElementById('mobileBankBar');
+  if (!el) return;
+  const buildHtml = (r, icon) => {
+    let count = '?', low = false;
+    if (state.bankStockTiers) {
+      const tier = state.bankStockTiers[r] ?? 0;
+      count = tier === 0 ? '✕' : tier === 1 ? '≤8' : tier === 2 ? '≤14' : '15+';
+      low = tier <= 1;
+    } else if (state.bankStock) {
+      count = state.bankStock[r] ?? 0;
+      low = count <= 3;
+    }
+    return `<div class="bank-chip${low?' bank-chip-low':''}"><span class="bc-icon">${icon}</span><span class="bc-count">${count}</span></div>`;
+  };
+  el.innerHTML = Object.entries(RES_INFO).map(([r,{icon}]) => buildHtml(r, icon)).join('');
+}
+
+function updateMobilePlayerCards(state) {
+  const el = document.getElementById('mobilePlayerCardsInner');
+  if (!el) return;
+  el.innerHTML = '';
+  state.players.forEach((p, i) => {
+    const isActive = i === state.currentPlayerIndex;
+    const isSelf = p.id === myId;
+    const totalRes = Object.values(p.resources||{}).reduce((a,b)=>a+b,0);
+    const devCount = (p.devCards||[]).filter(c=>!c.played&&c.type!=='vp').length;
+    const avatarChar = p.isBot ? '🤖' : p.name[0].toUpperCase();
+    const card = document.createElement('div');
+    card.className = 'mob-player-card' + (isActive?' active-turn':'') + (isSelf?' mob-self-card':'');
+    card.innerHTML = `
+      <div class="mob-card-top">
+        <div class="mob-vp-badge" style="background:${p.color}">${p.vp}</div>
+        <span class="mob-card-name">${escapeHtml(p.name)}${p.isBot?' 🤖':''}</span>
+        ${p.id===state.longestRoadPlayer?'<span title="Longest Road" style="font-size:.6rem">🛣</span>':''}
+        ${p.id===state.largestArmyPlayer?'<span title="Largest Army" style="font-size:.6rem">⚔</span>':''}
+      </div>
+      <div class="mob-card-res">
+        <span class="mob-card-res-count">${totalRes}</span>🃏
+        ${devCount>0?`<span style="margin-left:3px">${devCount}</span>📜`:''}
+      </div>
+      <div class="mob-card-bld">
+        <span>🏠${p.settlements||0}</span>
+        <span>🏰${p.cities||0}</span>
+        <span>🛣${p.roads||0}</span>
+      </div>`;
+    el.appendChild(card);
+  });
 }
 
 function updateBank(state) {
@@ -3132,7 +3218,18 @@ socket.on('gameError', msg => {
   }
 });
 
-socket.on('chatMessage', addChatMessage);
+socket.on('chatMessage', msg => {
+  addChatMessage(msg);
+  // Mirror to mobile chat
+  const mob = document.getElementById('mobileChatMessages');
+  if (mob) {
+    const div = document.createElement('div');
+    div.className = 'chat-player';
+    div.innerHTML = `<span class="cn" style="color:${msg.color}">${escapeHtml(msg.name)}:</span>${escapeHtml(msg.text)}`;
+    mob.appendChild(div);
+    mob.scrollTop = mob.scrollHeight;
+  }
+});
 
 // ── Voice signalling ──
 socket.on('voicePeerJoined', async ({ peerId }) => { await voiceChat.createPeer(peerId, true); });
@@ -3169,6 +3266,71 @@ document.getElementById('btnSettle').addEventListener('click', () => enterBuildM
 document.getElementById('btnCity').addEventListener('click',   () => enterBuildMode('city'));
 document.getElementById('btnRoad').addEventListener('click',   () => enterBuildMode('road'));
 document.getElementById('btnCancel').addEventListener('click', () => exitBuildMode());
+
+// ── Mobile UI handlers ──────────────────────────────────────────────────────
+(function() {
+  // Player cards toggle
+  const pcToggle = document.getElementById('mobileCardsToggle');
+  const pcEl = document.getElementById('mobilePlayerCards');
+  if (pcToggle && pcEl) {
+    pcToggle.addEventListener('click', () => {
+      const collapsed = pcEl.classList.toggle('collapsed');
+      pcToggle.textContent = collapsed ? '▲' : '▼';
+    });
+  }
+
+  // Mobile settings — reuse the existing settings panel
+  document.getElementById('mBtnSettings')?.addEventListener('click', () => {
+    document.getElementById('settingsPanel').classList.toggle('open');
+  });
+
+  // Mobile chat overlay
+  const chatOverlay = document.getElementById('mobileChatOverlay');
+  document.getElementById('mBtnChat')?.addEventListener('click', () => {
+    chatOverlay?.classList.add('open');
+  });
+  document.getElementById('mBtnChatClose')?.addEventListener('click', () => {
+    chatOverlay?.classList.remove('open');
+  });
+  chatOverlay?.addEventListener('click', e => {
+    if (e.target === chatOverlay) chatOverlay.classList.remove('open');
+  });
+
+  // Mobile chat send
+  function sendMobileChat() {
+    const inp = document.getElementById('mobileChatText');
+    const text = inp?.value.trim();
+    if (!text) return;
+    socket.emit('chatMessage', { text });
+    inp.value = '';
+  }
+  document.getElementById('mobileChatSend')?.addEventListener('click', sendMobileChat);
+  document.getElementById('mobileChatText')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendMobileChat();
+  });
+
+  // Mobile log overlay
+  const logOverlay = document.getElementById('mobileLogOverlay');
+  document.getElementById('mBtnLog')?.addEventListener('click', () => {
+    logOverlay?.classList.add('open');
+    // Populate log from desktop messages
+    const src = document.getElementById('chatMessages');
+    const dst = document.getElementById('mobileLogMessages');
+    if (src && dst) {
+      dst.innerHTML = '';
+      src.querySelectorAll('.chat-sys').forEach(el => {
+        dst.appendChild(el.cloneNode(true));
+      });
+      dst.scrollTop = dst.scrollHeight;
+    }
+  });
+  document.getElementById('mBtnLogClose')?.addEventListener('click', () => {
+    logOverlay?.classList.remove('open');
+  });
+  logOverlay?.addEventListener('click', e => {
+    if (e.target === logOverlay) logOverlay.classList.remove('open');
+  });
+})();
 
 // Settings panel — tile height sliders
 (function () {

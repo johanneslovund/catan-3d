@@ -65,6 +65,51 @@
 <!-- ── GAME ── -->
 <div id="game" style="display:none">
 
+  <!-- Mobile-only top bar (hidden on desktop) -->
+  <div id="mobileTopBar">
+    <div class="mob-top-left">
+      <button class="icon-btn" id="mBtnSettings">⚙</button>
+      <button class="icon-btn" id="mBtnInfo">ℹ</button>
+    </div>
+    <div id="mobileBankBar"></div>
+    <div class="mob-top-right">
+      <button class="icon-btn" id="mBtnChat">💬</button>
+      <button class="icon-btn" id="mBtnLog">📋</button>
+    </div>
+  </div>
+
+  <!-- Mobile player cards row (hidden on desktop) -->
+  <div id="mobilePlayerCards">
+    <div id="mobilePlayerCardsInner"></div>
+    <button id="mobileCardsToggle" class="mob-cards-toggle">▼</button>
+  </div>
+
+  <!-- Mobile chat overlay (hidden by default) -->
+  <div id="mobileChatOverlay" style="display:none">
+    <div id="mobileChatInner">
+      <div class="mob-chat-header">
+        <span>Chat</span>
+        <button id="mBtnChatClose">✕</button>
+      </div>
+      <div id="mobileChatMessages"></div>
+      <div id="mobileChatInputRow">
+        <input id="mobileChatText" type="text" placeholder="Send a message…" maxlength="200"/>
+        <button id="mobileChatSend">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile log overlay (hidden by default) -->
+  <div id="mobileLogOverlay" style="display:none">
+    <div id="mobileLogInner">
+      <div class="mob-chat-header">
+        <span>Activity Log</span>
+        <button id="mBtnLogClose">✕</button>
+      </div>
+      <div id="mobileLogMessages"></div>
+    </div>
+  </div>
+
   <!-- Left icon bar -->
   <div id="leftBar">
     <button class="icon-btn" id="btnSettings" title="Settings">⚙</button>
