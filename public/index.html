@@ -494,7 +494,7 @@
       </div>
       <div class="tile-slider" data-param="robber" data-type="scale">
         <label><span class="tile-icon">📏</span> Scale</label>
-        <div class="slider-row"><input type="range" min="0.2" max="3" step="0.05" value="1"/><span class="slider-val">1.00</span></div>
+        <div class="slider-row"><input type="range" min="0.2" max="3" step="0.05" value="0.50"/><span class="slider-val">0.50</span></div>
       </div>
       <div class="tile-slider" data-param="robber" data-type="emissive">
         <label><span class="tile-icon">💡</span> Emissive</label>
@@ -759,6 +759,7 @@
         </div>
         <!-- Waiting panel -->
         <div id="tradeWaitPanel" style="display:none">
+          <div id="tradeWaitSummary" class="trade-popup-cols" style="margin-bottom:8px"></div>
           <div class="trade-waiting-msg">⏳ Waiting for responses…</div>
           <div id="tradeResponseList"></div>
           <button id="btnTradeCancelProp" class="btn btn-secondary" style="width:100%;margin-top:6px">Cancel Proposal</button>
@@ -800,7 +801,7 @@
       </div>
       <div id="musicControls">
         <button id="btnMusicMute" class="mic-btn on" title="Mute music">🔊</button>
-        <input id="musicVolume" type="range" min="0" max="0.25" step="0.005" value="0.05" title="Music volume"/>
+        <input id="musicVolume" type="range" min="0" max="0.25" step="0.005" value="0.025" title="Music volume"/>
       </div>
     </div>
 

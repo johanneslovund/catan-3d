@@ -75,7 +75,7 @@ const BANK_PARAMS = {
 // Robber anim/material params
 const ROBBER_PARAMS = {
   animSpeed:  0.75,
-  scale:      1.0,
+  scale:      0.50,
   emissive:   0.0,
   roughness:  0.94,
   metalness: -1.0,
@@ -682,7 +682,7 @@ const MODEL_FILE_MAP = {
   hex_mountains: 'mountain',
   hex_desert:    'Desert',
   hex_hills:     'brick',
-  hex_fields:    'wheat hex',
+  hex_fields:    'Wheat hex',
   hex_pasture:   'sheep hex',
   sheep:         'Sheep object',
   camel:         'camel object',
@@ -2412,6 +2412,14 @@ function updateMainAction(state, isMyTurn, isSetup, isRobber, isPlaying, me) {
   }
 }
 
+// Returns 'dark' if color is light enough to need dark text
+function colorTextClass(hexColor) {
+  const c = hexColor.replace('#','');
+  const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16);
+  const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+  return lum > 0.65 ? 'dark-text' : '';
+}
+
 function updateMobileBank(state) {
   const el = document.getElementById('mobileBankBar');
   if (!el) return;
@@ -2442,9 +2450,10 @@ function updateMobilePlayerCards(state) {
     const avatarChar = p.isBot ? '🤖' : p.name[0].toUpperCase();
     const card = document.createElement('div');
     card.className = 'mob-player-card' + (isActive?' active-turn':'') + (isSelf?' mob-self-card':'');
+    const tc = colorTextClass(p.color);
     card.innerHTML = `
       <div class="mob-card-top">
-        <div class="mob-vp-badge" style="background:${p.color}">${p.vp}</div>
+        <div class="mob-vp-badge ${tc}" style="background:${p.color}">${p.vp}</div>
         <span class="mob-card-name">${escapeHtml(p.name)}${p.isBot?' 🤖':''}</span>
         ${p.id===state.longestRoadPlayer?'<span title="Longest Road" style="font-size:.6rem">🛣</span>':''}
         ${p.id===state.largestArmyPlayer?'<span title="Largest Army" style="font-size:.6rem">⚔</span>':''}
@@ -2513,8 +2522,9 @@ function updatePlayersList(state) {
     const isEmb = embargoed.has(p.id);
     const r = document.createElement('div');
     r.className = 'cpr' + (isActive ? ' active-turn' : '') + (isEmb ? ' embargoed' : '');
+    const avatarTc = colorTextClass(p.color);
     r.innerHTML = `
-      <div class="cpr-avatar${isTalking?' speaking':''}" style="background:${p.color}" data-pid="${escapeHtml(p.id)}" title="Click for options">${avatarContent}</div>
+      <div class="cpr-avatar${isTalking?' speaking':''} ${avatarTc}" style="background:${p.color}" data-pid="${escapeHtml(p.id)}" title="Click for options">${avatarContent}</div>
       <div class="cpr-mid">
         <div class="cpr-name">${escapeHtml(p.name)}${isEmb ? ' <span class="embargo-tag">🚫</span>' : ''}</div>
         <div class="cpr-vp">${p.vp} VP${p.id===state.longestRoadPlayer?' · 🛣 LR':''}${p.id===state.largestArmyPlayer?' · ⚔ LA':''}</div>
@@ -2609,9 +2619,10 @@ function updateSelfPlayer(state, me) {
           <span class="sdc-label">${DEV_CARD_LABELS[c.type]??c.type}</span>
         </div>`).join('')
       + `</div>` : '';
+  const selfTc = colorTextClass(me.color);
   el.innerHTML = `
     <div class="self-header" style="${isActive?'outline:2px solid '+me.color+';outline-offset:3px;border-radius:8px;padding:3px 4px':''}">
-      <div class="self-avatar" style="background:${me.color}">${initial}</div>
+      <div class="self-avatar ${selfTc}" style="background:${me.color}">${initial}</div>
       <div class="self-name">${escapeHtml(me.name)}</div>
       <div class="self-vp">${me.vp} VP</div>
     </div>
@@ -3683,6 +3694,16 @@ function updateTradePendingUI() {
     // Auto-open popup when we're proposing
     const popup = document.getElementById('tradePanelPopup');
     if (popup) popup.style.display = 'block';
+    // Show offer summary so popup doesn't look empty
+    const summaryEl = document.getElementById('tradeWaitSummary');
+    if (summaryEl && trade.offer && trade.want) {
+      const RES_ICONS = { wood:'🪵', sheep:'🐑', wheat:'🌾', brick:'🧱', ore:'⛏' };
+      const fmt = obj => Object.entries(obj).filter(([,v])=>v>0).map(([r,v])=>`${RES_ICONS[r]||r}×${v}`).join(' ') || '—';
+      summaryEl.innerHTML = `
+        <div class="trade-bar-col"><div class="trade-section-label">YOU GIVE</div><div style="font-size:.9rem;padding:4px 0">${fmt(trade.offer)}</div></div>
+        <div class="trade-popup-arrow">⟺</div>
+        <div class="trade-bar-col"><div class="trade-section-label">YOU GET</div><div style="font-size:.9rem;padding:4px 0">${fmt(trade.want)}</div></div>`;
+    }
     // Show responses
     const listEl = document.getElementById('tradeResponseList');
     if (listEl) {

@@ -394,9 +394,12 @@ function isBotId(id) { return typeof id === 'string' && id.startsWith('bot_'); }
 function createBot(game, difficulty = 'medium') {
   const colorIdx = game.players.length;
   const botId = `bot_${++_botIdCounter}`;
+  const _botUsedColors = new Set(game.players.map(p => p.color));
+  const _botAvailColors = PLAYER_COLORS.filter(c => !_botUsedColors.has(c));
+  const _botColor = _botAvailColors.length ? _botAvailColors[Math.floor(Math.random() * _botAvailColors.length)] : PLAYER_COLORS[colorIdx % PLAYER_COLORS.length];
   game.players.push({
     id: botId, name: (() => { const used = new Set(game.players.map(p=>p.name)); const avail = BOT_NAMES.filter(n=>!used.has(n)); return avail.length ? avail[Math.floor(Math.random()*avail.length)] : `Bot ${colorIdx+1}`; })(),
-    color: PLAYER_COLORS[colorIdx], colorIndex: colorIdx,
+    color: _botColor, colorIndex: colorIdx,
     resources: { wood:0, sheep:0, wheat:0, brick:0, ore:0 },
     devCards: [], knightsPlayed: 0, vp: 0, freeRoads: 0, isBot: true, difficulty,
   });
@@ -895,9 +898,12 @@ function joinRoom(socket, roomId, playerName, isHost) {
   socket.join(roomId);
   const game = rooms[roomId];
   const colorIdx = game.players.length;
+  const _usedColors = new Set(game.players.map(p => p.color));
+  const _availColors = PLAYER_COLORS.filter(c => !_usedColors.has(c));
+  const _color = _availColors.length ? _availColors[Math.floor(Math.random() * _availColors.length)] : PLAYER_COLORS[colorIdx % PLAYER_COLORS.length];
   game.players.push({
     id: socket.id, name: playerName,
-    color: PLAYER_COLORS[colorIdx], colorIndex: colorIdx,
+    color: _color, colorIndex: colorIdx,
     resources: { wood:0, sheep:0, wheat:0, brick:0, ore:0 },
     devCards: [], knightsPlayed: 0, vp: 0, freeRoads: 0
   });
