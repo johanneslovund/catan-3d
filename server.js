@@ -268,6 +268,7 @@ function createGame(roomId) {
     setupRound: 0,             // 0=forward, 1=backward
     lastSettlementPlaced: null,
     diceRolled: false,
+    turnStartedAt: Date.now(),
     devCardBought: false,
     devCardPlayed: false,      // only one dev card may be played per turn
     devDeck: [],
@@ -426,7 +427,7 @@ function advanceSetupTurn(game) {
     game.status = 'playing';
     game.currentPlayerIndex = 0;
     game.setupPhase = null;
-    game.diceRolled = false;
+    game.diceRolled = false; game.turnStartedAt = Date.now();
     addLog(game, `⚔️ ${cp(game).name}'s turn — roll the dice!`);
     return;
   }
@@ -1005,7 +1006,7 @@ function runBotTurn(roomId, buildCount) {
   player.freeRoads = 0;
   player.failedTrades = [];
   game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
-  game.diceRolled = false;
+  game.diceRolled = false; game.turnStartedAt = Date.now();
   game.devCardBought = false;
   game.devCardPlayed = false;
   game.dice = null;
@@ -1725,7 +1726,7 @@ io.on('connection', socket => {
     player.freeRoads = 0;
     player.failedTrades = [];
     game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
-    game.diceRolled = false;
+    game.diceRolled = false; game.turnStartedAt = Date.now();
     game.devCardBought = false;
     game.devCardPlayed = false;
     game.dice = null;
@@ -1825,8 +1826,10 @@ io.on('connection', socket => {
 
     if (game.status !== 'playing') return;
     const player = cp(game);
-    // Allow any human to unstick a bot's turn when the timer expires
-    if (player.id !== socket.id && !isBotId(player.id)) return;
+    const elapsed = Date.now() - (game.turnStartedAt ?? 0);
+    const timerExpired = elapsed >= 85_000; // 85s server-side slack on 90s client timer
+    // Current player can always force-advance; anyone can if timer truly expired server-side
+    if (player.id !== socket.id && !isBotId(player.id) && !timerExpired) return;
     // Cancel any pending trade before force-ending
     if (game.pendingTrade) { game.pendingTrade = null; broadcastState(info.roomId); }
     if (!game.diceRolled) {
@@ -1867,7 +1870,7 @@ io.on('connection', socket => {
     player.failedTrades = [];
     game.pendingTrade = null;
     game.currentPlayerIndex = (game.currentPlayerIndex + 1) % game.players.length;
-    game.diceRolled = false;
+    game.diceRolled = false; game.turnStartedAt = Date.now();
     game.devCardBought = false;
     game.devCardPlayed = false;
     game.dice = null;

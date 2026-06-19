@@ -3269,11 +3269,8 @@ function updateTimerDisplay() {
     timerInterval = null;
     if (gameState) {
       const curr = gameState.players[gameState.currentPlayerIndex];
-      const isMyTurn = curr?.id === myId;
-      const robberIsMe = gameState.status === 'robber' && gameState.robbingPlayer === myId;
-      // Also emit when it's a bot's turn so the server can unstick it
-      const isBotTurn = curr && curr.id !== myId && curr.id?.startsWith('bot_');
-      if (isMyTurn || robberIsMe || isBotTurn) socket.emit('forceEndTurn');
+      // All clients emit — server validates elapsed time server-side to prevent abuse
+      socket.emit('forceEndTurn');
     }
   }
 }
@@ -4772,6 +4769,22 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
     micOverlay.style.display = 'flex';
   }
 
+  // Music vol in mic overlay — mirrors AUDIO state
+  const micMusicMute = document.getElementById('micMusicMute');
+  const micMusicVol  = document.getElementById('micMusicVol');
+  micMusicMute?.addEventListener('click', () => {
+    AUDIO.musicMuted = !AUDIO.musicMuted;
+    micMusicMute.textContent = AUDIO.musicMuted ? '🔇' : '🔊';
+    micMusicMute.className = AUDIO.musicMuted ? 'mic-btn off' : 'mic-btn on';
+    AUDIO.applyMusicVolume?.();
+    // sync other music sliders
+    document.getElementById('mVolMusicMute')?.setAttribute('data-muted', AUDIO.musicMuted);
+  });
+  micMusicVol?.addEventListener('input', () => {
+    AUDIO.musicVolume = parseFloat(micMusicVol.value);
+    AUDIO.applyMusicVolume?.();
+  });
+
   document.getElementById('mBtnMic')?.addEventListener('click', openMicOverlay);
   document.getElementById('mBtnMicClose')?.addEventListener('click', () => {
     if (micOverlay) micOverlay.style.display = 'none';
@@ -5674,7 +5687,7 @@ document.getElementById('btnMicToggle').addEventListener('click', async () => {
 });
 
 // ─── Music player ────────────────────────────────────────────────────────────
-AUDIO.musicVolume = 0.03;
+AUDIO.musicVolume = 0.01;
 AUDIO.musicMuted  = false;
 {
   const TRACKS = [
