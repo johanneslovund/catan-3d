@@ -11,8 +11,6 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { FontLoader } from 'three/addons/loaders/FontLoader.js';
-import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
 // ─── Socket ────────────────────────────────────────────────────────────────────
 const socket = window.io();
