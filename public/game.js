@@ -5934,6 +5934,20 @@ const _animWorldPos = new THREE.Vector3();
 const _animToCam = new THREE.Vector3();
 const _animSeenHids = new Set();
 
+// FPS counter
+const _fpsEl = document.getElementById('fpsCounter');
+let _fpsFrames = 0, _fpsLast = performance.now();
+function _updateFPS() {
+  _fpsFrames++;
+  const now = performance.now();
+  if (now - _fpsLast >= 500) {
+    const fps = Math.round(_fpsFrames * 1000 / (now - _fpsLast));
+    if (_fpsEl) _fpsEl.textContent = fps + ' fps';
+    _fpsFrames = 0;
+    _fpsLast = now;
+  }
+}
+
 // Mobile frame throttle: skip every other frame to target ~30fps
 let _mobileFrameSkip = false;
 function animate() {
@@ -6931,6 +6945,7 @@ function animate() {
 
   composer.render();
   if (_is2D) _draw2DBoard();
+  _updateFPS();
 }
 // ─── 2D Mode: top-down camera + robber overlay ────────────────────────────────
 
