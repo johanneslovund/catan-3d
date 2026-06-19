@@ -34,25 +34,25 @@ body {
 #lobby.fading-out, #waiting.fading-out { opacity: 0; pointer-events: none; }
 
 .lobby-card {
-  background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.18);
   border-radius: 20px;
   padding: 40px 48px;
   width: 380px;
-  box-shadow: 0 8px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
+  box-shadow: 0 8px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.10);
   display: flex; flex-direction: column; gap: 14px;
-  color: var(--text);
+  color: #fff;
   align-items: center;
 }
 .lobby-card > * { width: 100%; }
-.lobby-card h1 { font-size: 2rem; text-align: center; }
+.lobby-card h1 { font-size: 2rem; text-align: center; text-shadow: 0 2px 12px rgba(0,0,0,0.8); }
 .lobby-card h2 { font-size: 1.4rem; text-align: center; }
-.subtitle { text-align: center; color: var(--text-mid); font-size: .85rem; margin-top: -10px; }
+.subtitle { text-align: center; color: rgba(255,255,255,0.75); font-size: .85rem; margin-top: -10px; }
 
 .form-group { display: flex; flex-direction: column; gap: 4px; }
-.form-group label { font-size: .8rem; color: var(--text-mid); text-transform: uppercase; letter-spacing: .05em; }
+.form-group label { font-size: .8rem; color: rgba(255,255,255,0.75); text-transform: uppercase; letter-spacing: .05em; }
 
 input[type="text"] {
   background: rgba(255,255,255,.1);
@@ -65,7 +65,7 @@ input[type="text"] {
 input[type="text"]:focus { border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.14); }
 input[type="text"]::placeholder { color: var(--text-muted); }
 
-.divider { text-align: center; font-size: .75rem; color: var(--text-muted); border-top: 1px solid var(--glass-border); padding-top: 12px; margin-top: 4px; }
+.divider { text-align: center; font-size: .75rem; color: rgba(255,255,255,0.6); border-top: 1px solid rgba(255,255,255,0.18); padding-top: 12px; margin-top: 4px; }
 
 .btn {
   padding: 11px 20px; border: none; border-radius: 10px;
@@ -90,7 +90,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .join-row input { flex: 1; }
 
 .error-msg { color: #f88; font-size: .85rem; min-height: 1em; text-align: center; }
-.hint { color: var(--text-mid); font-size: .82rem; text-align: center; }
+.hint { color: rgba(255,255,255,0.65); font-size: .82rem; text-align: center; }
 #botControls { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
 #botControls .btn { flex: 1; font-size: .82rem; padding: 7px 10px; }
 .bot-diff-select {
@@ -101,7 +101,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .bot-diff-select option { background: #1a2035; }
 .room-code { font-family: monospace; font-size: 1.3rem; font-weight: 700; letter-spacing: .12em; color: #f5c842; }
 
-.private-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: .85rem; color: var(--text-mid); margin-bottom: 2px; }
+.private-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: .85rem; color: rgba(255,255,255,0.75); margin-bottom: 2px; }
 .private-toggle input { width: 15px; height: 15px; cursor: pointer; accent-color: #f5c842; }
 
 .public-lobbies { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; }
@@ -113,7 +113,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 }
 .lobby-entry-info { display: flex; flex-direction: column; gap: 2px; }
 .lobby-entry-host { font-weight: 600; font-size: .88rem; }
-.lobby-entry-count { font-size: .75rem; color: var(--text-mid); }
+.lobby-entry-count { font-size: .75rem; color: rgba(255,255,255,0.65); }
 .lobby-entry .btn { padding: 5px 14px; font-size: .8rem; flex-shrink: 0; }
 
 #waitingPlayerList { list-style: none; display: flex; flex-direction: column; gap: 6px; }
