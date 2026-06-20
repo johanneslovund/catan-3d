@@ -342,25 +342,17 @@ controls.maxDistance = 22;
 controls.maxPolarAngle = Math.PI / 2.15;
 controls.target.set(0, 0, 0);
 
-// Disable expensive post-processing passes while camera is moving.
-// Use 'start'/'end' rather than 'change' — controls.update() with damping fires 'change'
-// every frame even when idle, which would permanently suppress post-processing.
-let _outlinesSuppressed = false;
+// Disable bloom while camera is moving; port OutlinePass is still used for port icons.
 let _outlineRestoreTimer = null;
 controls.addEventListener('start', () => {
-  _outlinesSuppressed = true;
-  _singleBuildingPass.enabled = false;
   _portOutlinePass.enabled = false;
   if (!_isMobile) bloom.enabled = false;
   if (_outlineRestoreTimer) { clearTimeout(_outlineRestoreTimer); _outlineRestoreTimer = null; }
 });
 controls.addEventListener('end', () => {
-  // Delay re-enable to allow damping animation to settle
   if (_outlineRestoreTimer) clearTimeout(_outlineRestoreTimer);
   _outlineRestoreTimer = setTimeout(() => {
-    _outlinesSuppressed = false;
     if (!_isMobile && !_is2D) {
-      _singleBuildingPass.enabled = _singleBuildingPass.selectedObjects.length > 0;
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
       bloom.enabled = true;
     }
@@ -396,22 +388,9 @@ scene.add(ground);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 
-// Single outline pass for all player buildings (consolidating 4 → 1 saves 3 full scene renders/frame)
+// Building outlines are now handled via backface shell meshes (addBackfaceOutline) —
+// no OutlinePass needed for buildings. Port outlines still use a single OutlinePass below.
 const _PIECE_COLORS = ['#e74c3c', '#3498db', '#ffffff', '#2ecc71'];
-const _singleBuildingPass = new OutlinePass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera
-);
-_singleBuildingPass.edgeStrength   = 6.0;
-_singleBuildingPass.edgeGlow       = 0.0;
-_singleBuildingPass.edgeThickness  = 1.5;
-_singleBuildingPass.pulsePeriod    = 0;
-_singleBuildingPass.visibleEdgeColor.set('#ffffff');
-_singleBuildingPass.hiddenEdgeColor.set('#000000');
-_singleBuildingPass.selectedObjects = [];
-if (_isMobile) _singleBuildingPass.enabled = false;
-composer.addPass(_singleBuildingPass);
-// Shim: existing callers that iterate _outlinePasses continue to work
-const _outlinePasses = _PIECE_COLORS.map(col => ({ pass: _singleBuildingPass, color: col }));
 
 // Single outline pass for all 3D port icon objects (white glow)
 const _PORT_OUTLINE_COLORS = {
@@ -2613,22 +2592,6 @@ function applyLightParams() {
   saturationPass.uniforms.uWarmth.value     = LIGHT_PARAMS.warmth;
 }
 
-function updateOutlinePasses(state) {
-  if (!state) {
-    _singleBuildingPass.selectedObjects = [];
-    _singleBuildingPass.enabled = false;
-    return;
-  }
-  const allObjs = [];
-  buildGroup.children.forEach(obj => {
-    if (obj.userData.buildingPlayerId) { allObjs.push(obj); return; }
-    const eid = obj.userData.edgeId;
-    if (eid !== undefined && state.board?.edges[eid]?.road) allObjs.push(obj);
-  });
-  _singleBuildingPass.selectedObjects = allObjs;
-  _singleBuildingPass.enabled = !_isMobile && allObjs.length > 0 && !_outlinesSuppressed;
-}
-
 // ─── Building rendering ───────────────────────────────────────────────────────
 function renderBuildings(state) {
   clearGroup(buildGroup);
@@ -2667,6 +2630,7 @@ function renderBuildings(state) {
       c.userData.vertexId = v.id;
       c.renderOrder = 2;
     });
+    addBackfaceOutline(mesh, col);
     buildGroup.add(mesh);
   });
 
@@ -2692,6 +2656,7 @@ function renderBuildings(state) {
     road.userData.edgeId = e.id;
     road.renderOrder = 1;
     road.traverse(c => { c.userData.edgeId = e.id; c.renderOrder = 1; });
+    addBackfaceOutline(road, col, true);
     buildGroup.add(road);
   });
 
@@ -2699,8 +2664,6 @@ function renderBuildings(state) {
   _mySettlements = buildGroup.children.filter(
     m => m.userData.buildingType === 'settlement' && m.userData.buildingPlayerId === myId
   );
-
-  updateOutlinePasses(state);
 
   // Robber lives in robberGroup (persists across renderBuildings for movement animation)
   // Only rebuild when not mid-movement
@@ -2806,6 +2769,42 @@ function renderBuildings(state) {
     playRobberVO();
   }
   robberLastHexId = newHexId;
+}
+
+// Backface outline + glow — two scaled BackSide shells per mesh, zero post-processing cost
+function addBackfaceOutline(obj, colorHexVal, isRoad) {
+  const solidScale  = isRoad ? 1.14 : 1.12;
+  const glowScale   = isRoad ? 1.30 : 1.26;
+  const color = new THREE.Color(colorHexVal);
+
+  obj.traverse(child => {
+    if (!child.isMesh) return;
+    // Inner shell — solid colored rim
+    const inner = new THREE.Mesh(child.geometry, new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.BackSide,
+      depthWrite: false,
+      transparent: false,
+    }));
+    inner.scale.setScalar(solidScale);
+    inner.renderOrder = child.renderOrder - 0.5;
+    inner.userData._isOutlineShell = true;
+    child.add(inner);
+
+    // Outer shell — additive glow halo
+    const outer = new THREE.Mesh(child.geometry, new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.BackSide,
+      depthWrite: false,
+      transparent: true,
+      opacity: 0.35,
+      blending: THREE.AdditiveBlending,
+    }));
+    outer.scale.setScalar(glowScale);
+    outer.renderOrder = child.renderOrder - 1;
+    outer.userData._isOutlineShell = true;
+    child.add(outer);
+  });
 }
 
 function makeSettlement(color) {
@@ -4929,9 +4928,7 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         if (gameState) renderBuildings(gameState);
         return;
       } else if (param === 'outline') {
-        if (type === 'thickness') { _singleBuildingPass.edgeThickness = v; }
-        else if (type === 'glow')  { _singleBuildingPass.edgeGlow = v; }
-        else if (type === 'strength') { _singleBuildingPass.edgeStrength = v; }
+        // Building outlines now use backface shells — settings panel no longer drives OutlinePass
         return;
       } else if (param === 'building') {
         if (type === 'colorTint') SCENE_PARAMS.buildingColorTint = v;
@@ -4976,12 +4973,9 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
           renderer.shadowMap.enabled = v > 0.5;
           scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
         } else if (type === 'outlines') {
+          // Backface shells are always on; toggle visibility of each shell mesh
           const on = v > 0.5;
-          if (!on) {
-            _singleBuildingPass.enabled = false;
-          } else if (!_isMobile && !_is2D) {
-            _singleBuildingPass.enabled = _singleBuildingPass.selectedObjects.length > 0;
-          }
+          buildGroup.traverse(c => { if (c.userData._isOutlineShell) c.visible = on; });
         } else if (type === 'pixelRatio') {
           renderer.setPixelRatio(v);
           renderer.setSize(renderer.domElement.clientWidth, renderer.domElement.clientHeight, false);
@@ -5913,7 +5907,6 @@ function resize() {
   renderer.setSize(w, h);
   composer.setSize(w, h);
   bloom.resolution.set(w, h);
-  _singleBuildingPass.resolution.set(w, h);
   _portOutlinePass.resolution.set(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -7117,15 +7110,15 @@ function _draw2DBoard() {
     ctx.closePath();
   }
 
-  // Solid ocean background so the 3D scene doesn't bleed through the overlay
+  // Solid ocean background — blocks 3D scene bleed-through
   ctx.globalAlpha = 1.0;
   ctx.fillStyle = '#1a6fa8';
   ctx.fillRect(0, 0, W, H);
 
-  // Draw water/port hexes first, then land hexes on top
+  // Draw water/port hexes first, then land hexes on top, at 50% opacity for the colonist style
   const sorted = [...gameState.board.hexes].sort((a,b) => (a.type==='water'?-1:1));
 
-  ctx.globalAlpha = 1.0;
+  ctx.globalAlpha = 0.50;
   sorted.forEach(hex => {
     const pts = _hexPts(hex);
 
@@ -7466,7 +7459,6 @@ function toggle2D() {
     controls.update();
 
     _set2DVisibility(false);
-    _singleBuildingPass.enabled = false;
     _portOutlinePass.enabled = false;
     _resizeOverlay();
     _overlay2d.style.display = 'block';
@@ -7488,9 +7480,7 @@ function toggle2D() {
     controls.update();
 
     _set2DVisibility(true);
-    // Re-enable only passes that actually have objects (avoid empty-pass renders)
     if (!_isMobile) {
-      _singleBuildingPass.enabled = _singleBuildingPass.selectedObjects.length > 0;
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
     }
     _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
