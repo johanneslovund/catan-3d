@@ -311,7 +311,7 @@ const ROBBER_PARAMS = {
 const canvas = document.getElementById('c');
 const _isMobile = window.innerWidth <= 768;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_isMobile, powerPreference: 'high-performance' });
-renderer.setPixelRatio(_isMobile ? Math.min(window.devicePixelRatio, 1) : Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(_isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
 const MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
 renderer.shadowMap.enabled = !_isMobile;
 renderer.shadowMap.type = THREE.BasicShadowMap;
@@ -1751,6 +1751,13 @@ function renderBoard(state) {
   ocean.position.y = SCENE_PARAMS.oceanY;
   boardGroup.add(ocean);
   boardGroup.userData.oceanMat = oceanMat;
+  // On mobile, replace the expensive shader with a simple static material
+  if (_isMobile) {
+    ocean.material = new THREE.MeshLambertMaterial({
+      color: 0x1a7ab8, transparent: true, opacity: 0.85,
+      side: THREE.DoubleSide, depthWrite: false,
+    });
+  }
 
   // Sandy island base (removed — no sand layer under map)
   const COAST_R = 7.2;
@@ -6702,7 +6709,7 @@ function animate() {
   }
 
   // Animated water + sky
-  if (boardGroup.userData.oceanMat) {
+  if (!_isMobile && boardGroup.userData.oceanMat) {
     const u = boardGroup.userData.oceanMat.uniforms;
     u.uTime.value      = t;
     u.uWaveAmp.value   = WATER_PARAMS.waveAmp;
@@ -6711,7 +6718,7 @@ function animate() {
     u.uFoamStr.value   = WATER_PARAMS.foamStr;
     u.uOpacity.value   = WATER_PARAMS.opacity;
   }
-  if (scene.userData.skyMat) {
+  if (!_isMobile && scene.userData.skyMat) {
     const su = scene.userData.skyMat.uniforms;
     su.uTime.value = t;
     su.uHorizon.value.setRGB(SKY_PARAMS.horizonR, SKY_PARAMS.horizonG, SKY_PARAMS.horizonB);
