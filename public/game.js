@@ -7117,10 +7117,15 @@ function _draw2DBoard() {
     ctx.closePath();
   }
 
+  // Solid ocean background so the 3D scene doesn't bleed through the overlay
+  ctx.globalAlpha = 1.0;
+  ctx.fillStyle = '#1a6fa8';
+  ctx.fillRect(0, 0, W, H);
+
   // Draw water/port hexes first, then land hexes on top
   const sorted = [...gameState.board.hexes].sort((a,b) => (a.type==='water'?-1:1));
 
-  ctx.globalAlpha = 0.50;
+  ctx.globalAlpha = 1.0;
   sorted.forEach(hex => {
     const pts = _hexPts(hex);
 
