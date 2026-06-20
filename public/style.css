@@ -1507,7 +1507,7 @@ img.piece-icon {
   #canvasWrapper canvas { touch-action: none; }
 
   /* ── FPS counter: top-left below mobileTopBar ── */
-  #fpsCounter { top: 134px !important; left: 8px !important; font-size: .65rem !important; }
+  #fpsCounter { top: 134px !important; left: 10px !important; font-size: .65rem !important; }
 
   /* ── Exit game button: tuck inside mobileTopBar area ── */
   #btnExitGame {

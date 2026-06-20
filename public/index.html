@@ -134,7 +134,7 @@
 <div id="game" style="display:none">
 
   <!-- Exit game button -->
-  <div id="fpsCounter" style="position:absolute;top:48px;left:56px;z-index:36;font-size:.72rem;font-weight:700;color:rgba(255,255,255,0.55);font-variant-numeric:tabular-nums;pointer-events:none;letter-spacing:.04em;text-shadow:0 1px 3px rgba(0,0,0,0.8)">0 fps</div>
+  <div id="fpsCounter" style="position:absolute;top:48px;left:10px;z-index:36;font-size:.72rem;font-weight:700;color:rgba(255,255,255,0.55);font-variant-numeric:tabular-nums;pointer-events:none;letter-spacing:.04em;text-shadow:0 1px 3px rgba(0,0,0,0.8)">0 fps</div>
   <button id="btnExitGame" style="position:absolute;top:10px;left:10px;z-index:35;background:rgba(20,30,55,0.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.18);color:#fff;font-size:.78rem;font-weight:600;letter-spacing:.04em;padding:6px 14px;border-radius:20px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='rgba(180,30,30,0.85)'" onmouseout="this.style.background='rgba(20,30,55,0.82)'">Exit Game</button>
 
   <!-- 2D/3D toggle button -->
@@ -917,6 +917,34 @@
           <div class="slider-row"><input type="range" min="0" max="1.0" step="0.01" value="0.40"/><span class="slider-val">0.40</span></div>
         </div>
       </div><!-- /settings-cat-body LAVA -->
+
+      <div class="settings-section-label collapsible" style="margin-top:10px">GRAPHICS</div>
+      <div class="settings-cat-body">
+        <div class="tile-slider" data-param="graphics" data-type="bloom">
+          <label><span class="tile-icon">✨</span> Bloom</label>
+          <div class="slider-row"><input type="range" min="0" max="1" step="1" value="1"/><span class="slider-val">1</span></div>
+        </div>
+        <div class="tile-slider" data-param="graphics" data-type="bloomStr">
+          <label><span class="tile-icon">💡</span> Bloom Strength</label>
+          <div class="slider-row"><input type="range" min="0" max="1.5" step="0.05" value="0.30"/><span class="slider-val">0.30</span></div>
+        </div>
+        <div class="tile-slider" data-param="graphics" data-type="shadows">
+          <label><span class="tile-icon">🌑</span> Shadows</label>
+          <div class="slider-row"><input type="range" min="0" max="1" step="1" value="1"/><span class="slider-val">1</span></div>
+        </div>
+        <div class="tile-slider" data-param="graphics" data-type="outlines">
+          <label><span class="tile-icon">🔲</span> Building Outlines</label>
+          <div class="slider-row"><input type="range" min="0" max="1" step="1" value="1"/><span class="slider-val">1</span></div>
+        </div>
+        <div class="tile-slider" data-param="graphics" data-type="pixelRatio">
+          <label><span class="tile-icon">🖥</span> Render Scale</label>
+          <div class="slider-row"><input type="range" min="0.5" max="2.0" step="0.25" value="1.0"/><span class="slider-val">1.00</span></div>
+        </div>
+        <div class="tile-slider" data-param="graphics" data-type="fpsCap">
+          <label><span class="tile-icon">🎯</span> FPS Cap</label>
+          <div class="slider-row"><input type="range" min="15" max="60" step="15" value="60"/><span class="slider-val">60</span></div>
+        </div>
+      </div><!-- /settings-cat-body GRAPHICS -->
 
     </div>
   </div>

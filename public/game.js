@@ -4962,6 +4962,29 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
           applyBankParams();  // live update position/scale/rotation
         }
         return;
+      } else if (param === 'graphics') {
+        if (type === 'bloom') {
+          bloom.enabled = v > 0.5;
+        } else if (type === 'bloomStr') {
+          LIGHT_PARAMS.bloomStr = v;
+          bloom.strength = v;
+        } else if (type === 'shadows') {
+          renderer.shadowMap.enabled = v > 0.5;
+          scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
+        } else if (type === 'outlines') {
+          const on = v > 0.5;
+          if (!on) {
+            _singleBuildingPass.enabled = false;
+          } else if (!_isMobile && !_is2D) {
+            _singleBuildingPass.enabled = _singleBuildingPass.selectedObjects.length > 0;
+          }
+        } else if (type === 'pixelRatio') {
+          renderer.setPixelRatio(v);
+          renderer.setSize(renderer.domElement.clientWidth, renderer.domElement.clientHeight, false);
+        } else if (type === 'fpsCap') {
+          _fpsCapMs = v >= 60 ? 0 : 1000 / v;
+        }
+        return;
       }
       if (!gameState) return;
       // robberY only needs buildings re-render
@@ -5959,11 +5982,18 @@ function _updateFPS() {
 
 // Mobile frame throttle: skip every other frame to target ~30fps
 let _mobileFrameSkip = false;
+let _fpsCapMs = 0; // 0 = uncapped; set via graphics settings
+let _fpsCapLast = 0;
 function animate() {
   requestAnimationFrame(animate);
   if (_isMobile) {
     _mobileFrameSkip = !_mobileFrameSkip;
     if (_mobileFrameSkip) return;
+  }
+  if (_fpsCapMs > 0) {
+    const now = performance.now();
+    if (now - _fpsCapLast < _fpsCapMs) return;
+    _fpsCapLast = now;
   }
   const delta = clock.getDelta();
   t += delta;
