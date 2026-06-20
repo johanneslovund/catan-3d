@@ -6001,13 +6001,13 @@ function updateSliderFill(el) {
 // ─── Resize ───────────────────────────────────────────────────────────────────
 function resize() {
   const wrap = document.getElementById('canvasWrapper');
-  const w = wrap ? wrap.clientWidth  : window.innerWidth;
-  const h = wrap ? wrap.clientHeight : window.innerHeight;
-  renderer.setSize(w, h);
+  const w = Math.max(1, wrap ? wrap.clientWidth  : window.innerWidth);
+  const h = Math.max(1, wrap ? wrap.clientHeight : window.innerHeight);
+  renderer.setSize(w, h, false);
+  // composer.setSize already resizes _composerRT (renderTarget1) internally — don't resize it again
   composer.setSize(w, h);
   bloom.resolution.set(w, h);
   _portOutlinePass.resolution.set(w, h);
-  _composerRT.setSize(w * renderer.getPixelRatio(), h * renderer.getPixelRatio());
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
