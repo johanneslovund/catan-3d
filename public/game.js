@@ -2773,32 +2773,26 @@ function renderBuildings(state) {
 
 // Backface outline + glow — two scaled BackSide shells per mesh, zero post-processing cost
 function addBackfaceOutline(obj, colorHexVal, isRoad) {
-  const solidScale  = isRoad ? 1.14 : 1.12;
-  const glowScale   = isRoad ? 1.30 : 1.26;
+  const solidScale = isRoad ? 1.14 : 1.12;
+  const glowScale  = isRoad ? 1.30 : 1.26;
   const color = new THREE.Color(colorHexVal);
 
-  obj.traverse(child => {
-    if (!child.isMesh || child.userData._isOutlineShell) return;
-    // Inner shell — solid colored rim
+  // Collect meshes first — never modify the hierarchy during traverse
+  const meshes = [];
+  obj.traverse(child => { if (child.isMesh) meshes.push(child); });
+
+  meshes.forEach(child => {
     const inner = new THREE.Mesh(child.geometry, new THREE.MeshBasicMaterial({
-      color,
-      side: THREE.BackSide,
-      depthWrite: false,
-      transparent: false,
+      color, side: THREE.BackSide, depthWrite: false,
     }));
     inner.scale.setScalar(solidScale);
     inner.renderOrder = child.renderOrder - 0.5;
     inner.userData._isOutlineShell = true;
     child.add(inner);
 
-    // Outer shell — additive glow halo
     const outer = new THREE.Mesh(child.geometry, new THREE.MeshBasicMaterial({
-      color,
-      side: THREE.BackSide,
-      depthWrite: false,
-      transparent: true,
-      opacity: 0.35,
-      blending: THREE.AdditiveBlending,
+      color, side: THREE.BackSide, depthWrite: false,
+      transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending,
     }));
     outer.scale.setScalar(glowScale);
     outer.renderOrder = child.renderOrder - 1;
