@@ -92,8 +92,11 @@ function canAfford(player, costs) {
   return Object.entries(costs).every(([r, n]) => (player.resources[r] || 0) >= n);
 }
 
-function spend(player, costs) {
-  Object.entries(costs).forEach(([r, n]) => { player.resources[r] -= n; });
+function spend(player, costs, bankStock) {
+  Object.entries(costs).forEach(([r, n]) => {
+    player.resources[r] -= n;
+    if (bankStock) bankStock[r] = (bankStock[r] || 0) + n;
+  });
 }
 
 function give(player, res) {
@@ -837,7 +840,7 @@ function runBotTurn(roomId, buildCount) {
         const discard = Math.floor(tot / 2);
         if (isBotId(p.id)) {
           const pool = Object.entries(p.resources).flatMap(([r,n])=>Array(n).fill(r));
-          shuffle(pool).slice(0, discard).forEach(r => { p.resources[r]--; });
+          shuffle(pool).slice(0, discard).forEach(r => { p.resources[r]--; game.bankStock[r] = (game.bankStock[r]||0)+1; });
           addLog(game, `${p.name} discarded ${discard} cards`);
         } else {
           game.discardingPlayers[p.id] = discard;
@@ -898,7 +901,7 @@ function runBotTurn(roomId, buildCount) {
         const best = difficulty === 'easy'
           ? setts[Math.floor(Math.random() * setts.length)]
           : setts.reduce((a, b) => scoreBotVertex(game, a.id) >= scoreBotVertex(game, b.id) ? a : b);
-        spend(player, COSTS.city);
+        spend(player, COSTS.city, game.bankStock);
         best.building = { type: 'city', playerId: botId };
         player.vp = computeVP(player, game);
         addLog(game, `${player.name} built a city`);
@@ -928,7 +931,7 @@ function runBotTurn(roomId, buildCount) {
           const best = difficulty === 'easy'
             ? candidates[Math.floor(Math.random() * candidates.length)]
             : candidates.reduce((a, b) => scoreBotVertex(game, a.id) >= scoreBotVertex(game, b.id) ? a : b);
-          spend(player, COSTS.settlement);
+          spend(player, COSTS.settlement, game.bankStock);
           best.building = { type: 'settlement', playerId: botId };
           updateLongestRoad(game);
           player.vp = computeVP(player, game);
@@ -946,7 +949,7 @@ function runBotTurn(roomId, buildCount) {
     if (difficulty === 'hard' && !game.devCardBought && canAfford(player, COSTS.devCard) && game.devDeck.length > 0) {
       const myDevs = player.devCards.length;
       if (myDevs < 4) { // don't hoard
-        spend(player, COSTS.devCard);
+        spend(player, COSTS.devCard, game.bankStock);
         game.devCardBought = true;
         const card = game.devDeck.splice(0, 1)[0];
         player.devCards.push({ type: card, played: false, newThisTurn: true });
@@ -987,7 +990,7 @@ function runBotTurn(roomId, buildCount) {
               if (s > bestScore) { bestScore = s; bestEdge = e; }
             });
           }
-          spend(player, COSTS.road);
+          spend(player, COSTS.road, game.bankStock);
           bestEdge.road = { playerId: botId };
           updateLongestRoad(game);
           addLog(game, `${player.name} built a road`);
@@ -1248,7 +1251,7 @@ io.on('connection', socket => {
         return e.road && e.road.playerId === socket.id;
       });
       if (!connected) return socket.emit('gameError', 'Must connect to your road');
-      spend(player, COSTS.settlement);
+      spend(player, COSTS.settlement, game.bankStock);
     }
 
     v.building = { type: 'settlement', playerId: socket.id };
@@ -1308,7 +1311,7 @@ io.on('connection', socket => {
       });
       if (!adjacent) return socket.emit('gameError', 'Road must connect to your network');
       if (player.freeRoads > 0) player.freeRoads--;
-      else spend(player, COSTS.road);
+      else spend(player, COSTS.road, game.bankStock);
     }
 
     edge.road = { playerId: socket.id };
@@ -1360,7 +1363,7 @@ io.on('connection', socket => {
         const discard = Math.floor(tot / 2);
         if (isBotId(p.id)) {
           const pool = Object.entries(p.resources).flatMap(([r,n])=>Array(n).fill(r));
-          shuffle(pool).slice(0, discard).forEach(r => { p.resources[r]--; });
+          shuffle(pool).slice(0, discard).forEach(r => { p.resources[r]--; game.bankStock[r] = (game.bankStock[r]||0)+1; });
           addLog(game, `${p.name} discarded ${discard} cards`);
         } else {
           game.discardingPlayers[p.id] = discard;
@@ -1466,7 +1469,7 @@ io.on('connection', socket => {
     if (!v || !v.building || v.building.playerId !== socket.id || v.building.type !== 'settlement')
       return socket.emit('gameError', 'Must upgrade your own settlement');
 
-    spend(player, COSTS.city);
+    spend(player, COSTS.city, game.bankStock);
     v.building = { type: 'city', playerId: socket.id };
     player.vp = computeVP(player, game);
     addLog(game, `${player.name} built a city`);
@@ -1655,7 +1658,7 @@ io.on('connection', socket => {
     if (!canAfford(player, COSTS.devCard)) return socket.emit('gameError', 'Cannot afford dev card');
     if (!game.devDeck.length) return socket.emit('gameError', 'Dev deck is empty');
 
-    spend(player, COSTS.devCard);
+    spend(player, COSTS.devCard, game.bankStock);
     const card = game.devDeck.pop();
     player.devCards.push({ type: card, played: false, newThisTurn: true });
     player.vp = computeVP(player, game);

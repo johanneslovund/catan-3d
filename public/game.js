@@ -342,16 +342,20 @@ controls.maxDistance = 22;
 controls.maxPolarAngle = Math.PI / 2.15;
 controls.target.set(0, 0, 0);
 
-// Disable expensive post-processing passes while camera is moving — re-enable 150ms after motion stops
+// Disable expensive post-processing passes while camera is moving.
+// Use 'start'/'end' rather than 'change' — controls.update() with damping fires 'change'
+// every frame even when idle, which would permanently suppress post-processing.
 let _outlinesSuppressed = false;
 let _outlineRestoreTimer = null;
-controls.addEventListener('change', () => {
-  if (!_outlinesSuppressed) {
-    _outlinesSuppressed = true;
-    _singleBuildingPass.enabled = false;
-    _portOutlinePass.enabled = false;
-    if (!_isMobile) bloom.enabled = false;
-  }
+controls.addEventListener('start', () => {
+  _outlinesSuppressed = true;
+  _singleBuildingPass.enabled = false;
+  _portOutlinePass.enabled = false;
+  if (!_isMobile) bloom.enabled = false;
+  if (_outlineRestoreTimer) { clearTimeout(_outlineRestoreTimer); _outlineRestoreTimer = null; }
+});
+controls.addEventListener('end', () => {
+  // Delay re-enable to allow damping animation to settle
   if (_outlineRestoreTimer) clearTimeout(_outlineRestoreTimer);
   _outlineRestoreTimer = setTimeout(() => {
     _outlinesSuppressed = false;
@@ -360,7 +364,7 @@ controls.addEventListener('change', () => {
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
       bloom.enabled = true;
     }
-  }, 150);
+  }, 400);
 });
 
 // ── Lighting — tropical midday ──
