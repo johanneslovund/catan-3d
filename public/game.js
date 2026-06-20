@@ -2590,19 +2590,20 @@ function applyLightParams() {
 }
 
 function updateOutlinePasses(state) {
-  if (!state) { _outlinePasses.forEach(o => { o.pass.selectedObjects = []; }); return; }
+  if (!state) {
+    _outlinePasses.forEach(o => { o.pass.selectedObjects = []; o.pass.enabled = false; });
+    return;
+  }
   const colorMap = {};
   _PIECE_COLORS.forEach(c => { colorMap[c] = []; });
 
   buildGroup.children.forEach(obj => {
-    // Buildings
     const pid = obj.userData.buildingPlayerId;
     if (pid) {
       const p = state.players.find(pl => pl.id === pid);
       if (p && colorMap[p.color] !== undefined) colorMap[p.color].push(obj);
       return;
     }
-    // Roads — matched by edgeId → road.playerId
     const eid = obj.userData.edgeId;
     if (eid !== undefined && state.board) {
       const edge = state.board.edges[eid];
@@ -2613,7 +2614,12 @@ function updateOutlinePasses(state) {
     }
   });
 
-  _outlinePasses.forEach(o => { o.pass.selectedObjects = colorMap[o.color] || []; });
+  // Disable passes with no objects — each OutlinePass does a full scene render even when empty
+  _outlinePasses.forEach(o => {
+    const objs = colorMap[o.color] || [];
+    o.pass.selectedObjects = objs;
+    o.pass.enabled = !_isMobile && objs.length > 0;
+  });
 }
 
 // ─── Building rendering ───────────────────────────────────────────────────────
@@ -6420,6 +6426,7 @@ function animate() {
         ig.traverse(m => { if (m.isMesh) _risenPortMeshes.push(m); });
       });
       _portOutlinePass.selectedObjects = _risenPortMeshes;
+      _portOutlinePass.enabled = !_isMobile && _risenPortMeshes.length > 0;
     }
   }
 
@@ -7439,8 +7446,11 @@ function toggle2D() {
     controls.update();
 
     _set2DVisibility(true);
-    _outlinePasses.forEach(o => { o.pass.enabled = true; });
-    _portOutlinePass.enabled = true;
+    // Re-enable only passes that actually have objects (avoid empty-pass renders)
+    if (!_isMobile) {
+      _outlinePasses.forEach(o => { o.pass.enabled = o.pass.selectedObjects.length > 0; });
+      _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
+    }
     _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
     _overlay2d.style.display = 'none';
 
