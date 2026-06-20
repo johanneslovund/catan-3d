@@ -342,9 +342,10 @@ controls.maxDistance = 22;
 controls.maxPolarAngle = Math.PI / 2.15;
 controls.target.set(0, 0, 0);
 
-// Disable bloom while camera is moving; port OutlinePass is still used for port icons.
+// Disable outline passes and bloom while camera is moving; restore 400ms after motion stops
 let _outlineRestoreTimer = null;
 controls.addEventListener('start', () => {
+  _outlinePasses.forEach(o => { o.pass.enabled = false; });
   _portOutlinePass.enabled = false;
   if (!_isMobile) bloom.enabled = false;
   if (_outlineRestoreTimer) { clearTimeout(_outlineRestoreTimer); _outlineRestoreTimer = null; }
@@ -353,6 +354,7 @@ controls.addEventListener('end', () => {
   if (_outlineRestoreTimer) clearTimeout(_outlineRestoreTimer);
   _outlineRestoreTimer = setTimeout(() => {
     if (!_isMobile && !_is2D) {
+      _outlinePasses.forEach(o => { o.pass.enabled = o.pass.selectedObjects.length > 0; });
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
       bloom.enabled = true;
     }
@@ -388,9 +390,21 @@ scene.add(ground);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 
-// Building outlines are now handled via backface shell meshes (addBackfaceOutline) —
-// no OutlinePass needed for buildings. Port outlines still use a single OutlinePass below.
+// One OutlinePass per player color — disabled when empty or during camera movement
 const _PIECE_COLORS = ['#e74c3c', '#3498db', '#ffffff', '#2ecc71'];
+const _outlinePasses = _PIECE_COLORS.map(col => {
+  const pass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
+  pass.edgeStrength  = 6.0;
+  pass.edgeGlow      = 0.5;
+  pass.edgeThickness = 1.5;
+  pass.pulsePeriod   = 0;
+  pass.visibleEdgeColor.set(col);
+  pass.hiddenEdgeColor.set('#000000');
+  pass.selectedObjects = [];
+  pass.enabled = false;
+  composer.addPass(pass);
+  return { pass, color: col };
+});
 
 // Single outline pass for all 3D port icon objects (white glow)
 const _PORT_OUTLINE_COLORS = {
@@ -1108,8 +1122,7 @@ function cloneModel(name, colorHexVal) {
           }
           nm.roughness = 0.65;
           nm.metalness = 0.05;
-          nm.emissive = new THREE.Color(colorHexVal);
-          nm.emissiveIntensity = colorHexVal >= 0xd0d0d0 ? 0.55 : 0.38;
+          if (colorHexVal >= 0xd0d0d0) { nm.emissive = new THREE.Color(0xffffff); nm.emissiveIntensity = 0.5; }
           nm.needsUpdate = true;
           return nm;
         });
@@ -2592,6 +2605,33 @@ function applyLightParams() {
   saturationPass.uniforms.uWarmth.value     = LIGHT_PARAMS.warmth;
 }
 
+function updateOutlinePasses(state) {
+  if (!state) {
+    _outlinePasses.forEach(o => { o.pass.selectedObjects = []; o.pass.enabled = false; });
+    return;
+  }
+  const colorMap = {};
+  _PIECE_COLORS.forEach(c => { colorMap[c] = []; });
+  buildGroup.children.forEach(obj => {
+    const pid = obj.userData.buildingPlayerId;
+    if (pid) {
+      const p = state.players.find(pl => pl.id === pid);
+      if (p && colorMap[p.color] !== undefined) colorMap[p.color].push(obj);
+      return;
+    }
+    const eid = obj.userData.edgeId;
+    if (eid !== undefined && state.board?.edges[eid]?.road) {
+      const p = state.players.find(pl => pl.id === state.board.edges[eid].road.playerId);
+      if (p && colorMap[p.color] !== undefined) colorMap[p.color].push(obj);
+    }
+  });
+  _outlinePasses.forEach(o => {
+    const objs = colorMap[o.color] || [];
+    o.pass.selectedObjects = objs;
+    o.pass.enabled = !_isMobile && !_is2D && objs.length > 0;
+  });
+}
+
 // ─── Building rendering ───────────────────────────────────────────────────────
 function renderBuildings(state) {
   clearGroup(buildGroup);
@@ -2662,6 +2702,8 @@ function renderBuildings(state) {
   _mySettlements = buildGroup.children.filter(
     m => m.userData.buildingType === 'settlement' && m.userData.buildingPlayerId === myId
   );
+
+  updateOutlinePasses(state);
 
   // Robber lives in robberGroup (persists across renderBuildings for movement animation)
   // Only rebuild when not mid-movement
@@ -2773,7 +2815,7 @@ function renderBuildings(state) {
 
 function makeSettlement(color) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness:0.65, metalness:0.05, emissive:new THREE.Color(color), emissiveIntensity:0.38 });
+  const mat = new THREE.MeshStandardMaterial({ color, roughness:0.65, metalness:0.05 });
   const darkMat = new THREE.MeshStandardMaterial({ color:0x222233, roughness:0.7 });
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.24,0.3), mat);
   body.position.y = 0.12; body.castShadow = true; g.add(body);
@@ -2790,7 +2832,7 @@ function makeSettlement(color) {
 
 function makeCity(color) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness:0.6, metalness:0.05, emissive:new THREE.Color(color), emissiveIntensity:0.38 });
+  const mat = new THREE.MeshStandardMaterial({ color, roughness:0.6, metalness:0.05 });
   const darkMat = new THREE.MeshStandardMaterial({ color:0x222233, roughness:0.7 });
   const winMat = new THREE.MeshStandardMaterial({ color:0xffeeaa, emissive:0xffcc44, emissiveIntensity:0.5, roughness:0.3, metalness:0 });
 
@@ -2817,7 +2859,7 @@ function makeRoad(v1, v2, color, roadY) {
   const dx=v2.x-v1.x, dz=v2.z-v1.z;
   const len = Math.sqrt(dx*dx+dz*dz);
   const geo = new THREE.BoxGeometry(len*0.88, 0.08, 0.18);
-  const mat = new THREE.MeshStandardMaterial({ color, map: cobbleTex, roughness:0.85, metalness:0.02, emissive:new THREE.Color(color), emissiveIntensity:0.38 });
+  const mat = new THREE.MeshStandardMaterial({ color, map: cobbleTex, roughness:0.85, metalness:0.02 });
   const m = new THREE.Mesh(geo, mat);
   const y = roadY ?? (HEX_H / 2 + 0.05);
   m.position.set((v1.x+v2.x)/2, y, (v1.z+v2.z)/2);
@@ -4892,7 +4934,9 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         if (gameState) renderBuildings(gameState);
         return;
       } else if (param === 'outline') {
-        // Building outlines now use backface shells — settings panel no longer drives OutlinePass
+        if (type === 'thickness') _outlinePasses.forEach(o => { o.pass.edgeThickness = v; });
+        else if (type === 'glow') _outlinePasses.forEach(o => { o.pass.edgeGlow = v; });
+        else if (type === 'strength') _outlinePasses.forEach(o => { o.pass.edgeStrength = v; });
         return;
       } else if (param === 'building') {
         if (type === 'colorTint') SCENE_PARAMS.buildingColorTint = v;
@@ -4937,8 +4981,8 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
           renderer.shadowMap.enabled = v > 0.5;
           scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
         } else if (type === 'outlines') {
-          const intensity = v > 0.5 ? 0.38 : 0;
-          buildGroup.traverse(c => { if (c.material?.emissive) c.material.emissiveIntensity = intensity; });
+          const on = v > 0.5;
+          _outlinePasses.forEach(o => { o.pass.enabled = on && !_isMobile && !_is2D && o.pass.selectedObjects.length > 0; });
         } else if (type === 'pixelRatio') {
           renderer.setPixelRatio(v);
           renderer.setSize(renderer.domElement.clientWidth, renderer.domElement.clientHeight, false);
@@ -5870,6 +5914,7 @@ function resize() {
   renderer.setSize(w, h);
   composer.setSize(w, h);
   bloom.resolution.set(w, h);
+  _outlinePasses.forEach(o => o.pass.resolution.set(w, h));
   _portOutlinePass.resolution.set(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -7422,6 +7467,7 @@ function toggle2D() {
     controls.update();
 
     _set2DVisibility(false);
+    _outlinePasses.forEach(o => { o.pass.enabled = false; });
     _portOutlinePass.enabled = false;
     _resizeOverlay();
     _overlay2d.style.display = 'block';
@@ -7444,6 +7490,7 @@ function toggle2D() {
 
     _set2DVisibility(true);
     if (!_isMobile) {
+      _outlinePasses.forEach(o => { o.pass.enabled = o.pass.selectedObjects.length > 0; });
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
     }
     _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
