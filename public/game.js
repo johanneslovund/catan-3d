@@ -342,6 +342,27 @@ controls.maxDistance = 22;
 controls.maxPolarAngle = Math.PI / 2.15;
 controls.target.set(0, 0, 0);
 
+// Disable expensive post-processing passes while camera is moving — re-enable 150ms after motion stops
+let _outlinesSuppressed = false;
+let _outlineRestoreTimer = null;
+controls.addEventListener('change', () => {
+  if (!_outlinesSuppressed) {
+    _outlinesSuppressed = true;
+    _singleBuildingPass.enabled = false;
+    _portOutlinePass.enabled = false;
+    if (!_isMobile) bloom.enabled = false;
+  }
+  if (_outlineRestoreTimer) clearTimeout(_outlineRestoreTimer);
+  _outlineRestoreTimer = setTimeout(() => {
+    _outlinesSuppressed = false;
+    if (!_isMobile && !_is2D) {
+      _singleBuildingPass.enabled = _singleBuildingPass.selectedObjects.length > 0;
+      _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
+      bloom.enabled = true;
+    }
+  }, 150);
+});
+
 // ── Lighting — tropical midday ──
 const ambient = new THREE.AmbientLight(0xc8d8c0, LIGHT_PARAMS.ambIntensity);
 scene.add(ambient);
@@ -349,7 +370,7 @@ scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xffe8c0, LIGHT_PARAMS.sunIntensity);
 sun.position.set(8, 20, 6);
 sun.castShadow = !_isMobile;
-sun.shadow.mapSize.set(_isMobile ? 512 : 1024, _isMobile ? 512 : 1024);
+sun.shadow.mapSize.set(512, 512);
 sun.shadow.camera.near = 0.5;
 sun.shadow.camera.far = 60;
 sun.shadow.camera.left = -16; sun.shadow.camera.right = 16;
@@ -371,23 +392,22 @@ scene.add(ground);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 
-// One outline pass per player color
+// Single outline pass for all player buildings (consolidating 4 → 1 saves 3 full scene renders/frame)
 const _PIECE_COLORS = ['#e74c3c', '#3498db', '#ffffff', '#2ecc71'];
-const _outlinePasses = _PIECE_COLORS.map(col => {
-  const pass = new OutlinePass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera
-  );
-  pass.edgeStrength   = 6.0;
-  pass.edgeGlow       = 0.0; // no bleed — closest building always wins
-  pass.edgeThickness  = 1.5;
-  pass.pulsePeriod    = 0;
-  pass.visibleEdgeColor.set(col);
-  pass.hiddenEdgeColor.set('#000000');
-  pass.selectedObjects = [];
-  if (_isMobile) pass.enabled = false; // outlines too expensive on mobile
-  composer.addPass(pass);
-  return { pass, color: col };
-});
+const _singleBuildingPass = new OutlinePass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera
+);
+_singleBuildingPass.edgeStrength   = 6.0;
+_singleBuildingPass.edgeGlow       = 0.0;
+_singleBuildingPass.edgeThickness  = 1.5;
+_singleBuildingPass.pulsePeriod    = 0;
+_singleBuildingPass.visibleEdgeColor.set('#ffffff');
+_singleBuildingPass.hiddenEdgeColor.set('#000000');
+_singleBuildingPass.selectedObjects = [];
+if (_isMobile) _singleBuildingPass.enabled = false;
+composer.addPass(_singleBuildingPass);
+// Shim: existing callers that iterate _outlinePasses continue to work
+const _outlinePasses = _PIECE_COLORS.map(col => ({ pass: _singleBuildingPass, color: col }));
 
 // Single outline pass for all 3D port icon objects (white glow)
 const _PORT_OUTLINE_COLORS = {
@@ -2591,35 +2611,18 @@ function applyLightParams() {
 
 function updateOutlinePasses(state) {
   if (!state) {
-    _outlinePasses.forEach(o => { o.pass.selectedObjects = []; o.pass.enabled = false; });
+    _singleBuildingPass.selectedObjects = [];
+    _singleBuildingPass.enabled = false;
     return;
   }
-  const colorMap = {};
-  _PIECE_COLORS.forEach(c => { colorMap[c] = []; });
-
+  const allObjs = [];
   buildGroup.children.forEach(obj => {
-    const pid = obj.userData.buildingPlayerId;
-    if (pid) {
-      const p = state.players.find(pl => pl.id === pid);
-      if (p && colorMap[p.color] !== undefined) colorMap[p.color].push(obj);
-      return;
-    }
+    if (obj.userData.buildingPlayerId) { allObjs.push(obj); return; }
     const eid = obj.userData.edgeId;
-    if (eid !== undefined && state.board) {
-      const edge = state.board.edges[eid];
-      if (edge?.road) {
-        const p = state.players.find(pl => pl.id === edge.road.playerId);
-        if (p && colorMap[p.color] !== undefined) colorMap[p.color].push(obj);
-      }
-    }
+    if (eid !== undefined && state.board?.edges[eid]?.road) allObjs.push(obj);
   });
-
-  // Disable passes with no objects — each OutlinePass does a full scene render even when empty
-  _outlinePasses.forEach(o => {
-    const objs = colorMap[o.color] || [];
-    o.pass.selectedObjects = objs;
-    o.pass.enabled = !_isMobile && objs.length > 0;
-  });
+  _singleBuildingPass.selectedObjects = allObjs;
+  _singleBuildingPass.enabled = !_isMobile && allObjs.length > 0 && !_outlinesSuppressed;
 }
 
 // ─── Building rendering ───────────────────────────────────────────────────────
@@ -4922,9 +4925,9 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         if (gameState) renderBuildings(gameState);
         return;
       } else if (param === 'outline') {
-        if (type === 'thickness') { _outlinePasses.forEach(o => { o.pass.edgeThickness = v; }); }
-        else if (type === 'glow')  { _outlinePasses.forEach(o => { o.pass.edgeGlow = v; }); }
-        else if (type === 'strength') { _outlinePasses.forEach(o => { o.pass.edgeStrength = v; }); }
+        if (type === 'thickness') { _singleBuildingPass.edgeThickness = v; }
+        else if (type === 'glow')  { _singleBuildingPass.edgeGlow = v; }
+        else if (type === 'strength') { _singleBuildingPass.edgeStrength = v; }
         return;
       } else if (param === 'building') {
         if (type === 'colorTint') SCENE_PARAMS.buildingColorTint = v;
@@ -5883,7 +5886,7 @@ function resize() {
   renderer.setSize(w, h);
   composer.setSize(w, h);
   bloom.resolution.set(w, h);
-  _outlinePasses.forEach(o => o.pass.resolution.set(w, h));
+  _singleBuildingPass.resolution.set(w, h);
   _portOutlinePass.resolution.set(w, h);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
@@ -7424,7 +7427,7 @@ function toggle2D() {
     controls.update();
 
     _set2DVisibility(false);
-    _outlinePasses.forEach(o => { o.pass.enabled = false; });
+    _singleBuildingPass.enabled = false;
     _portOutlinePass.enabled = false;
     _resizeOverlay();
     _overlay2d.style.display = 'block';
@@ -7448,7 +7451,7 @@ function toggle2D() {
     _set2DVisibility(true);
     // Re-enable only passes that actually have objects (avoid empty-pass renders)
     if (!_isMobile) {
-      _outlinePasses.forEach(o => { o.pass.enabled = o.pass.selectedObjects.length > 0; });
+      _singleBuildingPass.enabled = _singleBuildingPass.selectedObjects.length > 0;
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
     }
     _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
