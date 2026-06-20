@@ -1108,8 +1108,8 @@ function cloneModel(name, colorHexVal) {
           }
           nm.roughness = 0.65;
           nm.metalness = 0.05;
-          // For near-white players add a white emissive overlay so the tint reads clearly over the texture
-          if (colorHexVal >= 0xd0d0d0) { nm.emissive = new THREE.Color(0xffffff); nm.emissiveIntensity = 0.5; }
+          nm.emissive = new THREE.Color(colorHexVal);
+          nm.emissiveIntensity = colorHexVal >= 0xd0d0d0 ? 0.55 : 0.38;
           nm.needsUpdate = true;
           return nm;
         });
@@ -2630,7 +2630,6 @@ function renderBuildings(state) {
       c.userData.vertexId = v.id;
       c.renderOrder = 2;
     });
-    addBackfaceOutline(mesh, col);
     buildGroup.add(mesh);
   });
 
@@ -2656,7 +2655,6 @@ function renderBuildings(state) {
     road.userData.edgeId = e.id;
     road.renderOrder = 1;
     road.traverse(c => { c.userData.edgeId = e.id; c.renderOrder = 1; });
-    addBackfaceOutline(road, col, true);
     buildGroup.add(road);
   });
 
@@ -2772,38 +2770,10 @@ function renderBuildings(state) {
 }
 
 // Backface outline + glow — two scaled BackSide shells per mesh, zero post-processing cost
-function addBackfaceOutline(obj, colorHexVal, isRoad) {
-  const solidScale = isRoad ? 1.14 : 1.12;
-  const glowScale  = isRoad ? 1.30 : 1.26;
-  const color = new THREE.Color(colorHexVal);
-
-  // Collect meshes first — never modify the hierarchy during traverse
-  const meshes = [];
-  obj.traverse(child => { if (child.isMesh) meshes.push(child); });
-
-  meshes.forEach(child => {
-    const inner = new THREE.Mesh(child.geometry, new THREE.MeshBasicMaterial({
-      color, side: THREE.BackSide, depthWrite: false,
-    }));
-    inner.scale.setScalar(solidScale);
-    inner.renderOrder = child.renderOrder - 0.5;
-    inner.userData._isOutlineShell = true;
-    child.add(inner);
-
-    const outer = new THREE.Mesh(child.geometry, new THREE.MeshBasicMaterial({
-      color, side: THREE.BackSide, depthWrite: false,
-      transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending,
-    }));
-    outer.scale.setScalar(glowScale);
-    outer.renderOrder = child.renderOrder - 1;
-    outer.userData._isOutlineShell = true;
-    child.add(outer);
-  });
-}
 
 function makeSettlement(color) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness:0.65, metalness:0.05 });
+  const mat = new THREE.MeshStandardMaterial({ color, roughness:0.65, metalness:0.05, emissive:new THREE.Color(color), emissiveIntensity:0.38 });
   const darkMat = new THREE.MeshStandardMaterial({ color:0x222233, roughness:0.7 });
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.24,0.3), mat);
   body.position.y = 0.12; body.castShadow = true; g.add(body);
@@ -2820,7 +2790,7 @@ function makeSettlement(color) {
 
 function makeCity(color) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness:0.6, metalness:0.05 });
+  const mat = new THREE.MeshStandardMaterial({ color, roughness:0.6, metalness:0.05, emissive:new THREE.Color(color), emissiveIntensity:0.38 });
   const darkMat = new THREE.MeshStandardMaterial({ color:0x222233, roughness:0.7 });
   const winMat = new THREE.MeshStandardMaterial({ color:0xffeeaa, emissive:0xffcc44, emissiveIntensity:0.5, roughness:0.3, metalness:0 });
 
@@ -2847,7 +2817,7 @@ function makeRoad(v1, v2, color, roadY) {
   const dx=v2.x-v1.x, dz=v2.z-v1.z;
   const len = Math.sqrt(dx*dx+dz*dz);
   const geo = new THREE.BoxGeometry(len*0.88, 0.08, 0.18);
-  const mat = new THREE.MeshStandardMaterial({ color, map: cobbleTex, roughness:0.85, metalness:0.02 });
+  const mat = new THREE.MeshStandardMaterial({ color, map: cobbleTex, roughness:0.85, metalness:0.02, emissive:new THREE.Color(color), emissiveIntensity:0.38 });
   const m = new THREE.Mesh(geo, mat);
   const y = roadY ?? (HEX_H / 2 + 0.05);
   m.position.set((v1.x+v2.x)/2, y, (v1.z+v2.z)/2);
@@ -4967,9 +4937,8 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
           renderer.shadowMap.enabled = v > 0.5;
           scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
         } else if (type === 'outlines') {
-          // Backface shells are always on; toggle visibility of each shell mesh
-          const on = v > 0.5;
-          buildGroup.traverse(c => { if (c.userData._isOutlineShell) c.visible = on; });
+          const intensity = v > 0.5 ? 0.38 : 0;
+          buildGroup.traverse(c => { if (c.material?.emissive) c.material.emissiveIntensity = intensity; });
         } else if (type === 'pixelRatio') {
           renderer.setPixelRatio(v);
           renderer.setSize(renderer.domElement.clientWidth, renderer.domElement.clientHeight, false);
