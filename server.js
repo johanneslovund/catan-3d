@@ -18,7 +18,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
     if (/\.(mp3|aac|wav|ogg|png|jpg|jpeg|webp|glb|gltf)$/i.test(filePath)) {
       res.setHeader('Cache-Control', 'public, max-age=86400');
     } else if (/\.(js|css)$/i.test(filePath)) {
-      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     }
   }
 }));
