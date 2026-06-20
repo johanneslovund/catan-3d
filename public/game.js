@@ -2778,7 +2778,7 @@ function addBackfaceOutline(obj, colorHexVal, isRoad) {
   const color = new THREE.Color(colorHexVal);
 
   obj.traverse(child => {
-    if (!child.isMesh) return;
+    if (!child.isMesh || child.userData._isOutlineShell) return;
     // Inner shell — solid colored rim
     const inner = new THREE.Mesh(child.geometry, new THREE.MeshBasicMaterial({
       color,
