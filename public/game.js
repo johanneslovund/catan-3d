@@ -180,9 +180,9 @@ const WATER_PARAMS = {
 const BOB_PARAMS = { enabled: true, amp: 0.02, speed: 0.70 };
 const WATER_SPRITE_PARAMS = { amount: 5.0, size: 0.04, opacity: 1.00 };
 const LIGHT_PARAMS = {
-  timeOfDay: 0.76, sunIntensity: 2.60, ambIntensity: 0.80,
-  fillIntensity: 0.50, exposure: 1.00, fogDensity: 0.018, bloomStr: 0.30, bloomRadius: 0.0,
-  saturation: 1.30, brightness: 0.0, contrast: 1.0, hue: 0.0, warmth: 0.03,
+  timeOfDay: 0.76, sunIntensity: 1.70, ambIntensity: 0.65,
+  fillIntensity: 0.38, exposure: 0.88, fogDensity: 0.018, bloomStr: 0.30, bloomRadius: 0.0,
+  saturation: 1.10, brightness: 0.0, contrast: 1.05, hue: 0.0, warmth: 0.03,
 };
 
 // Per-type cloud params (used by renderBoard to place clouds over mountain hexes)
@@ -300,7 +300,7 @@ const _steamCircleTex = (() => {
 
 const ROBBER_PARAMS = {
   animSpeed:  0.75,
-  scale:      0.50,
+  scale:      1.20,
   emissive:   0.0,
   roughness:  0.94,
   metalness: -1.0,
@@ -342,10 +342,9 @@ controls.maxDistance = 22;
 controls.maxPolarAngle = Math.PI / 2.15;
 controls.target.set(0, 0, 0);
 
-// Disable outline passes and bloom while camera is moving; restore 400ms after motion stops
+// Disable bloom and port outlines while camera is moving; restore 400ms after motion stops
 let _outlineRestoreTimer = null;
 controls.addEventListener('start', () => {
-  _outlinePasses.forEach(o => { o.pass.enabled = false; });
   _portOutlinePass.enabled = false;
   if (!_isMobile) bloom.enabled = false;
   if (_outlineRestoreTimer) { clearTimeout(_outlineRestoreTimer); _outlineRestoreTimer = null; }
@@ -354,7 +353,6 @@ controls.addEventListener('end', () => {
   if (_outlineRestoreTimer) clearTimeout(_outlineRestoreTimer);
   _outlineRestoreTimer = setTimeout(() => {
     if (!_isMobile && !_is2D) {
-      _outlinePasses.forEach(o => { o.pass.enabled = o.pass.selectedObjects.length > 0; });
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
       bloom.enabled = true;
     }
@@ -387,24 +385,112 @@ ground.position.set(0, -4, 0);
 scene.add(ground);
 
 // ── Post-processing ──
-const composer = new EffectComposer(renderer);
+// Custom render target with stencil buffer so outline stencil masking works
+const _composerRT = new THREE.WebGLRenderTarget(
+  window.innerWidth, window.innerHeight,
+  { stencilBuffer: true, depthBuffer: true, samples: _isMobile ? 0 : 2 }
+);
+const composer = new EffectComposer(renderer, _composerRT);
+renderer.autoClearStencil = true;
 composer.addPass(new RenderPass(scene, camera));
 
-// One OutlinePass per player color — disabled when empty or during camera movement
-const _PIECE_COLORS = ['#e74c3c', '#3498db', '#ffffff', '#2ecc71'];
-const _outlinePasses = _PIECE_COLORS.map(col => {
-  const pass = new OutlinePass(new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera);
-  pass.edgeStrength  = 6.0;
-  pass.edgeGlow      = 0.5;
-  pass.edgeThickness = 1.5;
-  pass.pulsePeriod   = 0;
-  pass.visibleEdgeColor.set(col);
-  pass.hiddenEdgeColor.set('#000000');
-  pass.selectedObjects = [];
-  pass.enabled = false;
-  composer.addPass(pass);
-  return { pass, color: col };
-});
+let _outlineEnabled = true;
+const _OUTLINE_PARAMS = { thickness: 0.30 * 0.02, opacity: 0.10, glowSize: 1.8, glowOpacity: 0.05 };
+
+// ── Stencil-masked additive outline ──────────────────────────────────────────
+// Buildings write stencil=1 during normal render.
+// Outline meshes (normal-extruded, FrontSide) only draw where stencil != 1,
+// so glow appears ONLY outside the model silhouette.
+const _STENCIL_REF = 1;
+
+const _OUTLINE_VERT = `
+  uniform float uThickness;
+  void main() {
+    vec3 nrm = normalize(normalMatrix * normal);
+    vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+    mvPos.xyz += nrm * uThickness;
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+function _makeStencilOutlineMat(colorHex, thickness, opacity) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uThickness: { value: thickness },
+      uColor:     { value: new THREE.Color(colorHex) },
+      uOpacity:   { value: opacity },
+    },
+    vertexShader: _OUTLINE_VERT,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      void main() { gl_FragColor = vec4(uColor * 1.8, uOpacity); }
+    `,
+    side:        THREE.FrontSide,
+    transparent: true,
+    depthWrite:  false,
+    blending:    THREE.AdditiveBlending,
+    stencilWrite: false,
+    stencilRef:   _STENCIL_REF,
+    stencilFunc:  THREE.NotEqualStencilFunc,
+    stencilFail:  THREE.KeepStencilOp,
+    stencilZFail: THREE.KeepStencilOp,
+    stencilZPass: THREE.KeepStencilOp,
+  });
+}
+
+function _enableStencilWrite(material) {
+  material.stencilWrite = true;
+  material.stencilRef   = _STENCIL_REF;
+  material.stencilFunc  = THREE.AlwaysStencilFunc;
+  material.stencilZPass = THREE.ReplaceStencilOp;
+}
+
+function addStencilOutline(obj, colorHex) {
+  if (!_outlineEnabled || _isMobile) return;
+  const t = _OUTLINE_PARAMS.thickness;
+  const matRim  = _makeStencilOutlineMat(colorHex, t, _OUTLINE_PARAMS.opacity);
+  const matGlow = _makeStencilOutlineMat(colorHex, t * _OUTLINE_PARAMS.glowSize, _OUTLINE_PARAMS.glowOpacity);
+
+  const pairs = [];
+  obj.traverse(child => {
+    if (!child.isMesh || child.userData._isOutlineMesh) return;
+    // Enable stencil writes on this mesh's materials
+    const mats = Array.isArray(child.material) ? child.material : [child.material];
+    mats.forEach(_enableStencilWrite);
+    pairs.push({ mesh: child, parent: child.parent || obj });
+  });
+
+  pairs.forEach(({ mesh, parent }) => {
+    const addOutline = (mat) => {
+      const o = new THREE.Mesh(mesh.geometry, mat);
+      o.userData._isOutlineMesh = true;
+      o.renderOrder = (mesh.renderOrder || 0) + 2;
+      if (parent !== mesh) {
+        o.position.copy(mesh.position);
+        o.rotation.copy(mesh.rotation);
+        o.scale.copy(mesh.scale);
+      }
+      parent.add(o);
+    };
+    addOutline(matRim);
+    if (_OUTLINE_PARAMS.glowOpacity > 0) addOutline(matGlow);
+  });
+}
+
+function rebuildPortOutlines() {
+  if (!boardGroup) return;
+  boardGroup.traverse(obj => {
+    const col = obj.userData._portOutlineColor;
+    if (!col) return;
+    // Remove existing outline meshes
+    const toRemove = [];
+    obj.traverse(c => { if (c.userData._isOutlineMesh) toRemove.push(c); });
+    toRemove.forEach(c => c.parent?.remove(c));
+    // Re-add with current params
+    addStencilOutline(obj, col);
+  });
+}
 
 // Single outline pass for all 3D port icon objects (white glow)
 const _PORT_OUTLINE_COLORS = {
@@ -425,10 +511,11 @@ _portOutlinePass.pulsePeriod   = 0;
 _portOutlinePass.visibleEdgeColor.set('#ffffff');
 _portOutlinePass.hiddenEdgeColor.set('#ffffff');
 _portOutlinePass.selectedObjects = [];
-if (_isMobile) _portOutlinePass.enabled = false;
-composer.addPass(_portOutlinePass);
+_portOutlinePass.enabled = false; // replaced by stencil outlines on port icons
 // Keep _portOutlinePasses as a shim so existing callers work unchanged
 const _portOutlinePasses = [{ pass: _portOutlinePass, type: '_all' }];
+
+
 
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LIGHT_PARAMS.bloomStr, 0.5, 0.85);
 if (_isMobile) bloom.enabled = false;
@@ -616,7 +703,7 @@ const tokenIntro = {
   active: false, t: 0,
   scheduled: [],  // { hexId, startT, tokenMeshes, baseYs, tileMeshes, landed }
   landings: [],   // { tileMeshes, baseYs, t }
-  done: false,
+  done: true,     // true by default so robber shows on page refresh; set to false during intro
 };
 const robberDropIntro = { active: false, t: 0, duration: 0.7, targetY: 0 };
 const debrisParticles = []; // { mesh, vx, vy, vz, t, lifetime }
@@ -1070,7 +1157,7 @@ async function tryLoadModel(name, filename) {
   const file = filename || name;
   return new Promise(resolve => {
     gltfLoader.load(
-      `models/${file}.glb`,
+      `models/${file}.glb?v=14`,
       gltf => {
         const scene = gltf.scene;
         scene.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
@@ -1116,7 +1203,6 @@ function cloneModel(name, colorHexVal) {
         const tinted = mats.map(m => {
           const nm = m.clone();
           nm.color.setHex(colorHexVal);
-          // Apply building color tint intensity
           if (SCENE_PARAMS.buildingColorTint !== undefined && SCENE_PARAMS.buildingColorTint < 1) {
             nm.color.lerp(new THREE.Color(0x888888), 1 - SCENE_PARAMS.buildingColorTint);
           }
@@ -2143,6 +2229,8 @@ function renderBoard(state) {
         resObj.castShadow = true;
       }
       iconGroup.add(resObj);
+      resObj.userData._portOutlineColor = '#ffffff';
+      addStencilOutline(resObj, '#ffffff');
 
       // 2:1 text fixed in portGroup — textY is independent, not relative to iconY
       makeOutlineText('2:1', 0.16, 0.05, 0xffffff, 0xffffff, textScale, textY);
@@ -2605,32 +2693,6 @@ function applyLightParams() {
   saturationPass.uniforms.uWarmth.value     = LIGHT_PARAMS.warmth;
 }
 
-function updateOutlinePasses(state) {
-  if (!state) {
-    _outlinePasses.forEach(o => { o.pass.selectedObjects = []; o.pass.enabled = false; });
-    return;
-  }
-  const colorMap = {};
-  _PIECE_COLORS.forEach(c => { colorMap[c] = []; });
-  buildGroup.children.forEach(obj => {
-    const pid = obj.userData.buildingPlayerId;
-    if (pid) {
-      const p = state.players.find(pl => pl.id === pid);
-      if (p && colorMap[p.color] !== undefined) colorMap[p.color].push(obj);
-      return;
-    }
-    const eid = obj.userData.edgeId;
-    if (eid !== undefined && state.board?.edges[eid]?.road) {
-      const p = state.players.find(pl => pl.id === state.board.edges[eid].road.playerId);
-      if (p && colorMap[p.color] !== undefined) colorMap[p.color].push(obj);
-    }
-  });
-  _outlinePasses.forEach(o => {
-    const objs = colorMap[o.color] || [];
-    o.pass.selectedObjects = objs;
-    o.pass.enabled = !_isMobile && !_is2D && objs.length > 0;
-  });
-}
 
 // ─── Building rendering ───────────────────────────────────────────────────────
 function renderBuildings(state) {
@@ -2670,6 +2732,7 @@ function renderBuildings(state) {
       c.userData.vertexId = v.id;
       c.renderOrder = 2;
     });
+    addStencilOutline(mesh, col);
     buildGroup.add(mesh);
   });
 
@@ -2695,6 +2758,7 @@ function renderBuildings(state) {
     road.userData.edgeId = e.id;
     road.renderOrder = 1;
     road.traverse(c => { c.userData.edgeId = e.id; c.renderOrder = 1; });
+    addStencilOutline(road, col);
     buildGroup.add(road);
   });
 
@@ -2702,8 +2766,6 @@ function renderBuildings(state) {
   _mySettlements = buildGroup.children.filter(
     m => m.userData.buildingType === 'settlement' && m.userData.buildingPlayerId === myId
   );
-
-  updateOutlinePasses(state);
 
   // Robber lives in robberGroup (persists across renderBuildings for movement animation)
   // Only rebuild when not mid-movement
@@ -2996,8 +3058,8 @@ function enterBuildMode(mode) {
 
   document.getElementById('buildMode').style.display='block';
   document.getElementById('buildMode').innerHTML =
-    mode==='settlement' ? '<img src="Icons/Tower Icon.png" class="piece-icon" alt="tower"> Click a yellow spot to place tower' :
-    mode==='city'       ? '<img src="Icons/Castle Icon.png" class="piece-icon" alt="castle"> Click a yellow spot to upgrade to castle' :
+    mode==='settlement' ? '<img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="tower"> Click a yellow spot to place tower' :
+    mode==='city'       ? '<img src="Icons/Castle Icon.png?v=14" class="piece-icon" alt="castle"> Click a yellow spot to upgrade to castle' :
     mode==='road'       ? '<img src="images/Road icon.png" class="piece-icon" alt="road"> Click a yellow edge to place road' :
                           '💀 Click a tile to move the robber';
   document.getElementById('btnCancel').style.display='block';
@@ -3103,7 +3165,7 @@ renderer.domElement.addEventListener('click', e => {
       passiveRoadMarkers   = false;
       buildMode = 'settlement';
       document.getElementById('buildMode').style.display = 'block';
-      document.getElementById('buildMode').innerHTML = '<img src="Icons/Tower Icon.png" class="piece-icon" alt="tower"> Click a yellow spot to place tower';
+      document.getElementById('buildMode').innerHTML = '<img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="tower"> Click a yellow spot to place tower';
       document.getElementById('btnCancel').style.display = 'block';
       showBuildConfirm('Place tower here?', () => {
         socket.emit('placeSettlement', { vertexId: vid }); addTimerBonus(15);
@@ -3203,6 +3265,17 @@ renderer.domElement.addEventListener('click', e => {
 });
 
 // ─── UI ───────────────────────────────────────────────────────────────────────
+function _cardIconSrc(count) {
+  if (count >= 12) return 'Icons/card-icon-3x.png';
+  if (count >= 5)  return 'Icons/card-icon-2x.png';
+  return 'Icons/card-icon-1x.png';
+}
+function _cardIconSrcTier(tier) {
+  if (tier >= 3) return 'Icons/card-icon-3x.png';
+  if (tier >= 2) return 'Icons/card-icon-2x.png';
+  return 'Icons/card-icon-1x.png';
+}
+
 const RES_INFO = {
   wood:  { icon:'🪵', label:'Wood'  },
   sheep: { icon:'🐑', label:'Sheep' },
@@ -3445,19 +3518,23 @@ function colorTextClass(hexColor) {
 function updateMobileBank(state) {
   const el = document.getElementById('mobileBankBar');
   if (!el) return;
-  const buildHtml = (r, icon) => {
-    let count = '?', low = false;
+  const buildHtml = (r, info) => {
+    let countTxt = '?', low = false, imgSrc = 'Icons/card-icon-1x.png';
     if (state.bankStockTiers) {
       const tier = state.bankStockTiers[r] ?? 0;
-      count = tier === 0 ? '✕' : tier === 1 ? '≤8' : tier === 2 ? '≤14' : '15+';
       low = tier <= 1;
+      countTxt = tier === 0 ? '✕' : tier === 1 ? '≤8' : tier === 2 ? '≤14' : '15+';
+      imgSrc = tier === 0 ? null : _cardIconSrcTier(tier);
     } else if (state.bankStock) {
-      count = state.bankStock[r] ?? 0;
-      low = count <= 3;
+      const n = state.bankStock[r] ?? 0;
+      low = n <= 3;
+      countTxt = n;
+      imgSrc = n === 0 ? null : _cardIconSrc(n);
     }
-    return `<div class="bank-chip${low?' bank-chip-low':''}"><span class="bc-icon">${icon}</span><span class="bc-count">${count}</span></div>`;
+    const stackImg = imgSrc ? `<img src="${imgSrc}" class="bc-stack-img" alt="">` : `<span class="bc-empty">✕</span>`;
+    return `<div class="bank-chip${low?' bank-chip-low':''}"><span class="bc-icon">${info.icon}</span>${stackImg}<span class="bc-count">${countTxt}</span></div>`;
   };
-  el.innerHTML = Object.entries(RES_INFO).map(([r,{icon}]) => buildHtml(r, icon)).join('');
+  el.innerHTML = Object.entries(RES_INFO).map(([r, info]) => buildHtml(r, info)).join('');
 }
 
 function updateMobilePlayerCards(state) {
@@ -3481,12 +3558,12 @@ function updateMobilePlayerCards(state) {
         ${p.id===state.largestArmyPlayer?'<span title="Largest Army" style="font-size:.6rem">⚔</span>':''}
       </div>
       <div class="mob-card-res">
-        <span class="mob-card-res-count">${totalRes}</span><img src="Icons/Dev card icon.png" class="piece-icon" alt="card">
+        <span class="mob-card-res-count">${totalRes}</span><img src="Icons/Dev card icon.png?v=14" class="piece-icon" alt="card">
         ${devCount>0?`<span style="margin-left:3px">${devCount}</span>📜`:''}
       </div>
       <div class="mob-card-bld">
-        <span><img src="Icons/Tower Icon.png" class="piece-icon" alt="tower">${p.settlements||0}</span>
-        <span><img src="Icons/Castle Icon.png" class="piece-icon" alt="castle">${p.cities||0}</span>
+        <span><img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="tower">${p.settlements||0}</span>
+        <span><img src="Icons/Castle Icon.png?v=14" class="piece-icon" alt="castle">${p.cities||0}</span>
         <span>🛣${p.roads||0}</span>
       </div>`;
     el.appendChild(card);
@@ -3507,19 +3584,22 @@ function updateBank(state) {
   if (!el) return;
 
   if (state.bankStockTiers) {
-    // Hidden mode — show stack icons (🂠 = card back representation)
+    // Hidden mode — show card stack icons by tier
     el.innerHTML = Object.entries(RES_INFO).map(([r,{icon}]) => {
       const tier = state.bankStockTiers[r] ?? 0;
-      const stacks = '🂠'.repeat(tier) || '✕';
       const label = tier === 0 ? 'empty' : tier === 1 ? '1–8' : tier === 2 ? '9–14' : '15+';
-      return `<div class="bank-chip${tier<=1?' bank-chip-low':''}"><span class="bc-icon">${icon}</span><span class="bc-count" title="${label}">${stacks}</span></div>`;
+      const imgSrc = tier > 0 ? _cardIconSrcTier(tier) : null;
+      const stackImg = imgSrc ? `<img src="${imgSrc}" class="bc-stack-img" alt="">` : `<span class="bc-empty">✕</span>`;
+      return `<div class="bank-chip${tier<=1?' bank-chip-low':''}"><span class="bc-icon">${icon}</span>${stackImg}<span class="bc-count" title="${label}">${label}</span></div>`;
     }).join('');
   } else if (state.bankStock) {
     // Exact mode
     el.innerHTML = Object.entries(RES_INFO).map(([r,{icon}]) => {
       const inBank = state.bankStock[r] ?? 0;
       const low = inBank <= 3;
-      return `<div class="bank-chip${low?' bank-chip-low':''}"><span class="bc-icon">${icon}</span><span class="bc-count">${inBank}</span></div>`;
+      const imgSrc = inBank > 0 ? _cardIconSrc(inBank) : null;
+      const stackImg = imgSrc ? `<img src="${imgSrc}" class="bc-stack-img" alt="">` : `<span class="bc-empty">✕</span>`;
+      return `<div class="bank-chip${low?' bank-chip-low':''}"><span class="bc-icon">${icon}</span>${stackImg}<span class="bc-count">${inBank}</span></div>`;
     }).join('');
   } else {
     // Fallback: derive from player totals (old path)
@@ -3530,7 +3610,9 @@ function updateBank(state) {
     el.innerHTML = Object.entries(RES_INFO).map(([r,{icon}]) => {
       const inBank = Math.max(0, 19 - (totals[r]||0));
       const low = inBank <= 3;
-      return `<div class="bank-chip${low?' bank-chip-low':''}"><span class="bc-icon">${icon}</span><span class="bc-count">${inBank}</span></div>`;
+      const imgSrc = inBank > 0 ? _cardIconSrc(inBank) : null;
+      const stackImg = imgSrc ? `<img src="${imgSrc}" class="bc-stack-img" alt="">` : `<span class="bc-empty">✕</span>`;
+      return `<div class="bank-chip${low?' bank-chip-low':''}"><span class="bc-icon">${icon}</span>${stackImg}<span class="bc-count">${inBank}</span></div>`;
     }).join('');
   }
 }
@@ -3562,9 +3644,9 @@ function updatePlayersList(state) {
         <div class="cpr-cards">${resChips}${devChips}</div>
       </div>
       <div class="cpr-bld">
-        <div class="cpr-hand-count" title="${totalRes} resource cards">${totalRes}<span class="cpr-hand-icon"><img src="Icons/Dev card icon.png" class="piece-icon" alt="card"></span></div>
-        <div class="bld-item"><img src="Icons/Tower Icon.png" class="piece-icon" alt="tower"> ${p.settlements||0}</div>
-        <div class="bld-item"><img src="Icons/Castle Icon.png" class="piece-icon" alt="castle"> ${p.cities||0}</div>
+        <div class="cpr-hand-count" title="${totalRes} resource cards">${totalRes}<span class="cpr-hand-icon"><img src="Icons/Dev card icon.png?v=14" class="piece-icon" alt="card"></span></div>
+        <div class="bld-item"><img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="tower"> ${p.settlements||0}</div>
+        <div class="bld-item"><img src="Icons/Castle Icon.png?v=14" class="piece-icon" alt="castle"> ${p.cities||0}</div>
         <div class="bld-item">🛣 ${p.roads||0}</div>
       </div>`;
     r.querySelector('.cpr-avatar').addEventListener('click', e => {
@@ -3591,7 +3673,7 @@ function showStealPicker(victims, onPick, markerMesh) {
     const devCount = (p.devCards||[]).filter(c=>!c.played&&c.type!=='vp'&&c.type!=='hidden').length;
     const stats = `<span style="margin-left:auto;display:flex;gap:10px;font-size:.78rem;color:rgba(255,255,255,0.55);">
       <span title="Victory Points">⭐ ${p.vp}</span>
-      <span title="Resource cards"><img src="Icons/Dev card icon.png" class="piece-icon" alt="card"> ${totalRes}</span>
+      <span title="Resource cards"><img src="Icons/Dev card icon.png?v=14" class="piece-icon" alt="card"> ${totalRes}</span>
       <span title="Dev cards">📜 ${devCount}</span>
     </span>`;
     btn.innerHTML = `${dot}<span>${escapeHtml(p.name)}</span>${stats}`;
@@ -3672,8 +3754,8 @@ function updatePieces(state, me) {
   const citiesLeft = 4 - citiesUsed;
   el.innerHTML = `
     <div class="piece-chip">🛣 <span>${roadsLeft}</span></div>
-    <div class="piece-chip"><img src="Icons/Tower Icon.png" class="piece-icon" alt="tower"> <span>${settlesLeft}</span></div>
-    <div class="piece-chip"><img src="Icons/Castle Icon.png" class="piece-icon" alt="castle"> <span>${citiesLeft}</span></div>`;
+    <div class="piece-chip"><img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="tower"> <span>${settlesLeft}</span></div>
+    <div class="piece-chip"><img src="Icons/Castle Icon.png?v=14" class="piece-icon" alt="castle"> <span>${citiesLeft}</span></div>`;
 }
 
 // ─── Card collection animation ────────────────────────────────────────────────
@@ -4934,10 +5016,7 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         if (gameState) renderBuildings(gameState);
         return;
       } else if (param === 'outline') {
-        if (type === 'thickness') _outlinePasses.forEach(o => { o.pass.edgeThickness = v; });
-        else if (type === 'glow') _outlinePasses.forEach(o => { o.pass.edgeGlow = v; });
-        else if (type === 'strength') _outlinePasses.forEach(o => { o.pass.edgeStrength = v; });
-        return;
+        return; // outline params no longer used (normal-extrusion shader)
       } else if (param === 'building') {
         if (type === 'colorTint') SCENE_PARAMS.buildingColorTint = v;
         else if (type === 'colorSaturation') SCENE_PARAMS.buildingColorSaturation = v;
@@ -4981,8 +5060,21 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
           renderer.shadowMap.enabled = v > 0.5;
           scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
         } else if (type === 'outlines') {
-          const on = v > 0.5;
-          _outlinePasses.forEach(o => { o.pass.enabled = on && !_isMobile && !_is2D && o.pass.selectedObjects.length > 0; });
+          _outlineEnabled = v > 0.5;
+          if (gameState) renderBuildings(gameState);
+          rebuildPortOutlines();
+        } else if (type === 'outlineOpacity') {
+          _OUTLINE_PARAMS.opacity = v;
+          if (gameState) renderBuildings(gameState);
+          rebuildPortOutlines();
+        } else if (type === 'outlineGlow') {
+          _OUTLINE_PARAMS.glowOpacity = v;
+          if (gameState) renderBuildings(gameState);
+          rebuildPortOutlines();
+        } else if (type === 'outlineThick') {
+          _OUTLINE_PARAMS.thickness = v * 0.02; // slider 0–2 → thickness 0–0.04
+          if (gameState) renderBuildings(gameState);
+          rebuildPortOutlines();
         } else if (type === 'pixelRatio') {
           renderer.setPixelRatio(v);
           renderer.setSize(renderer.domElement.clientWidth, renderer.domElement.clientHeight, false);
@@ -5727,7 +5819,7 @@ document.getElementById('btnMicToggle').addEventListener('click', async () => {
 });
 
 // ─── Music player ────────────────────────────────────────────────────────────
-AUDIO.musicVolume = 0.01;
+AUDIO.musicVolume = _isMobile ? 0.002 : 0.01;
 AUDIO.musicMuted  = false;
 {
   const TRACKS = [
@@ -5914,8 +6006,8 @@ function resize() {
   renderer.setSize(w, h);
   composer.setSize(w, h);
   bloom.resolution.set(w, h);
-  _outlinePasses.forEach(o => o.pass.resolution.set(w, h));
   _portOutlinePass.resolution.set(w, h);
+  _composerRT.setSize(w * renderer.getPixelRatio(), h * renderer.getPixelRatio());
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -6996,6 +7088,8 @@ function animate() {
 
 const _robberImg2D = new Image();
 _robberImg2D.src = 'images/Robber.png';
+const _2dTowerImg  = new Image(); _2dTowerImg.src  = 'Icons/Tower Icon.png?v=15';
+const _2dCastleImg = new Image(); _2dCastleImg.src = 'Icons/Castle Icon.png?v=15';
 
 const _overlay2d    = document.getElementById('overlay2d');
 const _overlayCtx   = _overlay2d.getContext('2d');
@@ -7118,16 +7212,13 @@ function _draw2DBoard() {
     ctx.closePath();
   }
 
-  // Solid ocean background — blocks 3D scene bleed-through
-  ctx.globalAlpha = 1.0;
-  ctx.fillStyle = '#1a6fa8';
-  ctx.fillRect(0, 0, W, H);
-
-  // Draw water/port hexes first, then land hexes on top, at 50% opacity for the colonist style
+  // No ocean background — let 3D scene show through
+  // Draw land hexes only (skip water tiles), at 50% opacity
   const sorted = [...gameState.board.hexes].sort((a,b) => (a.type==='water'?-1:1));
 
   ctx.globalAlpha = 0.50;
   sorted.forEach(hex => {
+    if (hex.type === 'water') return; // skip water tiles — 3D ocean visible underneath
     const pts = _hexPts(hex);
 
     // Flat color fill — no texture
@@ -7263,47 +7354,36 @@ function _draw2DBoard() {
     });
   }
 
-  // Simplified 2D building shapes
+  // Buildings — PNG icons tinted to player color
   if (gameState.board.vertices) {
     gameState.board.vertices.forEach(v => {
       if (!v.building) return;
       const [px, py] = _w2c(v.x, v.z);
       const col = _pidColor[v.building.playerId] || '#e74c3c';
       const isCity = v.building.type === 'city';
-      const s = hexPxR * (isCity ? 0.30 : 0.22);
+      const s = hexPxR * (isCity ? 0.38 : 0.30);
+      const img = isCity ? _2dCastleImg : _2dTowerImg;
 
       ctx.save();
-      // Drop shadow
-      ctx.shadowColor = 'rgba(0,0,0,0.55)';
-      ctx.shadowBlur = s * 0.6;
-      ctx.shadowOffsetY = s * 0.2;
+      ctx.shadowColor = 'rgba(0,0,0,0.7)';
+      ctx.shadowBlur = s * 0.5;
+      ctx.shadowOffsetY = s * 0.15;
 
-      if (isCity) {
-        // City: larger filled square with notch (castle silhouette)
-        ctx.fillStyle = col;
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = Math.max(1.5, s * 0.18);
-        // Main body
-        ctx.beginPath();
-        ctx.rect(px - s, py - s * 0.7, s * 2, s * 1.4);
-        ctx.fill(); ctx.stroke();
-        // Two battlements on top
-        ctx.fillStyle = col;
-        ctx.beginPath(); ctx.rect(px - s, py - s * 1.2, s * 0.7, s * 0.55); ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.rect(px + s * 0.3, py - s * 1.2, s * 0.7, s * 0.55); ctx.fill(); ctx.stroke();
+      // Tint: draw colored square behind, then icon on top with multiply-style tint
+      if (img.complete && img.naturalWidth) {
+        // Draw tinted background circle
+        ctx.beginPath(); ctx.arc(px, py, s * 0.7, 0, Math.PI * 2);
+        ctx.fillStyle = col; ctx.globalAlpha = 0.85; ctx.fill();
+        ctx.globalAlpha = 1.0;
+        ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+        // Tower is 50% narrower (portrait), castle is square
+        const iw = isCity ? s * 1.2 : s * 1.0;
+        ctx.drawImage(img, px - iw / 2, py - s, iw, s * 2);
       } else {
-        // Settlement: pentagon (house shape)
-        ctx.fillStyle = col;
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = Math.max(1.5, s * 0.18);
-        ctx.beginPath();
-        ctx.moveTo(px,       py - s * 1.1);  // roof peak
-        ctx.lineTo(px + s,   py - s * 0.2);  // roof right
-        ctx.lineTo(px + s,   py + s * 0.8);  // base right
-        ctx.lineTo(px - s,   py + s * 0.8);  // base left
-        ctx.lineTo(px - s,   py - s * 0.2);  // roof left
-        ctx.closePath();
-        ctx.fill(); ctx.stroke();
+        // Fallback: colored dot
+        ctx.beginPath(); ctx.arc(px, py, s, 0, Math.PI * 2);
+        ctx.fillStyle = col; ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, s * 0.15); ctx.stroke();
       }
       ctx.restore();
     });
@@ -7374,8 +7454,8 @@ function _draw2DBoard() {
     }
   }
 
-  // Punch a transparent hole where the 3D dice are so they show through the canvas
-  if (typeof diceAnim !== 'undefined' && diceGroup.visible) {
+  // Punch a transparent hole where the 3D dice are — only while actively rolling, not after settled
+  if (typeof diceAnim !== 'undefined' && diceGroup.visible && diceAnim.active && !diceAnim.settled) {
     ctx.save();
     ctx.globalCompositeOperation = 'destination-out';
     [die1, die2].forEach(die => {
@@ -7467,7 +7547,6 @@ function toggle2D() {
     controls.update();
 
     _set2DVisibility(false);
-    _outlinePasses.forEach(o => { o.pass.enabled = false; });
     _portOutlinePass.enabled = false;
     _resizeOverlay();
     _overlay2d.style.display = 'block';
@@ -7490,7 +7569,6 @@ function toggle2D() {
 
     _set2DVisibility(true);
     if (!_isMobile) {
-      _outlinePasses.forEach(o => { o.pass.enabled = o.pass.selectedObjects.length > 0; });
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
     }
     _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);

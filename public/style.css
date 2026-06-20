@@ -1006,6 +1006,8 @@ img.piece-icon {
 #bankResources { display: flex; gap: 6px; flex-wrap: wrap; }
 .bank-chip { display: flex; flex-direction: column; align-items: center; gap: 1px; }
 .bank-chip .bc-icon { font-size: .95rem; }
+.bank-chip .bc-stack-img { width: 22px; height: auto; display: block; }
+.bank-chip .bc-empty { font-size: .75rem; color: #f08080; }
 .bank-chip .bc-count { font-size: .68rem; font-weight: 700; color: var(--text); }
 .bank-chip-low .bc-count { color: #f08080; }
 .bank-chip-low { background: rgba(176,32,32,.15); border-radius: 5px; }
@@ -1294,6 +1296,7 @@ img.piece-icon {
     display: flex; align-items: center; gap: 2px; flex-direction: row; flex-shrink: 0;
   }
   #mobileBankBar .bc-icon { font-size: .9rem; line-height: 1; }
+  #mobileBankBar .bc-stack-img { width: 18px; height: auto; }
   #mobileBankBar .bc-count {
     font-size: .75rem; font-weight: 800; color: var(--text);
   }
