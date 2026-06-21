@@ -6354,14 +6354,15 @@ function animate() {
     const cp = Math.min(1, cameraIntro.t / cameraIntro.duration);
     const ce = cp * cp * (3 - 2 * cp); // smooth step (ease-in-out)
     camera.position.x = 0;
-    const _introEndY = _isMobile ? 22 : 16;
+    const _introEndY = _isMobile ? 18 : 14;
+    const _introEndZ = _isMobile ? 10 : 8;
     camera.position.y = 5.5 + ce * (_introEndY - 5.5);
-    camera.position.z = 13 + ce * (0.1 - 13);
+    camera.position.z = 13 + ce * (_introEndZ - 13);
     camera.lookAt(0, 0, 0);
     if (cp >= 1) {
       cameraIntro.active = false;
       controls.enabled = true;
-      camera.position.set(0, _introEndY, 0.1);
+      camera.position.set(0, _introEndY, _introEndZ);
       camera.up.set(0, 1, 0);
       controls.target.set(0, 0, 0);
       controls.update();
