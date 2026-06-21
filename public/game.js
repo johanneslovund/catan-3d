@@ -356,7 +356,7 @@ controls.addEventListener('end', () => {
   _outlineRestoreTimer = setTimeout(() => {
     if (!_isMobile && !_is2D) {
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
-      bloom.enabled = true;
+      bloom.enabled = bloom.strength > 0.05;
     }
   }, 400);
 });
@@ -390,7 +390,7 @@ scene.add(ground);
 // Custom render target with stencil buffer so outline stencil masking works
 const _composerRT = new THREE.WebGLRenderTarget(
   window.innerWidth, window.innerHeight,
-  { stencilBuffer: true, depthBuffer: true, samples: _isMobile ? 0 : 2 }
+  { stencilBuffer: true, depthBuffer: true, samples: 0 }
 );
 const composer = new EffectComposer(renderer, _composerRT);
 renderer.autoClearStencil = true;
@@ -6363,6 +6363,7 @@ function animate() {
       controls.target.set(0, 0, 0);
       controls.update();
       bloom.strength = 0.0;
+      bloom.enabled = false;
       const startUpSnd = new Audio('sound effects/Bjorn Lynne - Multimedia - Game Console Start Up.aac');
       startUpSnd.volume = sfxVol();
       startUpSnd.play().catch(() => {});
@@ -6560,7 +6561,6 @@ function animate() {
         ig.traverse(m => { if (m.isMesh) _risenPortMeshes.push(m); });
       });
       _portOutlinePass.selectedObjects = _risenPortMeshes;
-      _portOutlinePass.enabled = !_isMobile && _risenPortMeshes.length > 0;
     }
   }
 
