@@ -770,7 +770,7 @@ if (!_pageReady) {
     }
   }, { once: true });
 }
-const cameraIntro = { active: false, t: 0, duration: 5.0 };
+const cameraIntro = { active: false, pending: false, t: 0, duration: 5.0 };
 let _markerGlowTex = null;
 function markerGlowTex() {
   if (_markerGlowTex) return _markerGlowTex;
@@ -2504,8 +2504,8 @@ function startTileIntro(hexes) {
   cameraIntro.boardCX = _bcx;
   cameraIntro.boardCZ = _bcz;
 
-  // Set camera overhead; it stays here through tile/token/robber animations
-  camera.position.set(_bcx, 28, _bcz);
+  // Set camera to high-angle overview; stays here through tile/token/robber animations
+  camera.position.set(_bcx, 26, _bcz + 6);
   camera.up.set(0, 1, 0);
   controls.target.set(_bcx, 0, _bcz);
   controls.enableDamping = false;
@@ -6133,10 +6133,12 @@ function resize() {
   const w = Math.max(1, wrap ? wrap.clientWidth  : window.innerWidth);
   const h = Math.max(1, wrap ? wrap.clientHeight : window.innerHeight);
   renderer.setSize(w, h, false);
-  // composer.setSize already resizes _composerRT (renderTarget1) internally — don't resize it again
-  composer.setSize(w, h);
-  bloom.resolution.set(w, h);
-  _portOutlinePass.resolution.set(w, h);
+  const pr = renderer.getPixelRatio();
+  const pw = Math.round(w * pr), ph = Math.round(h * pr);
+  // Pass physical pixel dimensions so composer RT matches renderer output resolution
+  composer.setSize(pw, ph);
+  bloom.resolution.set(pw, ph);
+  _portOutlinePass.resolution.set(pw, ph);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -6236,7 +6238,7 @@ function animate() {
   const delta = clock.getDelta();
   t += delta;
 
-  if (!cameraIntro.active && !tileIntro.active && !tokenIntro.active && !robberDropIntro.active) controls.update();
+  if (!cameraIntro.active && !cameraIntro.pending && !tileIntro.active && !tokenIntro.active && !robberDropIntro.active) controls.update();
   _applyLOD(camera.position.distanceTo(controls.target));
 
   // Marker pulse + live Y offset per marker type
@@ -6428,12 +6430,14 @@ function animate() {
     if (fp >= 1) {
       robberDropIntro.active = false;
       robberAnim.mesh.position.y = robberDropIntro.targetY;
+      cameraIntro.pending = true; // block controls.update() during voice-over gap
       // Play random voice-over then start ports + camera
       const voFile = VO_FILES[Math.floor(Math.random() * VO_FILES.length)];
       const vo = new Audio('voice over/' + encodeURIComponent(voFile));
       vo.volume = 0.85;
       const afterVO = () => {
         boardGroup.userData.portRise = { t: 0, duration: 1.8 };
+        cameraIntro.pending = false;
         cameraIntro.active = true;
         cameraIntro.t = 0;
         setTimeout(() => {
@@ -6489,18 +6493,15 @@ function animate() {
     cameraIntro.t += delta;
     const cp = Math.min(1, cameraIntro.t / cameraIntro.duration);
     const ce = cp * cp * (3 - 2 * cp); // smooth step (ease-in-out)
-    // Start overhead, arc to angled view — guarantees board is centered at start
-    const _introStartY = 28, _introStartZ = 0;
+    // High angled start — NOT directly overhead to avoid gimbal lock with up=(0,1,0)
+    const _introStartY = 26, _introStartZ = 6;
     const _introEndY = _isMobile ? 20 : 17;
     const _introEndZ = _isMobile ? 13 : 11;
     const bcx = cameraIntro.boardCX ?? 0, bcz = cameraIntro.boardCZ ?? 0;
-    // Keep camera.up stable: tilt it forward as camera descends so there's no gimbal flip
     camera.up.set(0, 1, 0);
-    camera.position.set(
-      bcx,
-      _introStartY + ce * (_introEndY - _introStartY),
-      bcz + _introStartZ + ce * (_introEndZ - _introStartZ)
-    );
+    const py = _introStartY + ce * (_introEndY - _introStartY);
+    const pz = bcz + _introStartZ + ce * (_introEndZ - _introStartZ);
+    camera.position.set(bcx, py, pz);
     camera.lookAt(bcx, 0, bcz);
     if (cp >= 1) {
       cameraIntro.active = false;
