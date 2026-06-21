@@ -6361,7 +6361,7 @@ function animate() {
     if (cp >= 1) {
       cameraIntro.active = false;
       controls.enabled = true;
-      camera.position.set(0, _introEndY, 0);
+      camera.position.set(0, _introEndY, 0.1);
       camera.up.set(0, 1, 0);
       controls.target.set(0, 0, 0);
       controls.update();
