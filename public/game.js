@@ -1169,9 +1169,6 @@ async function tryLoadModel(name, filename) {
             c.castShadow = true; c.receiveShadow = true;
             c.geometry.computeBoundingSphere();
             c.userData._lodRadius = (c.geometry.boundingSphere?.radius ?? 1) * Math.max(c.scale.x, c.scale.y, c.scale.z);
-            // Reduce env map reflections on terrain models — subtle at game scale
-            const mats = Array.isArray(c.material) ? c.material : [c.material];
-            mats.forEach(m => { if (m.envMapIntensity !== undefined) m.envMapIntensity = 0.25; });
           }
         });
         GLTF_DATA[name] = gltf;  // keep full gltf for animation clips
@@ -1615,7 +1612,7 @@ function renderBoard(state) {
   const { hexes, vertices, edges, ports } = state.board;
 
   // Animated ocean — large plane surrounds the island
-  const oceanGeo = new THREE.PlaneGeometry(80, 80, 30, 30);
+  const oceanGeo = new THREE.PlaneGeometry(80, 80, 100, 100);
   oceanGeo.rotateX(-Math.PI / 2);
   const oceanMat = new THREE.ShaderMaterial({
     uniforms: {
@@ -1901,7 +1898,7 @@ function renderBoard(state) {
         color: new THREE.Color(TILE_BASE_COLORS[hex.type]).multiplyScalar(0.82),
         roughness: TILE_ROUGHNESS[hex.type] ?? 0.88,
         metalness: TILE_METALNESS[hex.type] ?? 0,
-        envMapIntensity: 0.15,
+        envMapIntensity: 0.4,
       });
       const mesh = new THREE.Mesh(geo, mat);
       const cylYOff = TILE_Y_OFFSET[hex.type] ?? 0;
@@ -1919,7 +1916,7 @@ function renderBoard(state) {
         color: new THREE.Color(TILE_BASE_COLORS[hex.type]).multiplyScalar(1.05),
         roughness: TILE_ROUGHNESS[hex.type] ?? 0.88,
         metalness: TILE_METALNESS[hex.type] ?? 0,
-        envMapIntensity: 0.15,
+        envMapIntensity: 0.5,
       });
       const top = new THREE.Mesh(topGeo, topMat);
       top.rotation.x = -Math.PI/2;
@@ -2025,7 +2022,7 @@ function renderBoard(state) {
         roughnessMap: tokenScratchTex(),
         roughness: SCENE_PARAMS.tokenRoughness ?? 0.18,
         metalness: SCENE_PARAMS.tokenMetalness ?? 0.92,
-        envMapIntensity: 0.6,
+        envMapIntensity: 2.5,
       });
       discMat.userData = { isTokenDisc: true };
       const disc = new THREE.Mesh(discGeo, discMat);
@@ -2055,7 +2052,7 @@ function renderBoard(state) {
           color: isRed ? SCENE_PARAMS.token3dRed : SCENE_PARAMS.token3dSilver,
           metalness: 0.90,
           roughness: isRed ? 0.22 : 0.10,
-          envMapIntensity: 0.6,
+          envMapIntensity: 3.0,
         });
         // For red tokens, center the number+pips group on the coin
         const pipR = HEX_R * 0.022;
@@ -2075,7 +2072,7 @@ function renderBoard(state) {
           color: SCENE_PARAMS.token3dRingColor,
           metalness: 0.95,
           roughness: 0.10,
-          envMapIntensity: 0.6,
+          envMapIntensity: 3.0,
         });
         const ringMesh = new THREE.Mesh(ringGeo, ringMat);
         ringMesh.rotation.x = Math.PI / 2;
@@ -2947,7 +2944,7 @@ function showVertexMarkers(ids, append = false) {
     const v = gameState.board.vertices[vid];
     const maxTop = HEX_H / 2;
     const geo = new THREE.SphereGeometry(0.09, 8, 8);
-    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:0.5, emissive:0xc8600a, emissiveIntensity:0.18, transparent: hideDuringIntro, opacity: hideDuringIntro ? 0 : 1 });
+    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18, transparent: hideDuringIntro, opacity: hideDuringIntro ? 0 : 1 });
     const m = new THREE.Mesh(geo, mat);
     m.userData = { type:'vertexMarker', vertexId:vid, markerType:'vertex', baseY: maxTop + 0.17 };
     const startYOff = hideDuringIntro ? -2.5 : 0;
@@ -2966,7 +2963,7 @@ function showEdgeMarkers(ids, append = false) {
     const dx=v2.x-v1.x, dz=v2.z-v1.z;
     const len = Math.sqrt(dx*dx+dz*dz);
     const geo = new THREE.BoxGeometry(len*0.62, 0.1, 0.2);
-    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:0.5, emissive:0xc8600a, emissiveIntensity:0.18 });
+    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18 });
     const m = new THREE.Mesh(geo, mat);
     const edgeBaseY = HEX_H/2 + 0.06;
     m.userData = { type:'edgeMarker', edgeId:eid, markerType:'edge', baseY: edgeBaseY };
