@@ -1166,7 +1166,13 @@ async function tryLoadModel(name, filename) {
       `models/${file}.glb?v=14`,
       gltf => {
         const scene = gltf.scene;
-        scene.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+        scene.traverse(c => {
+          if (c.isMesh) {
+            c.castShadow = true; c.receiveShadow = true;
+            c.geometry.computeBoundingSphere();
+            c.userData._lodRadius = (c.geometry.boundingSphere?.radius ?? 1) * Math.max(c.scale.x, c.scale.y, c.scale.z);
+          }
+        });
         GLTF_DATA[name] = gltf;  // keep full gltf for animation clips
         resolve(scene);
       },
@@ -1597,6 +1603,7 @@ function numberTokenTex(num) {
 // ─── Board rendering ──────────────────────────────────────────────────────────
 function renderBoard(state) {
   _shadowsDirty = true;
+  _lodLevel = -1;
   clearGroup(boardGroup);
   sheepList.length = 0;
   camelList.length = 0;
@@ -6072,6 +6079,25 @@ function _updateFPS() {
 let _shadowsDirty = true;
 let _skyDirty = true;
 let _bobFrame = 0;
+let _lodLevel = -1; // forces update on first frame; 0=near 1=mid 2=far
+
+function _applyLOD(dist) {
+  const level = dist < 8 ? 0 : dist < 15 ? 1 : 2;
+  if (level === _lodLevel) return;
+  _lodLevel = level;
+  // Small submeshes hidden at distance; large ones always visible
+  // _lodRadius < 0.2 = tiny detail (leaf, pebble etc)
+  // _lodRadius < 0.5 = medium detail (branch, rock chunk etc)
+  scene.traverse(obj => {
+    if (!obj.isMesh || obj.userData._lodRadius === undefined) return;
+    const r = obj.userData._lodRadius;
+    if (level === 0)      obj.visible = true;          // near: everything
+    else if (level === 1) obj.visible = r > 0.15;      // mid: skip tiny details
+    else                  obj.visible = r > 0.40;      // far: only big shapes
+  });
+  // Clouds are above/behind camera when zoomed in — only show at mid/far
+  if (scene.userData.cloudGroup) scene.userData.cloudGroup.visible = level >= 1;
+}
 let _fpsCapMs = 0; // 0 = uncapped; set via graphics settings
 let _fpsCapLast = 0;
 function animate() {
@@ -6085,6 +6111,7 @@ function animate() {
   t += delta;
 
   controls.update();
+  _applyLOD(camera.position.distanceTo(controls.target));
 
   // Marker pulse + live Y offset per marker type
   if (markerGroup.children.length === 0) { /* skip */ }
