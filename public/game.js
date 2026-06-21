@@ -178,9 +178,104 @@ const WATER_PARAMS = {
   waveSpeed: 1.30, waveAmp: 1.30, waveScale: 3.00, foamStr: 0.75, opacity: 0.80,
 };
 const BOB_PARAMS = { enabled: true, amp: 0.02, speed: 0.70 };
+
+// ─── i18n ─────────────────────────────────────────────────────────────────────
+let _lang = localStorage.getItem('ti_lang') || 'en';
+const STRINGS = {
+  en: {
+    // resources
+    wood: 'Wood', brick: 'Brick', sheep: 'Sheep', wheat: 'Wheat', ore: 'Ore',
+    // terrain
+    desert: 'Desert',
+    // pieces
+    robber: 'Robber', settlement: 'Tower', city: 'Castle', road: 'Road',
+    // ui
+    placeSettlement: 'Place tower here?',
+    upgradeCity: 'Upgrade to castle?',
+    buildRoad: 'Build road here?',
+    moveRobber: 'Move robber here?',
+    moveRobberBtn: 'Move Robber',
+    placeRobberBtn: 'Place Robber',
+    clickTileRobber: '💀 Click a tile to move the robber',
+    clickSpotSettlement: '<img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="tower"> Click a yellow spot to place tower',
+    // lobby
+    yourName: 'Your Name',
+    avatar: 'Avatar',
+    create: 'Create',
+    createRoom: 'Create Room',
+    joinByCode: 'Join by Code',
+    openLobbies: 'Open Lobbies',
+    noLobbies: 'No open lobbies right now.',
+    joinBtn: 'Join',
+    // waiting
+    waitingRoom: 'Waiting Room',
+    shareCode: 'Share this code:',
+    startGame: 'Start Game',
+    waitingForHost: 'Waiting for host to start…',
+    back: '← Back',
+    hideBankCards: 'Hide bank card counts',
+    privateLobby: 'Private lobby',
+    // build confirm
+    confirm: 'Confirm', cancel: 'Cancel',
+    // trade
+    tradeBank: 'Trade with Bank',
+    // dev cards
+    knightLabel: '⚔ Knight', knightDesc: 'Move the robber & steal 1 resource',
+  },
+  no: {
+    wood: 'Tre', brick: 'Leire', sheep: 'Saud', wheat: 'Kønnj', ore: 'Stein',
+    desert: 'Ørken',
+    robber: 'Tjuvradd', settlement: 'Tårn', city: 'Slott', road: 'Vei',
+    placeSettlement: 'Plasser tårn her?',
+    upgradeCity: 'Oppgrader til slott?',
+    buildRoad: 'Bygg vei her?',
+    moveRobber: 'Flytt tjuvradd hit?',
+    moveRobberBtn: 'Flytt Tjuvradd',
+    placeRobberBtn: 'Plasser Tjuvradd',
+    clickTileRobber: '💀 Klikk en flis for å flytte tjuvradden',
+    clickSpotSettlement: '<img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="tårn"> Klikk et gult punkt for å plassere tårn',
+    yourName: 'Ditt navn',
+    avatar: 'Avatar',
+    create: 'Opprett',
+    createRoom: 'Opprett rom',
+    joinByCode: 'Bli med via kode',
+    openLobbies: 'Åpne lobbyer',
+    noLobbies: 'Ingen åpne lobbyer akkurat nå.',
+    joinBtn: 'Bli med',
+    waitingRoom: 'Venteværelse',
+    shareCode: 'Del denne koden:',
+    startGame: 'Start spill',
+    waitingForHost: 'Venter på at verten starter…',
+    back: '← Tilbake',
+    hideBankCards: 'Skjul bankkortantall',
+    privateLobby: 'Privat lobby',
+    confirm: 'Bekreft', cancel: 'Avbryt',
+    tradeBank: 'Handel med banken',
+    knightLabel: '⚔ Ridder', knightDesc: 'Flytt tjuvradden og stjel 1 ressurs',
+  }
+};
+function tr(key) { return (STRINGS[_lang] || STRINGS.en)[key] ?? STRINGS.en[key] ?? key; }
+function tRes(res) { return tr(res); }
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n;
+    if (el.tagName === 'INPUT' && el.placeholder !== undefined) el.placeholder = tr(k);
+    else el.textContent = tr(k);
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = tr(el.dataset.i18nHtml); });
+  document.getElementById('langEN')?.classList.toggle('active', _lang === 'en');
+  document.getElementById('langNO')?.classList.toggle('active', _lang === 'no');
+}
+window.setLang = function(lang) {
+  _lang = lang;
+  localStorage.setItem('ti_lang', lang);
+  applyLang();
+};
+// Apply on load
+applyLang();
 const WATER_SPRITE_PARAMS = { amount: 5.0, size: 0.04, opacity: 1.00 };
 const LIGHT_PARAMS = {
-  timeOfDay: 0.76, sunIntensity: 1.70, ambIntensity: 0.65,
+  timeOfDay: 0.76, sunIntensity: 1.70, ambIntensity: 0.0,
   fillIntensity: 0.38, exposure: 0.88, fogDensity: 0.018, bloomStr: 0.30, bloomRadius: 0.0,
   saturation: 1.10, brightness: 0.0, contrast: 1.05, hue: 0.0, warmth: 0.03,
 };
@@ -349,7 +444,6 @@ let _outlineRestoreTimer = null;
 controls.addEventListener('change', () => { _2dDirty = true; });
 controls.addEventListener('start', () => {
   _portOutlinePass.enabled = false;
-  if (!_isMobile) bloom.enabled = false;
   if (_outlineRestoreTimer) { clearTimeout(_outlineRestoreTimer); _outlineRestoreTimer = null; }
 });
 controls.addEventListener('end', () => {
@@ -357,7 +451,6 @@ controls.addEventListener('end', () => {
   _outlineRestoreTimer = setTimeout(() => {
     if (!_isMobile && !_is2D) {
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
-      bloom.enabled = bloom.strength > 0.05;
     }
   }, 400);
 });
@@ -389,8 +482,9 @@ scene.add(ground);
 
 // ── Post-processing ──
 // Custom render target with stencil buffer so outline stencil masking works
+const _pr = renderer.getPixelRatio();
 const _composerRT = new THREE.WebGLRenderTarget(
-  window.innerWidth, window.innerHeight,
+  Math.round(window.innerWidth * _pr), Math.round(window.innerHeight * _pr),
   { stencilBuffer: true, depthBuffer: true, samples: 0 }
 );
 const composer = new EffectComposer(renderer, _composerRT);
@@ -1028,7 +1122,7 @@ function triggerDiceRoll(d1, d2) {
   _diceSound.volume = sfxVol();
   _diceSound.play().catch(() => {});
   diceAnim.active = true; diceAnim.settled = false; diceAnim.t = 0; diceAnim.result = [d1, d2]; _2dDirty = true;
-  diceGroup.visible = true;
+  diceGroup.visible = !_is2D;
   // Throw from high above the board — full tumble during fall
   die1.position.set(-0.5, 5.5, 0.2);
   die2.position.set( 0.5, 6.2, 0.0);
@@ -1951,6 +2045,7 @@ function renderBoard(state) {
         sheep.position.set(sx, surfaceY + SCENE_PARAMS.sheepY, sz);
         sheep.rotation.y = Math.random() * Math.PI * 2;
         sheep.userData.hexId = hex.id;
+        sheep.userData.isSheep = true;
         boardGroup.add(sheep);
         // Pick random wander target within hex
         const ta = Math.random() * Math.PI * 2;
@@ -2216,6 +2311,7 @@ function renderBoard(state) {
         const sz = new THREE.Vector3(); bb.getSize(sz);
         resObj.scale.setScalar(0.32 / Math.max(sz.x, sz.y, sz.z, 0.01));
         resObj.castShadow = true;
+        resObj.traverse(c => { if (c.isMesh) c.userData._skipLOD = true; });
       } else {
         const mat = new THREE.MeshStandardMaterial({ color: 0x8090a0, roughness: 0.65, metalness: 0.3 });
         resObj = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 0), mat);
@@ -2401,10 +2497,20 @@ function startTileIntro(hexes) {
   // Hide robber during intro; it drops from sky after tokens
   if (robberAnim.mesh) robberAnim.mesh.visible = false;
 
-  // Set camera to Long Angle; it stays here through token + robber animations
-  camera.position.set(0, 5.5, 13);
-  controls.target.set(0, 0, 0);
+  // Compute actual board centroid from land hexes so camera always centers correctly
+  const _landHexes = hexes.filter(h => h.type !== 'water');
+  const _bcx = _landHexes.reduce((s, h) => s + h.x, 0) / (_landHexes.length || 1);
+  const _bcz = _landHexes.reduce((s, h) => s + h.z, 0) / (_landHexes.length || 1);
+  cameraIntro.boardCX = _bcx;
+  cameraIntro.boardCZ = _bcz;
+
+  // Set camera overhead; it stays here through tile/token/robber animations
+  camera.position.set(_bcx, 28, _bcz);
+  camera.up.set(0, 1, 0);
+  controls.target.set(_bcx, 0, _bcz);
+  controls.enableDamping = false;
   controls.update();
+  controls.enableDamping = true;
   controls.enabled = false;
   cameraIntro.active = false;
   cameraIntro.t = 0;
@@ -2800,6 +2906,11 @@ function renderBuildings(state) {
           if (!c.material.emissive) c.material.emissive = new THREE.Color(0xffffff);
           if (ROBBER_PARAMS.roughness >= 0) c.material.roughness = ROBBER_PARAMS.roughness;
           if (ROBBER_PARAMS.metalness >= 0) c.material.metalness = ROBBER_PARAMS.metalness;
+          // Desaturate the robber
+          if (c.material.color) {
+            const _hsl = {}; c.material.color.getHSL(_hsl);
+            c.material.color.setHSL(_hsl.h, _hsl.s * 0.15, _hsl.l);
+          }
           c.material.needsUpdate = true;
         });
 
@@ -3053,10 +3164,10 @@ function enterBuildMode(mode) {
 
   document.getElementById('buildMode').style.display='block';
   document.getElementById('buildMode').innerHTML =
-    mode==='settlement' ? '<img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="tower"> Click a yellow spot to place tower' :
-    mode==='city'       ? '<img src="Icons/Castle Icon.png?v=14" class="piece-icon" alt="castle"> Click a yellow spot to upgrade to castle' :
-    mode==='road'       ? '<img src="images/Road icon.png" class="piece-icon" alt="road"> Click a yellow edge to place road' :
-                          '💀 Click a tile to move the robber';
+    mode==='settlement' ? tr('clickSpotSettlement') :
+    mode==='city'       ? `<img src="Icons/Castle Icon.png?v=14" class="piece-icon" alt="castle"> ${_lang==='no'?'Klikk et gult punkt for å oppgradere til slott':'Click a yellow spot to upgrade to castle'}` :
+    mode==='road'       ? `<img src="images/Road icon.png" class="piece-icon" alt="road"> ${_lang==='no'?'Klikk en gul kant for å plassere vei':'Click a yellow edge to place road'}` :
+                          tr('clickTileRobber');
   document.getElementById('btnCancel').style.display='block';
 }
 
@@ -3142,16 +3253,37 @@ renderer.domElement.addEventListener('click', e => {
   const hasPassive = passiveVertexMarkers || passiveRoadMarkers;
   if (!buildMode && !hasPassive) return;
   const rect = canvas.getBoundingClientRect();
-  mouse.x = ((e.clientX-rect.left)/rect.width)*2-1;
-  mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
-  raycaster.setFromCamera(mouse, camera);
-  const hits = raycaster.intersectObjects(markerGroup.children, true);
-  if (!hits.length) return;
 
-  const ud = hits[0].object.userData?.type ? hits[0].object.userData : hits[0].object.parent?.userData;
+  let ud, hitMesh;
+
+  if (_is2D) {
+    // 2D proximity detection — project markers to canvas space and find nearest
+    const scaleX = _overlay2d.width / rect.width;
+    const scaleY = _overlay2d.height / rect.height;
+    const cx = (e.clientX - rect.left) * scaleX;
+    const cy = (e.clientY - rect.top)  * scaleY;
+    const hitR = _hexPxR * 0.5;
+    let bestDist = Infinity, bestMesh = null;
+    for (const m of markerGroup.children) {
+      if (!m.visible) continue;
+      const [px, py] = _w2c(m.position.x, m.position.z);
+      const d = Math.hypot(cx - px, cy - py);
+      if (d < hitR && d < bestDist) { bestDist = d; bestMesh = m; }
+    }
+    if (!bestMesh) return;
+    hitMesh = bestMesh;
+    ud = hitMesh.userData?.type ? hitMesh.userData : hitMesh.parent?.userData;
+  } else {
+    mouse.x = ((e.clientX-rect.left)/rect.width)*2-1;
+    mouse.y = -((e.clientY-rect.top)/rect.height)*2+1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(markerGroup.children, true);
+    if (!hits.length) return;
+    hitMesh = hits[0].object;
+    ud = hitMesh.userData?.type ? hitMesh.userData : hitMesh.parent?.userData;
+  }
+
   if (!ud) return;
-
-  const hitMesh = hits[0].object;
   if (ud.type==='vertexMarker') {
     // passive click — enter settlement build mode for this vertex
     if (!buildMode) {
@@ -3160,15 +3292,15 @@ renderer.domElement.addEventListener('click', e => {
       passiveRoadMarkers   = false;
       buildMode = 'settlement';
       document.getElementById('buildMode').style.display = 'block';
-      document.getElementById('buildMode').innerHTML = '<img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="tower"> Click a yellow spot to place tower';
+      document.getElementById('buildMode').innerHTML = tr('clickSpotSettlement');
       document.getElementById('btnCancel').style.display = 'block';
-      showBuildConfirm('Place tower here?', () => {
+      showBuildConfirm(tr('placeSettlement'), () => {
         socket.emit('placeSettlement', { vertexId: vid }); addTimerBonus(15);
       }, hitMesh);
       return;
     }
     const capturedMode = buildMode;
-    const label = capturedMode==='settlement' ? 'Place tower here?' : 'Upgrade to castle?';
+    const label = capturedMode==='settlement' ? tr('placeSettlement') : tr('upgradeCity');
     const vid = ud.vertexId;
     showBuildConfirm(label, () => {
       if (capturedMode==='settlement') { socket.emit('placeSettlement',{vertexId:vid}); addTimerBonus(15); }
@@ -3176,7 +3308,7 @@ renderer.domElement.addEventListener('click', e => {
     }, hitMesh);
   } else if (ud.type==='edgeMarker') {
     const eid = ud.edgeId;
-    showBuildConfirm('Build road here?', () => {
+    showBuildConfirm(tr('buildRoad'), () => {
       socket.emit('placeRoad',{edgeId:eid}); addTimerBonus(15);
     }, hitMesh);
   } else if (ud.type==='hexMarker') {
@@ -3193,7 +3325,7 @@ renderer.domElement.addEventListener('click', e => {
     };
     if (victims.length <= 1) {
       const steal = victims.length ? victims[0].id : null;
-      showBuildConfirm('Move robber here?', () => doRobber(steal), hitMesh, 'Place Robber');
+      showBuildConfirm(tr('moveRobber'), () => doRobber(steal), hitMesh, tr('placeRobberBtn'));
     } else {
       showStealPicker(victims, doRobber, hitMesh);
     }
@@ -3272,11 +3404,11 @@ function _cardIconSrcTier(tier) {
 }
 
 const RES_INFO = {
-  wood:  { icon:'🪵', label:'Wood'  },
-  sheep: { icon:'🐑', label:'Sheep' },
-  wheat: { icon:'🌾', label:'Wheat' },
-  brick: { icon:'🧱', label:'Brick' },
-  ore:   { icon:'🪨',  label:'Ore'   },
+  wood:  { icon:'🪵', get label(){ return tr('wood');  } },
+  sheep: { icon:'🐑', get label(){ return tr('sheep'); } },
+  wheat: { icon:'🌾', get label(){ return tr('wheat'); } },
+  brick: { icon:'🧱', get label(){ return tr('brick'); } },
+  ore:   { icon:'🪨',  get label(){ return tr('ore');   } },
 };
 const COSTS = { settlement:{wood:1,brick:1,sheep:1,wheat:1}, road:{wood:1,brick:1}, city:{wheat:2,ore:3}, devCard:{ore:1,wheat:1,sheep:1} };
 
@@ -3462,11 +3594,11 @@ function updateMainAction(state, isMyTurn, isSetup, isRobber, isPlaying, me) {
   btn.style.letterSpacing = '';
   if (isSetup) {
     const phase = state.setupPhase;
-    btn.textContent = phase==='settlement' ? 'Place Tower' : 'Place Road';
+    btn.textContent = phase==='settlement' ? tr('placeSettlement').replace('?','').replace(' here','') : tr('buildRoad').replace('?','').replace(' here','');
     btn.style.background = '#27ae60';
     btn.onclick = () => enterBuildMode(phase);
   } else if (isRobber && state.robbingPlayer===myId) {
-    btn.textContent = 'Move Robber';
+    btn.textContent = tr('moveRobberBtn');
     btn.style.background = '#8e44ad';
     btn.onclick = () => enterBuildMode('robber');
   } else if (isPlaying && !state.diceRolled && (me?.freeRoads||0) > 0) {
@@ -5137,11 +5269,11 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
 
 // ─── Trade UI ─────────────────────────────────────────────────────────────────
 const TRADE_RES = [
-  { key:'wood',  icon:'🪵', name:'Wood'  },
-  { key:'brick', icon:'🧱', name:'Brick' },
-  { key:'sheep', icon:'🐑', name:'Sheep' },
-  { key:'wheat', icon:'🌾', name:'Wheat' },
-  { key:'ore',   icon:'🪨',  name:'Ore'   },
+  { key:'wood',  icon:'🪵', get name(){ return tr('wood');  } },
+  { key:'brick', icon:'🧱', get name(){ return tr('brick'); } },
+  { key:'sheep', icon:'🐑', get name(){ return tr('sheep'); } },
+  { key:'wheat', icon:'🌾', get name(){ return tr('wheat'); } },
+  { key:'ore',   icon:'🪨',  get name(){ return tr('ore');   } },
 ];
 
 function buildResRow(containerId, countsObj, maxFn, onChange) {
@@ -5658,10 +5790,10 @@ document.getElementById('btnDevPlay').addEventListener('click', () => {
   const me = gameState.players.find(p => p.id === myId); if (!me) return;
   const list = document.getElementById('devCardList'); list.innerHTML = '';
   const DEV_INFO = {
-    knight:       { label: '⚔ Knight',          desc: 'Move the robber & steal 1 resource' },
-    roadBuilding: { label: '🛣 Road Building',   desc: 'Place 2 roads for free' },
-    yearOfPlenty: { label: '🌟 Year of Plenty',  desc: 'Take any 2 resources from the bank' },
-    monopoly:     { label: '💰 Monopoly',        desc: 'Steal all of one resource from everyone' },
+    knight:       { label: tr('knightLabel'), desc: tr('knightDesc') },
+    roadBuilding: { label: _lang==='no'?'🛣 Veibygning':'🛣 Road Building',   desc: _lang==='no'?'Plasser 2 veier gratis':'Place 2 roads for free' },
+    yearOfPlenty: { label: _lang==='no'?'🌟 Overflodssår':'🌟 Year of Plenty',  desc: _lang==='no'?'Ta hvilke som helst 2 ressurser fra banken':'Take any 2 resources from the bank' },
+    monopoly:     { label: _lang==='no'?'💰 Monopol':'💰 Monopoly',        desc: _lang==='no'?'Stjel alle av én ressurs fra alle':'Steal all of one resource from everyone' },
   };
   let anyShown = false;
   me.devCards.forEach((card, i) => {
@@ -5689,7 +5821,7 @@ document.getElementById('btnDevPlay').addEventListener('click', () => {
 document.getElementById('btnDevCancel').addEventListener('click', () => document.getElementById('devModal').style.display='none');
 
 function playDevCard(idx, type) {
-  const resOpts = '<option value="wood">🪵 Wood</option><option value="brick">🧱 Brick</option><option value="sheep">🐑 Sheep</option><option value="wheat">🌾 Wheat</option><option value="ore">🪨 Ore</option>';
+  const resOpts = `<option value="wood">🪵 ${tr('wood')}</option><option value="brick">🧱 ${tr('brick')}</option><option value="sheep">🐑 ${tr('sheep')}</option><option value="wheat">🌾 ${tr('wheat')}</option><option value="ore">🪨 ${tr('ore')}</option>`;
   if (type === 'knight') {
     socket.emit('playDevCard', { cardIndex: idx, params: {} }); addTimerBonus(15);
     // Server will set status='robber'; updateUI will auto-enter robber build mode
@@ -6080,18 +6212,14 @@ let _bobFrame = 0;
 let _lodLevel = -1; // forces update on first frame; 0=near 1=mid 2=far
 
 function _applyLOD(dist) {
-  const level = dist < 8 ? 0 : dist < 15 ? 1 : 2;
+  const level = dist < 10 ? 0 : 1;
   if (level === _lodLevel) return;
   _lodLevel = level;
-  // Small submeshes hidden at distance; large ones always visible
-  // _lodRadius < 0.2 = tiny detail (leaf, pebble etc)
-  // _lodRadius < 0.5 = medium detail (branch, rock chunk etc)
   scene.traverse(obj => {
-    if (!obj.isMesh || obj.userData._lodRadius === undefined) return;
-    const r = obj.userData._lodRadius;
-    if (level === 0)      obj.visible = true;          // near: everything
-    else if (level === 1) obj.visible = r > 0.15;      // mid: skip tiny details
-    else                  obj.visible = r > 0.40;      // far: only big shapes
+    if (!obj.isMesh) return;
+    if (obj.userData._skipLOD) { obj.visible = true; return; }
+    if (obj.userData._lodRadius === undefined) return;
+    obj.visible = level === 0 || obj.userData._lodRadius > 0.08;
   });
   // Clouds are above/behind camera when zoomed in — only show at mid/far
   if (scene.userData.cloudGroup) scene.userData.cloudGroup.visible = level >= 1;
@@ -6108,7 +6236,7 @@ function animate() {
   const delta = clock.getDelta();
   t += delta;
 
-  controls.update();
+  if (!cameraIntro.active && !tileIntro.active && !tokenIntro.active && !robberDropIntro.active) controls.update();
   _applyLOD(camera.position.distanceTo(controls.target));
 
   // Marker pulse + live Y offset per marker type
@@ -6361,21 +6489,30 @@ function animate() {
     cameraIntro.t += delta;
     const cp = Math.min(1, cameraIntro.t / cameraIntro.duration);
     const ce = cp * cp * (3 - 2 * cp); // smooth step (ease-in-out)
-    camera.position.x = 0;
-    const _introEndY = _isMobile ? 18 : 14;
-    const _introEndZ = _isMobile ? 10 : 8;
-    camera.position.y = 5.5 + ce * (_introEndY - 5.5);
-    camera.position.z = 13 + ce * (_introEndZ - 13);
-    camera.lookAt(0, 0, 0);
+    // Start overhead, arc to angled view — guarantees board is centered at start
+    const _introStartY = 28, _introStartZ = 0;
+    const _introEndY = _isMobile ? 20 : 17;
+    const _introEndZ = _isMobile ? 13 : 11;
+    const bcx = cameraIntro.boardCX ?? 0, bcz = cameraIntro.boardCZ ?? 0;
+    // Keep camera.up stable: tilt it forward as camera descends so there's no gimbal flip
+    camera.up.set(0, 1, 0);
+    camera.position.set(
+      bcx,
+      _introStartY + ce * (_introEndY - _introStartY),
+      bcz + _introStartZ + ce * (_introEndZ - _introStartZ)
+    );
+    camera.lookAt(bcx, 0, bcz);
     if (cp >= 1) {
       cameraIntro.active = false;
       controls.enabled = true;
-      camera.position.set(0, _introEndY, _introEndZ);
+      camera.position.set(bcx, _introEndY, bcz + _introEndZ);
       camera.up.set(0, 1, 0);
-      controls.target.set(0, 0, 0);
+      camera.lookAt(bcx, 0, bcz);
+      controls.target.set(bcx, 0, bcz);
+      controls.enableDamping = false;
       controls.update();
-      bloom.strength = 0.0;
-      bloom.enabled = false;
+      controls.enableDamping = true;
+      bloom.strength = LIGHT_PARAMS.bloomStr;
       const startUpSnd = new Audio('sound effects/Bjorn Lynne - Multimedia - Game Console Start Up.aac');
       startUpSnd.volume = sfxVol();
       startUpSnd.play().catch(() => {});
@@ -6584,6 +6721,7 @@ function animate() {
       const hid = child.userData.hexId ?? child.userData.tokenHexId;
       if (hid === undefined || child.userData.baseY === undefined) return;
       if (child.userData.isCamel) return;
+      if (child.userData.isSheep) return;
       if (child.userData.isLava) return;
       const phase = tileBobPhases.get(hid) ?? 0;
       child.position.y = child.userData.baseY + Math.sin(t * BOB_PARAMS.speed + phase) * BOB_PARAMS.amp;
@@ -7096,12 +7234,8 @@ function animate() {
     }
   }
 
-  if (bloom.enabled) {
-    composer.render();
-  } else {
-    renderer.setRenderTarget(null);
-    renderer.render(scene, camera);
-  }
+  bloom.enabled = bloom.strength > 0.05;
+  composer.render();
   if (_is2D) _draw2DBoard();
   _updateFPS();
 }
@@ -7114,6 +7248,7 @@ const _2dCastleImg = new Image(); _2dCastleImg.src = 'Icons/Castle Icon.png?v=15
 
 const _overlay2d    = document.getElementById('overlay2d');
 const _overlayCtx   = _overlay2d.getContext('2d');
+let _hexPxR = 50;
 
 function _resizeOverlay() {
   _overlay2d.width  = renderer.domElement.clientWidth  || window.innerWidth;
@@ -7207,8 +7342,9 @@ function _hexPts(hex) {
 
 let _2dDirty = true;
 function _draw2DBoard() {
-  if (!_2dDirty) return;
-  _2dDirty = false;
+  const _diceRolling = diceAnim.active && !diceAnim.settled;
+  if (!_2dDirty && !_diceRolling) return;
+  if (!_diceRolling) _2dDirty = false;
   _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
   if (!_is2D || !gameState?.board) return;
   // (no early return for diceAnim — tiles stay visible; dice hole punched below)
@@ -7223,6 +7359,7 @@ function _draw2DBoard() {
     const [ex] = _w2c(anyHex.x + HEX_R, anyHex.z);
     hexPxR = Math.abs(ex - cx);
   }
+  _hexPxR = hexPxR;
 
   // Helper: draw the hex path (does NOT call beginPath)
   function hexPath(pts) {
@@ -7290,7 +7427,7 @@ function _draw2DBoard() {
 
   // Colonist-style ports
   if (gameState.board.ports) {
-    const bCx = W/2, bCy = H/2; // canvas center (approximates board center)
+    const [bCx, bCy] = _w2c(0, 0); // actual projected board center
     gameState.board.ports.forEach(port => {
       const v1 = gameState.board.vertices[port.vertices[0]];
       const v2 = gameState.board.vertices[port.vertices[1]];
@@ -7298,10 +7435,10 @@ function _draw2DBoard() {
       const [x1,y1] = _w2c(v1.x, v1.z);
       const [x2,y2] = _w2c(v2.x, v2.z);
       const mx=(x1+x2)/2, my=(y1+y2)/2;
-      // Outward from board center
+      // Outward from actual board center
       const od = Math.hypot(mx-bCx, my-bCy)||1;
       const nx=(mx-bCx)/od, ny=(my-bCy)/od;
-      const pier = hexPxR*0.7;
+      const pier = hexPxR*1.1;
       const dx = mx+nx*pier, dy = my+ny*pier; // dock badge center
 
       // Pier lines to each vertex
@@ -7309,7 +7446,7 @@ function _draw2DBoard() {
       ctx.beginPath(); ctx.moveTo(dx,dy); ctx.lineTo(x1,y1); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(dx,dy); ctx.lineTo(x2,y2); ctx.stroke();
 
-      // Vertex dots (shows which spots have port access)
+      // Vertex dots
       [x1,y1,x2,y2].forEach((_, i, a) => {
         if (i%2!==0) return;
         const [vx,vy]=[a[i],a[i+1]];
@@ -7317,33 +7454,39 @@ function _draw2DBoard() {
         ctx.fillStyle='#6b4c1a'; ctx.fill();
       });
 
-      // Badge background (no stroke on outer circle)
-      const br = hexPxR*0.32;
-      ctx.beginPath(); ctx.arc(dx,dy,br,0,Math.PI*2);
-      ctx.fillStyle='#2a1a00'; ctx.fill();
+      const isAny = port.type === 'any';
+      const portColor = _2D_PORT_COLORS[port.type] || '#ddd';
+      const br = hexPxR*0.34;
 
-      // Badge inner color
-      ctx.beginPath(); ctx.arc(dx,dy,br*0.80,0,Math.PI*2);
-      ctx.fillStyle=_2D_PORT_COLORS[port.type]||'#ddd'; ctx.fill();
+      // Outer ring: resource color (any=gold), with dark border
+      ctx.beginPath(); ctx.arc(dx,dy,br,0,Math.PI*2);
+      ctx.fillStyle = portColor;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = Math.max(1.5, br * 0.10);
+      ctx.stroke();
+
+      // Dark inner circle
+      ctx.beginPath(); ctx.arc(dx,dy,br*0.70,0,Math.PI*2);
+      ctx.fillStyle = isAny ? '#f5e6c8' : 'rgba(0,0,0,0.72)';
+      ctx.fill();
 
       // Ratio text + icon
-      const ratio = port.type==='any'?'3:1':'2:1';
+      const ratio = isAny ? '3:1' : '2:1';
       ctx.save();
-      // 3:1 (any port) gets black text on light bg; 2:1 resource ports get white with shadow
-      const isAny = port.type === 'any';
-      ctx.fillStyle = isAny ? '#000' : '#fff';
-      ctx.shadowColor = isAny ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.95)';
-      ctx.shadowBlur = Math.max(3, br * 0.22);
+      ctx.fillStyle = isAny ? '#2c1a00' : '#fff';
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = Math.max(2, br * 0.15);
       ctx.textAlign='center'; ctx.textBaseline='middle';
       if (isAny) {
-        ctx.font=`bold ${Math.round(br*0.72)}px sans-serif`;
+        ctx.font=`bold ${Math.round(br*0.70)}px sans-serif`;
         ctx.fillText(ratio, dx, dy);
       } else {
-        ctx.font=`bold ${Math.round(br*0.72)}px sans-serif`;
-        ctx.fillText(ratio, dx, dy - br*0.18);
+        ctx.font=`bold ${Math.round(br*0.65)}px sans-serif`;
+        ctx.fillText(ratio, dx, dy - br*0.20);
         const icon = _2D_PORT_ICONS[port.type]||'';
-        ctx.font=`${Math.round(br*0.52)}px sans-serif`;
-        ctx.fillText(icon, dx, dy + br*0.46);
+        ctx.font=`${Math.round(br*0.50)}px sans-serif`;
+        ctx.fillText(icon, dx, dy + br*0.42);
       }
       ctx.restore();
     });
@@ -7437,10 +7580,10 @@ function _draw2DBoard() {
         const v = gameState.board.vertices[m.userData.vertexId];
         if (!v) return;
         const [px,py] = _w2c(v.x, v.z);
-        const r = hexPxR * 0.2;
+        const r = hexPxR * 0.12;
         ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
         ctx.fillStyle = 'rgba(255,215,0,0.92)'; ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5,r*0.2); ctx.stroke();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5,r*0.25); ctx.stroke();
       } else if (m.userData.edgeId !== undefined) {
         const e = gameState.board.edges[m.userData.edgeId];
         if (!e) return;
@@ -7474,19 +7617,56 @@ function _draw2DBoard() {
     }
   }
 
-  // Punch a transparent hole where the 3D dice are — only while actively rolling, not after settled
-  if (typeof diceAnim !== 'undefined' && diceGroup.visible && diceAnim.active && !diceAnim.settled) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-out';
-    [die1, die2].forEach(die => {
-      const sp = die.position.clone().project(camera);
-      const sx = ( sp.x * 0.5 + 0.5) * W;
-      const sy = (-sp.y * 0.5 + 0.5) * H;
-      const r = hexPxR * 1.2;
-      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,1)'; ctx.fill();
-    });
-    ctx.restore();
+  // 2D dice overlay — shown instead of 3D dice when in top-down mode
+  if (typeof diceAnim !== 'undefined' && (diceAnim.active || diceAnim.settled)) {
+    const ds = Math.round(hexPxR * 0.85); // die size in px
+    const gap = Math.round(ds * 0.25);
+    const totalW = ds * 2 + gap;
+    const ox = W / 2 - totalW / 2;
+    const oy = H * 0.10;
+    const rolling = diceAnim.active && !diceAnim.settled;
+    const [v1, v2] = rolling
+      ? [Math.ceil(Math.random() * 6), Math.ceil(Math.random() * 6)]
+      : diceAnim.result;
+
+    function _draw2DDie(x, y, val) {
+      const r = ds * 0.18;
+      // Shadow
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.45)';
+      ctx.shadowBlur = ds * 0.18;
+      ctx.shadowOffsetY = ds * 0.05;
+      // Body
+      ctx.beginPath();
+      ctx.roundRect(x, y, ds, ds, r);
+      ctx.fillStyle = rolling ? `hsl(${Math.random()*360|0},70%,55%)` : '#f5f5f5';
+      ctx.fill();
+      ctx.strokeStyle = rolling ? 'rgba(0,0,0,0.3)' : '#aaa';
+      ctx.lineWidth = Math.max(1.5, ds * 0.04);
+      ctx.stroke();
+      ctx.restore();
+      if (!rolling) {
+        // Pips
+        const PIP_POS = {
+          1:[[.5,.5]],
+          2:[[.25,.25],[.75,.75]],
+          3:[[.25,.25],[.5,.5],[.75,.75]],
+          4:[[.25,.25],[.75,.25],[.25,.75],[.75,.75]],
+          5:[[.25,.25],[.75,.25],[.5,.5],[.25,.75],[.75,.75]],
+          6:[[.25,.2],[.75,.2],[.25,.5],[.75,.5],[.25,.8],[.75,.8]],
+        };
+        const pr = ds * 0.09;
+        ctx.fillStyle = '#222';
+        (PIP_POS[val]||[]).forEach(([px,py]) => {
+          ctx.beginPath();
+          ctx.arc(x + px*ds, y + py*ds, pr, 0, Math.PI*2);
+          ctx.fill();
+        });
+      }
+    }
+
+    _draw2DDie(ox, oy, v1);
+    _draw2DDie(ox + ds + gap, oy, v2);
   }
 }
 

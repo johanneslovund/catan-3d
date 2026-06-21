@@ -22,14 +22,18 @@
 <!-- ── LOBBY ── -->
 <div id="lobby">
   <div class="lobby-card">
+    <div class="lang-picker" id="langPicker">
+      <button class="lang-btn active" id="langEN" onclick="setLang('en')" title="English">🇬🇧</button>
+      <button class="lang-btn" id="langNO" onclick="setLang('no')" title="Norsk">🇳🇴</button>
+    </div>
     <h1>Tantrum Island</h1>
     <p class="subtitle">Multiplayer · 3D Board · 2–4 Players</p>
     <div class="form-group">
-      <label>Your Name</label>
+      <label data-i18n="yourName">Your Name</label>
       <input id="playerName" type="text" maxlength="16" placeholder="Enter name…"/>
     </div>
     <div class="form-group">
-      <label>Avatar</label>
+      <label data-i18n="avatar">Avatar</label>
       <div class="avatar-picker-row">
         <div class="avatar-preview" id="avatarPreview"><span id="avatarPreviewInner">?</span></div>
         <div class="avatar-btns">
@@ -67,16 +71,16 @@
       <div style="font-weight:600;margin-bottom:6px">You were disconnected from a game</div>
       <button id="btnRejoin" class="btn btn-primary" style="width:auto;padding:6px 20px">Rejoin Game</button>
     </div>
-    <div class="divider">Create</div>
-    <button id="btnCreate" class="btn btn-primary">Create Room</button>
-    <div class="divider">Join by Code</div>
+    <div class="divider" data-i18n="create">Create</div>
+    <button id="btnCreate" class="btn btn-primary" data-i18n="createRoom">Create Room</button>
+    <div class="divider" data-i18n="joinByCode">Join by Code</div>
     <div class="join-row">
       <input id="roomCodeInput" type="text" maxlength="6" placeholder="Room code…" style="text-transform:uppercase"/>
-      <button id="btnJoin" class="btn btn-secondary">Join</button>
+      <button id="btnJoin" class="btn btn-secondary" data-i18n="joinBtn">Join</button>
     </div>
-    <div class="divider">Open Lobbies</div>
+    <div class="divider" data-i18n="openLobbies">Open Lobbies</div>
     <div id="publicLobbies" class="public-lobbies">
-      <p class="hint" id="noLobbiesHint">No open lobbies right now.</p>
+      <p class="hint" id="noLobbiesHint" data-i18n="noLobbies">No open lobbies right now.</p>
     </div>
     <p id="lobbyError" class="error-msg"></p>
   </div>
@@ -85,8 +89,8 @@
 <!-- ── WAITING ── -->
 <div id="waiting" style="display:none">
   <div class="lobby-card">
-    <h2>Waiting Room</h2>
-    <p>Share this code: <span id="roomCodeDisplay" class="room-code"></span></p>
+    <h2 data-i18n="waitingRoom">Waiting Room</h2>
+    <p><span data-i18n="shareCode">Share this code:</span> <span id="roomCodeDisplay" class="room-code"></span></p>
     <ul id="waitingPlayerList"></ul>
     <div id="botControls" style="display:none">
       <select id="botDifficulty" class="bot-diff-select">
@@ -100,16 +104,16 @@
     <div id="gameSettings" style="display:none;margin:10px 0;padding:8px 10px;background:rgba(255,255,255,0.06);border-radius:8px;font-size:.85rem">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
         <input type="checkbox" id="chkHideBankCards" style="width:16px;height:16px;cursor:pointer">
-        <span>Hide bank card counts</span>
+        <span data-i18n="hideBankCards">Hide bank card counts</span>
       </label>
       <label class="private-toggle" style="margin-top:8px">
         <input type="checkbox" id="chkPrivate"/>
-        <span>Private lobby</span>
+        <span data-i18n="privateLobby">Private lobby</span>
       </label>
     </div>
-    <button id="btnStart" class="btn btn-primary" style="display:none">Start Game</button>
-    <p id="waitingHint" class="hint">Waiting for host to start…</p>
-    <button id="btnLeaveWaiting" class="btn btn-secondary" style="display:none;margin-top:8px">← Back</button>
+    <button id="btnStart" class="btn btn-primary" style="display:none" data-i18n="startGame">Start Game</button>
+    <p id="waitingHint" class="hint" data-i18n="waitingForHost">Waiting for host to start…</p>
+    <button id="btnLeaveWaiting" class="btn btn-secondary" style="display:none;margin-top:8px" data-i18n="back">← Back</button>
 
     <!-- Lobby communication panel -->
     <div id="lobbyChatVoice">
@@ -1243,6 +1247,6 @@ window.addEventListener('unhandledrejection', e => {
   document.body.appendChild(d);
 });
 </script>
-<script type="module" src="game.js?v=32"></script>
+<script type="module" src="game.js?v=44"></script>
 </body>
 </html>
