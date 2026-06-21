@@ -6086,16 +6086,10 @@ function _updateFPS() {
   }
 }
 
-// Mobile frame throttle: skip every other frame to target ~30fps
-let _mobileFrameSkip = false;
 let _fpsCapMs = 0; // 0 = uncapped; set via graphics settings
 let _fpsCapLast = 0;
 function animate() {
   requestAnimationFrame(animate);
-  if (_isMobile) {
-    _mobileFrameSkip = !_mobileFrameSkip;
-    if (_mobileFrameSkip) return;
-  }
   if (_fpsCapMs > 0) {
     const now = performance.now();
     if (now - _fpsCapLast < _fpsCapMs) return;
