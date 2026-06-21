@@ -341,6 +341,8 @@ controls.minDistance = 4;
 controls.maxDistance = 22;
 controls.maxPolarAngle = Math.PI / 2.15;
 controls.target.set(0, 0, 0);
+controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+controls.screenSpacePanning = true;
 
 // Disable bloom and port outlines while camera is moving; restore 400ms after motion stops
 let _outlineRestoreTimer = null;
