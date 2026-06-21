@@ -314,6 +314,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_isMobile, powerP
 renderer.setPixelRatio(_isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
 const MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
 renderer.shadowMap.enabled = !_isMobile;
+renderer.shadowMap.autoUpdate = false;
+renderer.shadowMap.needsUpdate = true;
 renderer.shadowMap.type = THREE.BasicShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = LIGHT_PARAMS.exposure * 0.38;
@@ -1592,6 +1594,7 @@ function numberTokenTex(num) {
 
 // ─── Board rendering ──────────────────────────────────────────────────────────
 function renderBoard(state) {
+  _shadowsDirty = true;
   clearGroup(boardGroup);
   sheepList.length = 0;
   camelList.length = 0;
@@ -1633,23 +1636,16 @@ function renderBoard(state) {
         float a = uWaveAmp;
         float x = pos.x, z = pos.z;
         float r = max(length(vec2(x, z)), 0.001);
-        // Wave displacement
+        // Wave displacement (3 terms instead of 6)
         pos.y = sin(x*0.9*s + t*0.8)   * 0.018*a
               + sin(z*1.1*s + t*0.6)   * 0.015*a
-              + sin(x*2.3*s - t*1.1)   * 0.009*a
-              + sin(z*1.9*s + t*1.3)   * 0.008*a
-              + sin((x-z)*1.4*s+t*0.9) * 0.012*a
-              + sin(r*0.6*s - t*0.7)   * 0.014*a;
+              + sin((x-z)*1.4*s+t*0.9) * 0.012*a;
         vHeight = pos.y;
-        // Analytic surface normal via wave partial derivatives
+        // Analytic normal (4 cos instead of 8)
         float dydx = cos(x*0.9*s+t*0.8)*0.9*s*0.018*a
-                   + cos(x*2.3*s-t*1.1)*2.3*s*0.009*a
-                   + cos((x-z)*1.4*s+t*0.9)*1.4*s*0.012*a
-                   + cos(r*0.6*s-t*0.7)*0.6*s*0.014*a*(x/r);
+                   + cos((x-z)*1.4*s+t*0.9)*1.4*s*0.012*a;
         float dydz = cos(z*1.1*s+t*0.6)*1.1*s*0.015*a
-                   + cos(z*1.9*s+t*1.3)*1.9*s*0.008*a
-                   + cos((x-z)*1.4*s+t*0.9)*(-1.4*s)*0.012*a
-                   + cos(r*0.6*s-t*0.7)*0.6*s*0.014*a*(z/r);
+                   + cos((x-z)*1.4*s+t*0.9)*(-1.4*s)*0.012*a;
         vNormal = normalize(vec3(-dydx, 1.0, -dydz));
         vec4 worldPos = modelMatrix * vec4(pos, 1.0);
         vViewDir = normalize(cameraPosition - worldPos.xyz);
@@ -1684,18 +1680,10 @@ function renderBoard(state) {
         vec3 deep    = vec3(0.02, 0.26, 0.46);
         vec3 col = mix(shallow, deep, depth * depth);
 
-        // ── Detail normal (micro-ripple, two layers, fragment-only) ─────────────
-        float nx = sin(vWPos.x*13.0 + vWPos.y*9.0  + uTime*1.9) * 0.11
-                 + sin(vWPos.x*23.0 - vWPos.y*19.0 - uTime*2.3) * 0.05;
-        float nz = sin(vWPos.x*10.0 - vWPos.y*12.0 + uTime*1.5) * 0.11
-                 + sin(vWPos.x*20.0 + vWPos.y*24.0 - uTime*2.0) * 0.05;
+        // ── Detail normal (micro-ripple, one layer) ──────────────────────────────
+        float nx = sin(vWPos.x*13.0 + vWPos.y*9.0 + uTime*1.9) * 0.11;
+        float nz = sin(vWPos.x*10.0 - vWPos.y*12.0 + uTime*1.5) * 0.11;
         vec3 detailN = normalize(vNormal + vec3(nx, 0.0, nz));
-
-        // ── Caustics shimmer (shallow zone) ────────────────────────────────────
-        float caus = (sin(vWPos.x*8.0+uTime*1.2)*sin(vWPos.y*7.0+uTime*0.9)+1.0)*0.5
-                   * (sin(vWPos.x*5.0-uTime*0.7)*sin(vWPos.y*6.0+uTime*1.1)+1.0)*0.5;
-        float shallowMask = 1.0 - smoothstep(shoreStart - 0.3, shoreStart + 2.2, distFromIsland);
-        col += vec3(0.06, 0.20, 0.16) * caus * shallowMask * 0.5;
 
         // ── Subsurface scattering hint (wave peaks glow teal) ──────────────────
         float sss = smoothstep(0.01, 0.038, vHeight);
@@ -1706,7 +1694,7 @@ function renderBoard(state) {
         float foamOuter = shoreStart + 1.8;
         float foam = smoothstep(foamInner, foamInner + 0.8, distFromIsland)
                    * (1.0 - smoothstep(foamOuter - 0.6, foamOuter, distFromIsland));
-        float foamTex = (sin(vWPos.x*14.0+uTime*0.8)*sin(vWPos.y*12.0-uTime*0.6)+1.0)*0.5;
+        float foamTex = (sin(vWPos.x*14.0 + vWPos.y*12.0 + uTime*0.8) + 1.0) * 0.5;
         foamTex = mix(0.65, 1.0, foamTex);
         col = mix(col, vec3(0.94, 0.99, 1.0) * foamTex, foam * uFoamStr);
 
@@ -2705,6 +2693,7 @@ function applyLightParams() {
 
 // ─── Building rendering ───────────────────────────────────────────────────────
 function renderBuildings(state) {
+  _shadowsDirty = true;
   clearGroup(buildGroup);
   const { vertices, edges, hexes } = state.board;
   const robberHex = hexes[state.robberHex];
@@ -6086,6 +6075,8 @@ function _updateFPS() {
   }
 }
 
+let _shadowsDirty = true;
+let _bobFrame = 0;
 let _fpsCapMs = 0; // 0 = uncapped; set via graphics settings
 let _fpsCapLast = 0;
 function animate() {
@@ -6101,7 +6092,8 @@ function animate() {
   controls.update();
 
   // Marker pulse + live Y offset per marker type
-  markerGroup.children.forEach((m, i) => {
+  if (markerGroup.children.length === 0) { /* skip */ }
+  else markerGroup.children.forEach((m, i) => {
     if (m.userData.baseY !== undefined) {
       const yOff = m.userData.markerType === 'vertex' ? SCENE_PARAMS.vertexMarkerY :
                    m.userData.markerType === 'edge'   ? SCENE_PARAMS.edgeMarkerY   :
@@ -6565,7 +6557,8 @@ function animate() {
   }
 
   // Tile bobbing — independent per-hex sine wave (skip during intro sequences)
-  if (BOB_PARAMS.enabled && !tileIntro.active && !tokenIntro.active && !robberDropIntro.active) {
+  _bobFrame++;
+  if (BOB_PARAMS.enabled && (_bobFrame & 1) === 0 && !tileIntro.active && !tokenIntro.active && !robberDropIntro.active) {
     _animSeenHids.clear();
     boardGroup.children.forEach(child => {
       const hid = child.userData.hexId ?? child.userData.tokenHexId;
@@ -7084,7 +7077,21 @@ function animate() {
   updateVoicePlayers();
   _lobbyUpdateVoiceRings();
 
-  composer.render();
+  // Shadow map: only recompute when scene actually changed
+  if (!_isMobile) {
+    const _anyAnim = dropAnims.length > 0 || robberDropIntro.active || tileIntro.active || tokenIntro.active || cameraIntro.active || robberAnim.active;
+    if (_shadowsDirty || _anyAnim) {
+      renderer.shadowMap.needsUpdate = true;
+      _shadowsDirty = false;
+    }
+  }
+
+  if (bloom.enabled) {
+    composer.render();
+  } else {
+    renderer.setRenderTarget(null);
+    renderer.render(scene, camera);
+  }
   if (_is2D) _draw2DBoard();
   _updateFPS();
 }
