@@ -28,7 +28,7 @@ body {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background: url('images/Background.png?v=21') center 30% / cover no-repeat;
+  background: url('images/Background.png?v=22') center 30% / cover no-repeat;
   transition: opacity 0.55s ease;
 }
 /* Adaptive vertical framing by viewport aspect ratio */
