@@ -7674,34 +7674,10 @@ function _draw2DBoard() {
 // Objects to hide when entering 2D mode
 function _set2DVisibility(visible) {
   // Keep 3D tiles visible in 2D (canvas overlay sits on top at 80% opacity)
-  // Only de-reflectivize tokens in 2D, restore in 3D
+  // Hide tokens entirely in 2D — they're drawn on the 2D canvas overlay instead
   boardGroup.children.forEach(child => {
-    // De-reflectivize tokens in 2D, restore in 3D
     if (child.userData.tokenHexId !== undefined) {
-      child.traverse(m => {
-        if (m.material) {
-          if (!visible) {
-            // entering 2D: store original values, flatten material
-            if (m.material.envMapIntensity !== undefined) {
-              m.userData._origEnv = m.material.envMapIntensity;
-              m.userData._origMet = m.material.metalness;
-              m.userData._origEmi = m.material.emissiveIntensity;
-              m.material.envMapIntensity = 0;
-              m.material.metalness = 0.05;
-              m.material.emissiveIntensity = 0;
-              m.material.needsUpdate = true;
-            }
-          } else {
-            // exiting 2D: restore
-            if (m.userData._origEnv !== undefined) {
-              m.material.envMapIntensity = m.userData._origEnv;
-              m.material.metalness = m.userData._origMet;
-              m.material.emissiveIntensity = m.userData._origEmi;
-              m.material.needsUpdate = true;
-            }
-          }
-        }
-      });
+      child.visible = visible;
     }
   });
   // Hide lava meshes
