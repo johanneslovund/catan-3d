@@ -226,7 +226,7 @@ const STRINGS = {
     wood: 'Tre', brick: 'Leire', sheep: 'Saud', wheat: 'Kønnj', ore: 'Stein',
     desert: 'Ørken',
     robber: 'Tjuvradd', settlement: 'Tårn', city: 'Slott', road: 'Vei',
-    placeSettlement: 'Plasser tårn her?',
+    placeSettlement: 'Plasser tårn?',
     upgradeCity: 'Oppgrader til slott?',
     buildRoad: 'Bygg vei her?',
     moveRobber: 'Flytt tjuvradd hit?',
@@ -2491,6 +2491,11 @@ function startTileIntro(hexes) {
 
   // Hide robber during intro; it drops from sky after tokens
   if (robberAnim.mesh) robberAnim.mesh.visible = false;
+
+  // Force browser layout flush — #game was just made visible, so clientWidth/clientHeight
+  // would still be 0 without this. getBoundingClientRect() triggers synchronous layout.
+  document.getElementById('canvasWrapper')?.getBoundingClientRect();
+  resize();
 
   // Compute actual board centroid from land hexes so camera always centers correctly
   const _landHexes = hexes.filter(h => h.type !== 'water');
@@ -7238,7 +7243,7 @@ function animate() {
 // ─── 2D Mode: top-down camera + robber overlay ────────────────────────────────
 
 const _robberImg2D = new Image();
-_robberImg2D.src = 'images/Robber.png';
+_robberImg2D.src = 'images/Robber.png?v=2';
 const _2dTowerImg  = new Image(); _2dTowerImg.src  = 'Icons/Tower Icon.png?v=15';
 const _2dCastleImg = new Image(); _2dCastleImg.src = 'Icons/Castle Icon.png?v=15';
 
