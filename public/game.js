@@ -282,7 +282,7 @@ const LIGHT_PARAMS = {
 
 // Per-type cloud params (used by renderBoard to place clouds over mountain hexes)
 const CLOUD_PARAMS = {
-  enabled:    1,
+  enabled:    0,
   height:    -0.45,
   spread:     0.00,
   scale:      0.35,
@@ -736,13 +736,8 @@ composer.addPass(saturationPass);
     g.position.set(x, y, z); g.scale.setScalar(scale);
     return g;
   }
-  const cloudGroup = new THREE.Group();
-  [ [14,10,-18,2.2],[-12,12,-20,1.8],[22,11,-14,1.5],[-20,9,-16,2.0],
-    [8,13,-25,1.6],[-5,11,-22,2.4],[18,9,-10,1.3],[-16,12,-12,1.9] ].forEach(([x,y,z,s])=>{
-    cloudGroup.add(makeCloud(x, y, z, s));
-  });
-  scene.add(cloudGroup);
-  scene.userData.cloudGroup = cloudGroup;
+  // Clouds removed
+  scene.userData.cloudGroup = null;
 }
 
 // ── Groups ──
@@ -2504,8 +2499,8 @@ function startTileIntro(hexes) {
   cameraIntro.boardCX = _bcx;
   cameraIntro.boardCZ = _bcz;
 
-  // Set camera to high-angle overview; stays here through tile/token/robber animations
-  camera.position.set(_bcx, 26, _bcz + 6);
+  // Set camera to angled overview for tile/token/robber animations
+  camera.position.set(_bcx, 18, _bcz + 12);
   camera.up.set(0, 1, 0);
   controls.target.set(_bcx, 0, _bcz);
   controls.enableDamping = false;
@@ -6493,10 +6488,10 @@ function animate() {
     cameraIntro.t += delta;
     const cp = Math.min(1, cameraIntro.t / cameraIntro.duration);
     const ce = cp * cp * (3 - 2 * cp); // smooth step (ease-in-out)
-    // High angled start — NOT directly overhead to avoid gimbal lock with up=(0,1,0)
-    const _introStartY = 26, _introStartZ = 6;
-    const _introEndY = _isMobile ? 20 : 17;
-    const _introEndZ = _isMobile ? 13 : 11;
+    // Low angle → top-down arc
+    const _introStartY = 4,  _introStartZ = 16;   // eye-level, looking across the island
+    const _introEndY   = _isMobile ? 18 : 22;
+    const _introEndZ   = 0.4;                       // near top-down (tiny z avoids gimbal lock)
     const bcx = cameraIntro.boardCX ?? 0, bcz = cameraIntro.boardCZ ?? 0;
     camera.up.set(0, 1, 0);
     const py = _introStartY + ce * (_introEndY - _introStartY);
