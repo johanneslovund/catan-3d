@@ -311,7 +311,7 @@ const ROBBER_PARAMS = {
 const canvas = document.getElementById('c');
 const _isMobile = window.innerWidth <= 768;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_isMobile, powerPreference: 'high-performance' });
-renderer.setPixelRatio(_isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(_isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 1.5));
 const MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
 renderer.shadowMap.enabled = !_isMobile;
 renderer.shadowMap.autoUpdate = false;
@@ -330,7 +330,7 @@ const envMap = pmrem.fromScene(roomEnv).texture;
 const scene = new THREE.Scene();
 scene.environment = envMap;
 scene.background = new THREE.Color(0xa8c8d8);
-scene.fog = new THREE.FogExp2(0xb8c8c0, LIGHT_PARAMS.fogDensity);
+scene.fog = null;
 
 const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 80);
 camera.position.set(0, 13, 11);
@@ -348,6 +348,7 @@ controls.screenSpacePanning = true;
 
 // Disable bloom and port outlines while camera is moving; restore 400ms after motion stops
 let _outlineRestoreTimer = null;
+controls.addEventListener('change', () => { _2dDirty = true; });
 controls.addEventListener('start', () => {
   _portOutlinePass.enabled = false;
   if (!_isMobile) bloom.enabled = false;
@@ -1028,7 +1029,7 @@ function triggerDiceRoll(d1, d2) {
   _diceSound.currentTime = 0;
   _diceSound.volume = sfxVol();
   _diceSound.play().catch(() => {});
-  diceAnim.active = true; diceAnim.settled = false; diceAnim.t = 0; diceAnim.result = [d1, d2];
+  diceAnim.active = true; diceAnim.settled = false; diceAnim.t = 0; diceAnim.result = [d1, d2]; _2dDirty = true;
   diceGroup.visible = true;
   // Throw from high above the board — full tumble during fall
   die1.position.set(-0.5, 5.5, 0.2);
@@ -1088,6 +1089,7 @@ function updateDiceAnim(delta) {
   } else if (!diceAnim.settled) {
     diceAnim.settled = true;
     diceAnim.active  = false;
+    _2dDirty = true;
     const r1 = DIE_TOP_ROT[diceAnim.result[0]];
     const r2 = DIE_TOP_ROT[diceAnim.result[1]];
     die1.rotation.copy(r1); die2.rotation.copy(r2);
@@ -1713,18 +1715,7 @@ function renderBoard(state) {
         float spec = pow(max(dot(reflDir, sunDir), 0.0), 140.0);
         col += vec3(1.0, 0.97, 0.88) * spec * 0.85;
 
-        // ── Sparkle glints (tiny dot per cell, not square) ──────────────────────
-        vec2 sgUV = vWPos * 11.0 + vec2(uTime * 0.22, uTime * 0.16);
-        vec2 sgCell = floor(sgUV);
-        vec2 sgFrac = fract(sgUV) - 0.5; // offset from cell centre
-        float h  = hash(sgCell);
-        float st = fract(uTime * (0.25 + h * 0.35) + h);
-        float twinkle = pow(max(0.0, 1.0 - abs(st - 0.5) * 10.0), 3.0);
-        float dotMask = 1.0 - smoothstep(0.04, 0.16, length(sgFrac));
-        float sparkle = twinkle * h * dotMask;
-        col += vec3(0.88, 0.95, 1.0) * sparkle * 0.65 * (1.0 - foam);
-
-        // ── Horizon haze ────────────────────────────────────────────────────────
+// ── Horizon haze ────────────────────────────────────────────────────────
         col = mix(col, vec3(0.72, 0.92, 0.96), smoothstep(0.5, 1.0, dist));
 
         // ── Alpha ───────────────────────────────────────────────────────────────
@@ -2680,7 +2671,7 @@ function applyLightParams() {
   ambient.intensity = LIGHT_PARAMS.ambIntensity;
   fill.intensity = LIGHT_PARAMS.fillIntensity;
   renderer.toneMappingExposure = LIGHT_PARAMS.exposure * 0.38;
-  scene.fog.density = LIGHT_PARAMS.fogDensity;
+  // fog removed
   bloom.strength = LIGHT_PARAMS.bloomStr;
   bloom.radius = LIGHT_PARAMS.bloomRadius;
   saturationPass.uniforms.uSaturation.value = LIGHT_PARAMS.saturation;
@@ -2694,6 +2685,7 @@ function applyLightParams() {
 // ─── Building rendering ───────────────────────────────────────────────────────
 function renderBuildings(state) {
   _shadowsDirty = true;
+  _2dDirty = true;
   clearGroup(buildGroup);
   const { vertices, edges, hexes } = state.board;
   const robberHex = hexes[state.robberHex];
@@ -4995,10 +4987,12 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
       } else if (param === 'light') {
         LIGHT_PARAMS[type] = v;
         applyLightParams();
+        _skyDirty = true;
         return;
       } else if (param === 'sky') {
         SKY_PARAMS[type] = v;
-        return; // synced every frame in animate loop
+        _skyDirty = true;
+        return;
       } else if (param === 'lava') {
         LAVA_PARAMS[type] = v;
         // steamAmount/steamGravity/steamOpacity are live; geometry params need rebuild
@@ -6076,6 +6070,7 @@ function _updateFPS() {
 }
 
 let _shadowsDirty = true;
+let _skyDirty = true;
 let _bobFrame = 0;
 let _fpsCapMs = 0; // 0 = uncapped; set via graphics settings
 let _fpsCapLast = 0;
@@ -6567,15 +6562,6 @@ function animate() {
       if (child.userData.isLava) return;
       const phase = tileBobPhases.get(hid) ?? 0;
       child.position.y = child.userData.baseY + Math.sin(t * BOB_PARAMS.speed + phase) * BOB_PARAMS.amp;
-      // Spawn water ring (desktop only — skip on mobile for perf)
-      if (!_isMobile && !_animSeenHids.has(hid) && child.userData.hexId !== undefined) {
-        _animSeenHids.add(hid);
-        const sinVal = Math.sin(t * BOB_PARAMS.speed + phase);
-        const spawnRate = delta * 0.55 * WATER_SPRITE_PARAMS.amount * Math.max(0, -sinVal);
-        if (Math.random() < spawnRate) {
-          spawnWaterRing(child.userData.baseX ?? child.position.x, child.userData.baseZ ?? child.position.z);
-        }
-      }
     });
   }
 
@@ -6708,18 +6694,17 @@ function animate() {
     u.uFoamStr.value   = WATER_PARAMS.foamStr;
     u.uOpacity.value   = WATER_PARAMS.opacity;
   }
-  if (!_isMobile && scene.userData.skyMat) {
+  if (_skyDirty && scene.userData.skyMat) {
     const su = scene.userData.skyMat.uniforms;
-    su.uTime.value = t;
     su.uHorizon.value.setRGB(SKY_PARAMS.horizonR, SKY_PARAMS.horizonG, SKY_PARAMS.horizonB);
     su.uZenith.value.setRGB(SKY_PARAMS.zenithR, SKY_PARAMS.zenithG, SKY_PARAMS.zenithB);
     su.uHazeAmt.value  = SKY_PARAMS.hazeAmt;
     su.uSunSize.value  = SKY_PARAMS.sunSize;
     su.uSunGlow.value  = SKY_PARAMS.sunGlow;
-    // Keep sun direction in sync with time-of-day
     const tod = LIGHT_PARAMS.timeOfDay;
     const ang = tod * Math.PI;
     su.uSunDir.value.set(Math.cos(ang) * 12, Math.max(1, Math.sin(ang) * 22), 6).normalize();
+    _skyDirty = false;
   }
   // Background cloud drift + height + color temperature
   if (scene.userData.cloudGroup) {
@@ -7195,11 +7180,10 @@ function _hexPts(hex) {
   return pts;
 }
 
-let _2dLastDraw = 0;
+let _2dDirty = true;
 function _draw2DBoard() {
-  const now = performance.now();
-  if (now - _2dLastDraw < 33) return; // cap at ~30fps
-  _2dLastDraw = now;
+  if (!_2dDirty) return;
+  _2dDirty = false;
   _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
   if (!_is2D || !gameState?.board) return;
   // (no early return for diceAnim — tiles stay visible; dice hole punched below)
@@ -7557,6 +7541,7 @@ function toggle2D() {
     controls.target.set(controls.target.x, 0, controls.target.z);
     controls.update();
 
+    _2dDirty = true;
     _set2DVisibility(false);
     _portOutlinePass.enabled = false;
     _resizeOverlay();
