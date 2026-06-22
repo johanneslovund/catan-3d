@@ -1121,8 +1121,15 @@ function triggerDiceRoll(d1, d2) {
   _diceSound.currentTime = 0;
   _diceSound.volume = sfxVol();
   _diceSound.play().catch(() => {});
+  if (_is2D) {
+    diceGroup.visible = false;
+    // In 2D mode just update the bottom-right dice display — no animation or popup
+    const dd2 = document.getElementById('mobDice2D');
+    if (dd2) dd2.textContent = `🎲 ${d1}+${d2}=${d1+d2}`;
+    return;
+  }
   diceAnim.active = true; diceAnim.settled = false; diceAnim.t = 0; diceAnim.result = [d1, d2]; _2dDirty = true;
-  diceGroup.visible = !_is2D;
+  diceGroup.visible = true;
   // Throw from high above the board — full tumble during fall
   die1.position.set(-0.5, 5.5, 0.2);
   die2.position.set( 0.5, 6.2, 0.0);
@@ -3059,8 +3066,8 @@ function showVertexMarkers(ids, append = false) {
   ids.forEach(vid => {
     const v = gameState.board.vertices[vid];
     const maxTop = HEX_H / 2;
-    const geo = new THREE.SphereGeometry(0.09, 8, 8);
-    const mat = new THREE.MeshStandardMaterial({ color:0xc8921a, roughnessMap:tokenScratchTex(), roughness:0.72, metalness:0.82, envMapIntensity:1.6, emissive:0xc8600a, emissiveIntensity:0.18, transparent: hideDuringIntro, opacity: hideDuringIntro ? 0 : 1 });
+    const geo = new THREE.SphereGeometry(0.18, 10, 10);
+    const mat = new THREE.MeshStandardMaterial({ color:0xffe066, roughness:0.5, metalness:0.3, emissive:0xffaa00, emissiveIntensity:0.55, transparent: true, opacity: hideDuringIntro ? 0 : 0.55 });
     const m = new THREE.Mesh(geo, mat);
     m.userData = { type:'vertexMarker', vertexId:vid, markerType:'vertex', baseY: maxTop + 0.17 };
     const startYOff = hideDuringIntro ? -2.5 : 0;
@@ -6780,7 +6787,7 @@ function animate() {
         if (m.userData.markerType === 'vertex') {
           m.position.y = m.userData.baseY + SCENE_PARAMS.vertexMarkerY + riseOff;
         }
-        if (m.material) m.material.opacity = fadeP;
+        if (m.material) m.material.opacity = m.userData.markerType === 'vertex' ? fadeP * 0.55 : fadeP;
       });
     }
     if (rp >= 1) {
@@ -6797,11 +6804,11 @@ function animate() {
       (boardGroup.userData.boats ?? []).forEach(b => {
         b.mesh.traverse(c => { if (c.isMesh && c.material) { c.material.transparent = false; c.material.opacity = 1; } });
       });
-      // Snap vertex markers fully opaque
+      // Snap vertex markers to target opacity
       if (markerGroup.userData.pendingAppear) {
         markerGroup.userData.pendingAppear = false;
         markerGroup.children.forEach(m => {
-          if (m.material) { m.material.transparent = false; m.material.opacity = 1; }
+          if (m.material) { m.material.transparent = true; m.material.opacity = m.userData.markerType === 'vertex' ? 0.55 : 1; }
           if (m.userData.markerType === 'vertex') m.position.y = m.userData.baseY + SCENE_PARAMS.vertexMarkerY;
         });
       }
