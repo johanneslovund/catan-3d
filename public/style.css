@@ -697,6 +697,8 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   border-radius: 10px; padding: 6px 8px; min-width: 56px; cursor: default;
 }
 .trc-icon { font-size: 1.3rem; line-height: 1; }
+.trc-card-img { width: 38px; height: auto; border-radius: 4px; display: block; }
+.ti-res-chip .trc-card-img { width: 30px; }
 .trc-name { font-size: .58rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
 .trc-controls { display: flex; align-items: center; gap: 3px; }
 .trc-btn {
@@ -1499,12 +1501,13 @@ img.piece-icon {
   #mobResFooter::-webkit-scrollbar { display: none; }
   .mob-res-card {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-width: 48px; height: 58px; border-radius: 10px;
-    border: 1.5px solid rgba(255,255,255,0.18);
-    padding: 4px 6px; flex-shrink: 0;
-    gap: 1px;
+    min-width: 44px; border-radius: 8px;
+    background: rgba(0,0,0,0.35);
+    border: 1.5px solid rgba(255,255,255,0.12);
+    padding: 4px 4px 5px; flex-shrink: 0;
+    gap: 2px;
   }
-  .mob-res-card-icon { font-size: 1.4rem; line-height: 1.1; }
+  .mob-res-card-img { width: 36px; height: auto; border-radius: 4px; display: block; }
   .mob-res-card-count {
     font-size: .95rem; font-weight: 900; color: #fff;
     text-shadow: 0 1px 3px rgba(0,0,0,0.8);

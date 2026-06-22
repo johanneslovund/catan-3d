@@ -3415,6 +3415,13 @@ function _cardIconSrcTier(tier) {
   return 'Icons/card-icon-1x.png';
 }
 
+const RES_CARD_IMG = {
+  wood:  'Icons/Wood card icon.png',
+  sheep: 'Icons/Sheep Card Icon.png',
+  wheat: 'Icons/Wheat Card Icon.png',
+  brick: 'Icons/Brick Card Icon.png',
+  ore:   'Icons/Ore Card Icon.png',
+};
 const RES_INFO = {
   wood:  { icon:'🪵', get label(){ return tr('wood');  } },
   sheep: { icon:'🐑', get label(){ return tr('sheep'); } },
@@ -5324,7 +5331,7 @@ function buildResRow(containerId, countsObj, maxFn, onChange) {
     const chip = document.createElement('div');
     chip.className = 'trade-res-chip';
     chip.innerHTML = `
-      <div class="trc-icon">${icon}</div>
+      <div class="trc-icon"><img src="${RES_CARD_IMG[key]}" class="trc-card-img" alt="${key}"></div>
       <div class="trc-name">${name}</div>
       <div class="trc-controls">
         <button class="trc-btn trc-minus" data-key="${key}">−</button>
@@ -5527,8 +5534,7 @@ function updateMyResourcesHand(state, me) {
     const n = me.resources[r] || 0;
     const card = document.createElement('div');
     card.className = 'mob-res-card' + (n === 0 ? ' empty' : '');
-    card.style.background = _MOB_RES_COLORS[r];
-    card.innerHTML = `<span class="mob-res-card-icon">${RES_EMOJI[r]}</span><span class="mob-res-card-count">${n}</span>`;
+    card.innerHTML = `<img src="${RES_CARD_IMG[r]}" class="mob-res-card-img" alt="${r}"><span class="mob-res-card-count">${n}</span>`;
     card.addEventListener('click', () => {
       if (!gameState || !me) return;
       const curr = gameState.players[gameState.currentPlayerIndex];
@@ -5658,7 +5664,7 @@ function updateTradeIncoming(state) {
       if (n === 0) return;
       const chip = document.createElement('div');
       chip.className = 'ti-res-chip';
-      chip.innerHTML = `<div class="trc-icon">${icon}</div><div class="trc-count">${n}</div>`;
+      chip.innerHTML = `<div class="trc-icon"><img src="${RES_CARD_IMG[key]}" class="trc-card-img" alt="${key}"></div><div class="trc-count">${n}</div>`;
       row.appendChild(chip);
     });
     if (!row.children.length) row.innerHTML = '<span style="color:var(--text-muted);font-size:.75rem">—</span>';
