@@ -3531,8 +3531,11 @@ function updateUI(state) {
   syncLog(state);
 
   // Dice display
+  const diceText = state.dice ? `🎲 ${state.dice[0]}+${state.dice[1]}=${state.dice[0]+state.dice[1]}` : '';
   const dd = document.getElementById('diceDisplay');
-  if (dd) dd.textContent = state.dice ? `🎲 ${state.dice[0]}+${state.dice[1]}=${state.dice[0]+state.dice[1]}` : '';
+  if (dd) dd.textContent = diceText;
+  const dd2 = document.getElementById('mobDice2D');
+  if (dd2) dd2.textContent = diceText;
 
   // Build shortcut enable/disable
   const res = me?.resources||{};
@@ -7582,10 +7585,14 @@ function _draw2DBoard() {
         tx.drawImage(img, 0, 0, tc.width, tc.height);
         tx.globalCompositeOperation = 'source-atop';
         tx.fillStyle = col;
-        tx.globalAlpha = 0.72;
+        tx.globalAlpha = 0.36;
         tx.fillRect(0, 0, tc.width, tc.height);
         ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+        // White outline via shadow
+        ctx.shadowColor = 'rgba(255,255,255,0.95)';
+        ctx.shadowBlur = Math.max(2, s * 0.18);
         ctx.drawImage(tc, px - iw, py - ih * 0.85, iw * 2, ih);
+        ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
       } else {
         ctx.beginPath(); ctx.arc(px, py, s, 0, Math.PI * 2);
         ctx.fillStyle = col; ctx.fill();
@@ -7799,6 +7806,8 @@ function toggle2D() {
 
     _btn2d.textContent = '3D';
     _btn2d.classList.add('active');
+    const _dd2on = document.getElementById('mobDice2D');
+    if (_dd2on) _dd2on.style.display = '';
   } else {
     camera.up.set(0, 1, 0);
     controls.enableRotate = true;
@@ -7823,6 +7832,8 @@ function toggle2D() {
 
     _btn2d.textContent = '2D';
     _btn2d.classList.remove('active');
+    const _dd2off = document.getElementById('mobDice2D');
+    if (_dd2off) _dd2off.style.display = 'none';
   }
 }
 
