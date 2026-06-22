@@ -3105,7 +3105,7 @@ function showHexMarkers(ids) {
     const h = gameState.board.hexes[hid];
     const geo = new THREE.CylinderGeometry(HEX_R*0.62, HEX_R*0.62, 0.07, 6);
     geo.rotateY(Math.PI/6);
-    const mat = new THREE.MeshStandardMaterial({ color:0xff3300, emissive:0xff2200, emissiveIntensity:0.25, transparent:true, opacity:0.28 });
+    const mat = new THREE.MeshStandardMaterial({ color:0xffaa00, emissive:0xffcc00, emissiveIntensity:0.30, transparent:true, opacity:0.22 });
     const m = new THREE.Mesh(geo, mat);
     const hexBaseY = HEX_H/2 + 0.04;
     m.userData = { type:'hexMarker', hexId:hid, markerType:'hex', baseY: hexBaseY };
@@ -6265,20 +6265,31 @@ function animate() {
 
   // Marker pulse + live Y offset per marker type
   if (markerGroup.children.length === 0) { /* skip */ }
-  else markerGroup.children.forEach((m, i) => {
-    if (m.userData.baseY !== undefined) {
-      const yOff = m.userData.markerType === 'vertex' ? SCENE_PARAMS.vertexMarkerY :
-                   m.userData.markerType === 'edge'   ? SCENE_PARAMS.edgeMarkerY   :
-                   m.userData.markerType === 'hex'    ? SCENE_PARAMS.hexMarkerY    : 0;
-      m.position.y = m.userData.baseY + yOff;
-    }
-    if (m === pendingMarkerMesh) {
-      if (m.material?.emissiveIntensity !== undefined) m.material.emissiveIntensity = 0.8 + 0.2 * Math.sin(t * 8);
-      m.scale.setScalar(1.5 + 0.1 * Math.sin(t * 8));
-    } else {
-      if (m.material?.emissiveIntensity !== undefined) m.material.emissiveIntensity = 0.3 + 0.25 * Math.sin(t*3 + i*0.8);
-    }
-  });
+  else {
+    if (_is2D) _2dDirty = true; // redraw 2D overlay every frame when markers present
+    markerGroup.children.forEach((m, i) => {
+      if (m.userData.baseY !== undefined) {
+        const yOff = m.userData.markerType === 'vertex' ? SCENE_PARAMS.vertexMarkerY :
+                     m.userData.markerType === 'edge'   ? SCENE_PARAMS.edgeMarkerY   :
+                     m.userData.markerType === 'hex'    ? SCENE_PARAMS.hexMarkerY    : 0;
+        m.position.y = m.userData.baseY + yOff;
+      }
+      if (m === pendingMarkerMesh) {
+        if (m.material?.emissiveIntensity !== undefined) m.material.emissiveIntensity = 0.8 + 0.2 * Math.sin(t * 8);
+        m.scale.setScalar(1.5 + 0.1 * Math.sin(t * 8));
+      } else if (m.userData.markerType === 'hex') {
+        // Hex (robber) markers: pulsate opacity
+        const p = 0.5 + 0.5 * Math.sin(t * 3.5);
+        if (m.material) { m.material.opacity = 0.18 + 0.22 * p; m.material.emissiveIntensity = 0.2 + 0.3 * p; }
+        m.scale.setScalar(1.0 + 0.06 * Math.sin(t * 3.5));
+      } else {
+        // Vertex/edge markers: pulsate scale + emissive
+        const p = Math.sin(t * 3.5 + i * 0.7);
+        if (m.material?.emissiveIntensity !== undefined) m.material.emissiveIntensity = 0.3 + 0.25 * p;
+        m.scale.setScalar(1.0 + 0.14 * p);
+      }
+    });
+  }
 
   // Drop animations — pieces falling from sky
   for (let i = dropAnims.length - 1; i >= 0; i--) {
@@ -7588,14 +7599,15 @@ function _draw2DBoard() {
       const h = gameState.board.hexes[m.userData.hexId];
       if (!h) return;
       const pts = _hexPts(h);
+      const _hp = 0.5 + 0.5 * Math.sin(t * 3.5);
       ctx.beginPath();
       ctx.moveTo(pts[0][0], pts[0][1]);
       for (let i=1;i<6;i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(255,40,0,0.30)';
+      ctx.fillStyle = `rgba(255,160,0,${0.08 + 0.14 * _hp})`;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(255,80,0,0.70)';
-      ctx.lineWidth = Math.max(2, hexPxR * 0.08);
+      ctx.strokeStyle = `rgba(255,200,0,${0.55 + 0.35 * _hp})`;
+      ctx.lineWidth = Math.max(2, hexPxR * (0.06 + 0.04 * _hp));
       ctx.stroke();
     });
   }
@@ -7604,14 +7616,15 @@ function _draw2DBoard() {
   if (typeof markerGroup !== 'undefined') {
     markerGroup.children.forEach(m => {
       if (!m.visible) return;
+      const _pulse = 0.5 + 0.5 * Math.sin(t * 3.5);
       if (m.userData.vertexId !== undefined) {
         const v = gameState.board.vertices[m.userData.vertexId];
         if (!v) return;
         const [px,py] = _w2c(v.x, v.z);
-        const r = hexPxR * 0.14;
+        const r = hexPxR * (0.12 + 0.05 * _pulse);
         ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
-        ctx.fillStyle = 'rgba(255,215,0,0.32)'; ctx.fill();
-        ctx.strokeStyle = 'rgba(255,215,0,0.70)'; ctx.lineWidth = Math.max(1.5,r*0.22); ctx.stroke();
+        ctx.fillStyle = `rgba(255,215,0,${0.22 + 0.20 * _pulse})`; ctx.fill();
+        ctx.strokeStyle = `rgba(255,215,0,${0.55 + 0.30 * _pulse})`; ctx.lineWidth = Math.max(1.5,r*0.22); ctx.stroke();
       } else if (m.userData.edgeId !== undefined) {
         const e = gameState.board.edges[m.userData.edgeId];
         if (!e) return;
@@ -7620,10 +7633,10 @@ function _draw2DBoard() {
         if (!v1||!v2) return;
         const [x1,y1] = _w2c(v1.x, v1.z);
         const [x2,y2] = _w2c(v2.x, v2.z);
-        const r = hexPxR * 0.16;
+        const r = hexPxR * (0.13 + 0.05 * _pulse);
         ctx.beginPath(); ctx.arc((x1+x2)/2,(y1+y2)/2,r,0,Math.PI*2);
-        ctx.fillStyle = 'rgba(255,215,0,0.32)'; ctx.fill();
-        ctx.strokeStyle = 'rgba(255,215,0,0.70)'; ctx.lineWidth = Math.max(1.5,r*0.18); ctx.stroke();
+        ctx.fillStyle = `rgba(255,215,0,${0.22 + 0.20 * _pulse})`; ctx.fill();
+        ctx.strokeStyle = `rgba(255,215,0,${0.55 + 0.30 * _pulse})`; ctx.lineWidth = Math.max(1.5,r*0.18); ctx.stroke();
       }
     });
   }
