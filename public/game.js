@@ -7274,8 +7274,9 @@ const _overlayCtx   = _overlay2d.getContext('2d');
 let _hexPxR = 50;
 
 function _resizeOverlay() {
-  _overlay2d.width  = renderer.domElement.clientWidth  || window.innerWidth;
-  _overlay2d.height = renderer.domElement.clientHeight || window.innerHeight;
+  const _ow = document.getElementById('canvasWrapper');
+  _overlay2d.width  = (_ow ? _ow.clientWidth  : renderer.domElement.clientWidth)  || window.innerWidth;
+  _overlay2d.height = (_ow ? _ow.clientHeight : renderer.domElement.clientHeight) || window.innerHeight;
 }
 
 const _2D_TILE_COLORS = {
@@ -7743,11 +7744,16 @@ function toggle2D() {
     const _bcx2d = _landH.reduce((s,h) => s+h.x, 0) / (_landH.length||1);
     const _bcz2d = _landH.reduce((s,h) => s+h.z, 0) / (_landH.length||1);
     const _boardR = _landH.reduce((m,h) => Math.max(m, Math.hypot(h.x-_bcx2d, h.z-_bcz2d)), 0) + 2.5;
-    const _aspect = (canvas.clientWidth||390) / (canvas.clientHeight||600);
+    // Use canvasWrapper for reliable dimensions (canvas CSS may be 0 before layout flush)
+    const _wrap = document.getElementById('canvasWrapper');
+    _wrap?.getBoundingClientRect(); // force layout flush
+    const _ww = _wrap ? _wrap.clientWidth  : window.innerWidth;
+    const _wh = _wrap ? _wrap.clientHeight : window.innerHeight;
+    const _aspect = (_ww || window.innerWidth) / (_wh || window.innerHeight);
     const _fovRad = camera.fov * Math.PI / 180;
     const _visH = Math.tan(_fovRad / 2);
     const _visW = _visH * _aspect;
-    const height2d = Math.max(10, (_boardR / Math.min(_visH, _visW)) * 1.08);
+    const height2d = Math.max(10, (_boardR / Math.min(_visH, _visW)) * 1.1);
 
     camera.up.set(0, 0, -1);
     controls.enableRotate = false;
