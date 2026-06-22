@@ -7475,27 +7475,25 @@ function _draw2DBoard() {
 
       // Dock lines
       ctx.save();
-      ctx.strokeStyle = '#8B6914'; ctx.lineWidth = Math.max(2, hexPxR*0.07); ctx.lineCap='round';
+      ctx.strokeStyle = '#a07820'; ctx.lineWidth = Math.max(2, hexPxR*0.09); ctx.lineCap='round';
       ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(x1,y1); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(x2,y2); ctx.stroke();
       ctx.restore();
       [[x1,y1],[x2,y2]].forEach(([vx,vy]) => {
-        ctx.beginPath(); ctx.arc(vx,vy,Math.max(2,hexPxR*0.09),0,Math.PI*2);
-        ctx.fillStyle='#8B6914'; ctx.fill();
+        ctx.beginPath(); ctx.arc(vx,vy,Math.max(2,hexPxR*0.10),0,Math.PI*2);
+        ctx.fillStyle='#a07820'; ctx.fill();
       });
 
       // Card badge center
-      const dist = hexPxR * 1.05;
+      const dist = hexPxR * 1.10;
       const cx2 = mx + nx*dist, cy2 = my + ny*dist;
       const isAny = port.type === 'any';
       const portColor = _2D_PORT_COLORS[port.type] || '#e8dcc8';
-      const bw = hexPxR * 0.72, bh = hexPxR * 0.72;
-      const r2 = bw * 0.20; // corner radius
+      const bw = hexPxR * 0.44, bh = hexPxR * 0.50;
+      const r2 = bw * 0.22;
 
       ctx.save();
-      // Card shadow
-      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=Math.max(3,bw*0.15); ctx.shadowOffsetY=Math.max(1,bw*0.05);
-      // Rounded rect
+      ctx.shadowColor='rgba(0,0,0,0.55)'; ctx.shadowBlur=Math.max(2,bw*0.18); ctx.shadowOffsetY=Math.max(1,bw*0.06);
       ctx.beginPath();
       ctx.moveTo(cx2-bw+r2, cy2-bh); ctx.lineTo(cx2+bw-r2, cy2-bh);
       ctx.arcTo(cx2+bw, cy2-bh, cx2+bw, cy2-bh+r2, r2);
@@ -7508,21 +7506,19 @@ function _draw2DBoard() {
       ctx.closePath();
       ctx.fillStyle = portColor; ctx.fill();
       ctx.shadowColor='transparent';
-      ctx.strokeStyle='rgba(0,0,0,0.40)'; ctx.lineWidth=Math.max(1.5,bw*0.06); ctx.stroke();
+      ctx.strokeStyle='rgba(0,0,0,0.50)'; ctx.lineWidth=Math.max(1,bw*0.08); ctx.stroke();
 
-      // Resource icon (large, top half)
       const icon = isAny ? '⚓' : (_2D_PORT_ICONS[port.type]||'?');
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=Math.max(2,bw*0.1);
-      ctx.font=`${Math.round(bh*0.72)}px sans-serif`;
-      ctx.fillText(icon, cx2, cy2 - bh*0.22);
+      ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=Math.max(1,bw*0.08);
+      ctx.font=`${Math.round(bh*0.70)}px sans-serif`;
+      ctx.fillText(icon, cx2, cy2 - bh*0.18);
 
-      // Ratio text (bottom half)
       const ratio = isAny ? '3:1' : '2:1';
-      ctx.font=`bold ${Math.round(bh*0.48)}px sans-serif`;
-      ctx.fillStyle='rgba(0,0,0,0.80)';
+      ctx.font=`bold ${Math.round(bh*0.42)}px sans-serif`;
+      ctx.fillStyle='rgba(0,0,0,0.85)';
       ctx.shadowBlur=0;
-      ctx.fillText(ratio, cx2, cy2 + bh*0.52);
+      ctx.fillText(ratio, cx2, cy2 + bh*0.55);
 
       ctx.restore();
     });

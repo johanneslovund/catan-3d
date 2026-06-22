@@ -247,7 +247,12 @@ function generateBoard() {
   // Pick 9 evenly spaced edges
   const step = Math.floor(outerEdges.length / 9);
   const portEdges = Array.from({ length: 9 }, (_, i) => outerEdges[i * step]);
-  const portTypes = shuffle(['wood','sheep','wheat','brick','ore','any','any','any','any']);
+  // 5x 3:1 (any) + 4x resource, arranged alternately: any, resource, any, resource...
+  const resourceTypes = shuffle(['wood','sheep','wheat','brick','ore'].slice(0,4));
+  const portTypes = [
+    'any', resourceTypes[0], 'any', resourceTypes[1],
+    'any', resourceTypes[2], 'any', resourceTypes[3], 'any'
+  ];
   const ports = portEdges.map((edge, i) => {
     const pt = portTypes[i];
     edge.vertices.forEach(vid => { vertices[vid].port = pt; });
