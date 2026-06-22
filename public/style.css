@@ -507,7 +507,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 #canvasWrapper {
   flex: 1; overflow: hidden; position: relative; height: 100%;
 }
-#c { display: block; }
+#c { display: block; width: 100%; height: 100%; }
 
 /* Build mode overlay */
 #buildMode {

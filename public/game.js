@@ -441,7 +441,7 @@ controls.target.set(0, 0, 0);
 
 // On mobile: single-finger drag pans, two-finger pinch zooms/rotates
 if (_isMobile) {
-  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
 }
 
 // Disable bloom and port outlines while camera is moving; restore 400ms after motion stops
