@@ -7449,9 +7449,9 @@ function _draw2DBoard() {
     ctx.fillText(hex.number, cx, cy);
   });
 
-  // Colonist-style ports
+  // Colonist-style ports: card badge + dock lines
   if (gameState.board.ports) {
-    const [bCx, bCy] = _w2c(0, 0); // actual projected board center
+    const [bCx, bCy] = _w2c(0, 0);
     gameState.board.ports.forEach(port => {
       const v1 = gameState.board.vertices[port.vertices[0]];
       const v2 = gameState.board.vertices[port.vertices[1]];
@@ -7459,59 +7459,60 @@ function _draw2DBoard() {
       const [x1,y1] = _w2c(v1.x, v1.z);
       const [x2,y2] = _w2c(v2.x, v2.z);
       const mx=(x1+x2)/2, my=(y1+y2)/2;
-      // Outward from actual board center
       const od = Math.hypot(mx-bCx, my-bCy)||1;
       const nx=(mx-bCx)/od, ny=(my-bCy)/od;
-      const pier = hexPxR*1.1;
-      const dx = mx+nx*pier, dy = my+ny*pier; // dock badge center
 
-      // Pier lines to each vertex
-      ctx.strokeStyle = '#6b4c1a'; ctx.lineWidth = Math.max(2, hexPxR*0.06); ctx.lineCap='round';
-      ctx.beginPath(); ctx.moveTo(dx,dy); ctx.lineTo(x1,y1); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(dx,dy); ctx.lineTo(x2,y2); ctx.stroke();
-
-      // Vertex dots
-      [x1,y1,x2,y2].forEach((_, i, a) => {
-        if (i%2!==0) return;
-        const [vx,vy]=[a[i],a[i+1]];
-        ctx.beginPath(); ctx.arc(vx,vy, hexPxR*0.09,0,Math.PI*2);
-        ctx.fillStyle='#6b4c1a'; ctx.fill();
+      // Dock lines
+      ctx.save();
+      ctx.strokeStyle = '#8B6914'; ctx.lineWidth = Math.max(2, hexPxR*0.07); ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(x1,y1); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(x2,y2); ctx.stroke();
+      ctx.restore();
+      [[x1,y1],[x2,y2]].forEach(([vx,vy]) => {
+        ctx.beginPath(); ctx.arc(vx,vy,Math.max(2,hexPxR*0.09),0,Math.PI*2);
+        ctx.fillStyle='#8B6914'; ctx.fill();
       });
 
+      // Card badge center
+      const dist = hexPxR * 1.05;
+      const cx2 = mx + nx*dist, cy2 = my + ny*dist;
       const isAny = port.type === 'any';
-      const portColor = _2D_PORT_COLORS[port.type] || '#ddd';
-      const br = hexPxR*0.34;
+      const portColor = _2D_PORT_COLORS[port.type] || '#e8dcc8';
+      const bw = hexPxR * 0.72, bh = hexPxR * 0.72;
+      const r2 = bw * 0.20; // corner radius
 
-      // Outer ring: resource color (any=gold), with dark border
-      ctx.beginPath(); ctx.arc(dx,dy,br,0,Math.PI*2);
-      ctx.fillStyle = portColor;
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-      ctx.lineWidth = Math.max(1.5, br * 0.10);
-      ctx.stroke();
-
-      // Dark inner circle
-      ctx.beginPath(); ctx.arc(dx,dy,br*0.70,0,Math.PI*2);
-      ctx.fillStyle = isAny ? '#f5e6c8' : 'rgba(0,0,0,0.72)';
-      ctx.fill();
-
-      // Ratio text + icon
-      const ratio = isAny ? '3:1' : '2:1';
       ctx.save();
-      ctx.fillStyle = isAny ? '#2c1a00' : '#fff';
-      ctx.shadowColor = 'rgba(0,0,0,0.8)';
-      ctx.shadowBlur = Math.max(2, br * 0.15);
+      // Card shadow
+      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=Math.max(3,bw*0.15); ctx.shadowOffsetY=Math.max(1,bw*0.05);
+      // Rounded rect
+      ctx.beginPath();
+      ctx.moveTo(cx2-bw+r2, cy2-bh); ctx.lineTo(cx2+bw-r2, cy2-bh);
+      ctx.arcTo(cx2+bw, cy2-bh, cx2+bw, cy2-bh+r2, r2);
+      ctx.lineTo(cx2+bw, cy2+bh-r2);
+      ctx.arcTo(cx2+bw, cy2+bh, cx2+bw-r2, cy2+bh, r2);
+      ctx.lineTo(cx2-bw+r2, cy2+bh);
+      ctx.arcTo(cx2-bw, cy2+bh, cx2-bw, cy2+bh-r2, r2);
+      ctx.lineTo(cx2-bw, cy2-bh+r2);
+      ctx.arcTo(cx2-bw, cy2-bh, cx2-bw+r2, cy2-bh, r2);
+      ctx.closePath();
+      ctx.fillStyle = portColor; ctx.fill();
+      ctx.shadowColor='transparent';
+      ctx.strokeStyle='rgba(0,0,0,0.40)'; ctx.lineWidth=Math.max(1.5,bw*0.06); ctx.stroke();
+
+      // Resource icon (large, top half)
+      const icon = isAny ? '⚓' : (_2D_PORT_ICONS[port.type]||'?');
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      if (isAny) {
-        ctx.font=`bold ${Math.round(br*0.70)}px sans-serif`;
-        ctx.fillText(ratio, dx, dy);
-      } else {
-        ctx.font=`bold ${Math.round(br*0.65)}px sans-serif`;
-        ctx.fillText(ratio, dx, dy - br*0.20);
-        const icon = _2D_PORT_ICONS[port.type]||'';
-        ctx.font=`${Math.round(br*0.50)}px sans-serif`;
-        ctx.fillText(icon, dx, dy + br*0.42);
-      }
+      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=Math.max(2,bw*0.1);
+      ctx.font=`${Math.round(bh*0.72)}px sans-serif`;
+      ctx.fillText(icon, cx2, cy2 - bh*0.22);
+
+      // Ratio text (bottom half)
+      const ratio = isAny ? '3:1' : '2:1';
+      ctx.font=`bold ${Math.round(bh*0.48)}px sans-serif`;
+      ctx.fillStyle='rgba(0,0,0,0.80)';
+      ctx.shadowBlur=0;
+      ctx.fillText(ratio, cx2, cy2 + bh*0.52);
+
       ctx.restore();
     });
   }
@@ -7541,33 +7542,36 @@ function _draw2DBoard() {
     });
   }
 
-  // Buildings — PNG icons tinted to player color
+  // Buildings — tinted icon only (no background circle)
   if (gameState.board.vertices) {
     gameState.board.vertices.forEach(v => {
       if (!v.building) return;
       const [px, py] = _w2c(v.x, v.z);
       const col = _pidColor[v.building.playerId] || '#e74c3c';
       const isCity = v.building.type === 'city';
-      const s = hexPxR * (isCity ? 0.38 : 0.30);
+      const s = hexPxR * (isCity ? 0.42 : 0.34);
       const img = isCity ? _2dCastleImg : _2dTowerImg;
 
       ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.7)';
-      ctx.shadowBlur = s * 0.5;
-      ctx.shadowOffsetY = s * 0.15;
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = s * 0.6;
+      ctx.shadowOffsetY = s * 0.1;
 
-      // Tint: draw colored square behind, then icon on top with multiply-style tint
       if (img.complete && img.naturalWidth) {
-        // Draw tinted background circle
-        ctx.beginPath(); ctx.arc(px, py, s * 0.7, 0, Math.PI * 2);
-        ctx.fillStyle = col; ctx.globalAlpha = 0.85; ctx.fill();
-        ctx.globalAlpha = 1.0;
+        const iw = isCity ? s * 1.3 : s * 1.1;
+        const ih = s * 2.2;
+        // Off-screen tint canvas: draw icon, then overlay player color with source-atop
+        const tc = document.createElement('canvas');
+        tc.width = Math.ceil(iw * 2); tc.height = Math.ceil(ih);
+        const tx = tc.getContext('2d');
+        tx.drawImage(img, 0, 0, tc.width, tc.height);
+        tx.globalCompositeOperation = 'source-atop';
+        tx.fillStyle = col;
+        tx.globalAlpha = 0.72;
+        tx.fillRect(0, 0, tc.width, tc.height);
         ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-        // Tower is 50% narrower (portrait), castle is square
-        const iw = isCity ? s * 1.2 : s * 1.0;
-        ctx.drawImage(img, px - iw / 2, py - s, iw, s * 2);
+        ctx.drawImage(tc, px - iw, py - ih * 0.85, iw * 2, ih);
       } else {
-        // Fallback: colored dot
         ctx.beginPath(); ctx.arc(px, py, s, 0, Math.PI * 2);
         ctx.fillStyle = col; ctx.fill();
         ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, s * 0.15); ctx.stroke();

@@ -1,4 +1,5 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { touch-action: pan-x pan-y; }
 
 :root {
   --bg: #0d1117;
