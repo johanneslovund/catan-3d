@@ -1275,12 +1275,11 @@ img.piece-icon {
   #mobileTopBar {
     display: flex; align-items: center;
     height: 44px; flex-shrink: 0;
-    background: rgba(8,10,18,0.97);
-    border-bottom: 1px solid var(--glass-border);
+    background: transparent;
+    border-bottom: none;
     padding: 0 6px; gap: 4px;
     z-index: 20;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    position: relative;
   }
   .mob-top-section { display: flex; align-items: center; }
   .mob-top-left-icons { gap: 2px; flex-shrink: 0; }
@@ -1317,8 +1316,8 @@ img.piece-icon {
   #mobilePlayerCards {
     display: flex; align-items: stretch;
     height: 78px; flex-shrink: 0;
-    background: rgba(6,8,16,0.92);
-    border-bottom: 1px solid var(--glass-border);
+    background: transparent;
+    border-bottom: none;
     position: relative; overflow: hidden;
     transition: height 0.2s ease;
   }
@@ -1343,7 +1342,8 @@ img.piece-icon {
   .mob-player-card {
     flex: 1; min-width: 0;
     padding: 5px 5px 4px;
-    border-right: 1px solid var(--glass-border);
+    border-right: 1px solid rgba(255,255,255,0.10);
+    background: rgba(0,0,0,0.35);
     display: flex; flex-direction: column; gap: 2px;
     position: relative;
   }
@@ -1403,7 +1403,7 @@ img.piece-icon {
   /* ── Bottom-left corner: log + chat ── */
   #mobBtmLeft {
     display: flex; flex-direction: column; gap: 6px;
-    position: fixed; left: 10px; bottom: 14px; z-index: 30;
+    position: fixed; left: 10px; bottom: 86px; z-index: 30;
   }
   .mob-corner-btn {
     width: 40px; height: 40px; border-radius: 50%;
@@ -1419,7 +1419,7 @@ img.piece-icon {
   /* ── Bottom-right corner: 3 action buttons ── */
   #mobBtmRight {
     display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;
-    position: fixed; right: 10px; bottom: 14px; z-index: 30;
+    position: fixed; right: 10px; bottom: 86px; z-index: 30;
     width: calc(3 * 56px + 2 * 8px); /* fits 3 buttons */
   }
   #mobDice2D {
@@ -1446,9 +1446,36 @@ img.piece-icon {
   /* ── Center area (board + bottom bar) fills rest ── */
   #centerArea { flex: 1; min-height: 0; position: relative; }
 
+  /* ── My resource footer ── */
+  #mobResFooter {
+    display: flex; gap: 6px; align-items: center; justify-content: flex-start;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 6px 10px 10px;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    z-index: 25;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  #mobResFooter::-webkit-scrollbar { display: none; }
+  .mob-res-card {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 48px; height: 58px; border-radius: 10px;
+    border: 1.5px solid rgba(255,255,255,0.18);
+    padding: 4px 6px; flex-shrink: 0;
+    gap: 1px;
+  }
+  .mob-res-card-icon { font-size: 1.4rem; line-height: 1.1; }
+  .mob-res-card-count {
+    font-size: .95rem; font-weight: 900; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    line-height: 1;
+  }
+  .mob-res-card.empty { opacity: 0.35; }
+
   /* ── Bottom bar: only the main action button floats above corner buttons ── */
   #bottomBar {
-    position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: 156px; left: 50%; transform: translateX(-50%);
     right: auto; width: auto; height: auto;
     flex-direction: column; align-items: center;
     padding: 0; gap: 4px;

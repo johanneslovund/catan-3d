@@ -5504,8 +5504,42 @@ function updateResourceBar(me, state) {
   bar.appendChild(totalBadge);
 }
 
+const _MOB_RES_COLORS = { wood:'#3a6b1a', brick:'#8b3a1a', sheep:'#5a9e2f', wheat:'#b8860b', ore:'#5a6872' };
+
 function updateMyResourcesHand(state, me) {
   updateResourceBar(me, state);
+
+  const footer = document.getElementById('mobResFooter');
+  if (!footer) return;
+  const inGame = me && state.status !== 'lobby';
+  footer.style.display = inGame && _isMobile ? 'flex' : 'none';
+  if (!inGame) return;
+
+  footer.innerHTML = '';
+  ['wood','brick','sheep','wheat','ore'].forEach(r => {
+    const n = me.resources[r] || 0;
+    const card = document.createElement('div');
+    card.className = 'mob-res-card' + (n === 0 ? ' empty' : '');
+    card.style.background = _MOB_RES_COLORS[r];
+    card.innerHTML = `<span class="mob-res-card-icon">${RES_EMOJI[r]}</span><span class="mob-res-card-count">${n}</span>`;
+    card.addEventListener('click', () => {
+      if (!gameState || !me) return;
+      const curr = gameState.players[gameState.currentPlayerIndex];
+      if (curr?.id !== myId || !gameState.diceRolled) return;
+      const popup = document.getElementById('tradePanelPopup');
+      if (popup) popup.style.display = 'block';
+      const ratios = getPortRatios();
+      const max = Math.min(ratios[r] || 4, me.resources[r] || 0);
+      if ((tradeGiveCounts[r] || 0) < max) {
+        tradeGiveCounts[r] = (tradeGiveCounts[r] || 0) + 1;
+        const giveFn = key => Math.min(ratios[key]||4, me.resources[key]||0);
+        refreshResRow('tradeGiveRow', tradeGiveCounts, giveFn);
+        refreshResRow('tradeRecvRow', tradeRecvCounts, null);
+        updateBankTradeInfo();
+      }
+    });
+    footer.appendChild(card);
+  });
 }
 
 function updateTradePanelIfOpen() {
