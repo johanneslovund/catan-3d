@@ -3405,8 +3405,8 @@ renderer.domElement.addEventListener('click', e => {
 
 // ─── UI ───────────────────────────────────────────────────────────────────────
 function _bankStackDepth(count) {
-  if (count >= 10) return 3;
-  if (count >= 4)  return 2;
+  if (count >= 16) return 3;
+  if (count >= 10) return 2;
   if (count >= 1)  return 1;
   return 0;
 }
