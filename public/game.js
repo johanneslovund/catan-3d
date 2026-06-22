@@ -3681,11 +3681,20 @@ function updateMobilePlayerCards(state) {
     const card = document.createElement('div');
     card.className = 'mob-player-card' + (isActive?' active-turn':'');
     const tc = colorTextClass(p.color);
-    // Resources: show individual counts if visible, else total
-    const resHtml = RES_ORDER.map(r => {
-      const cnt = p.resources?.[r] ?? 0;
-      return `<div class="mob-card-res-cell"><span class="mob-res-icon">${RES_INFO[r].icon}</span><span class="mob-res-count">${cnt}</span></div>`;
-    }).join('');
+    // Resources: show individual counts only for self; others get total only
+    const totalRes = Object.values(p.resources||{}).reduce((a,b)=>a+b,0);
+    let resHtml;
+    if (isSelf) {
+      resHtml = `<div class="mob-card-resources">${RES_ORDER.map(r => {
+        const cnt = p.resources?.[r] ?? 0;
+        return `<div class="mob-card-res-cell"><span class="mob-res-icon">${RES_INFO[r].icon}</span><span class="mob-res-count">${cnt}</span></div>`;
+      }).join('')}</div>`;
+    } else {
+      resHtml = `<div class="mob-card-summary">
+        <span class="mob-summary-item">🎴 <b>${totalRes}</b></span>
+        ${devCount > 0 ? `<span class="mob-summary-item">📜 <b>${devCount}</b></span>` : ''}
+      </div>`;
+    }
     // Active player action label
     const actionLabel = isActive && state.phase ? `<div class="mob-card-action">${escapeHtml(state.phase.replace(/_/g,' '))}</div>` : '';
     card.innerHTML = `
@@ -3693,12 +3702,11 @@ function updateMobilePlayerCards(state) {
         <div class="mob-vp-badge ${tc}" style="background:${p.color}">${p.vp}</div>
         <span class="mob-card-name">${escapeHtml(p.name)}${p.isBot?' 🤖':''}${p.id===state.longestRoadPlayer?' 🛣':''}${p.id===state.largestArmyPlayer?' ⚔':''}</span>
       </div>
-      <div class="mob-card-resources">${resHtml}</div>
+      ${resHtml}
       <div class="mob-card-bld">
         <span><img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="🏠">${p.settlements||0}</span>
         <span><img src="Icons/Castle Icon.png?v=14" class="piece-icon" alt="🏰">${p.cities||0}</span>
         <span>🛣${p.roads||0}</span>
-        ${devCount>0?`<span>🎴${devCount}</span>`:''}
       </div>
       ${actionLabel}`;
     el.appendChild(card);

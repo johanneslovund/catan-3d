@@ -1316,7 +1316,7 @@ img.piece-icon {
   /* ── Player cards row ── */
   #mobilePlayerCards {
     display: flex; align-items: stretch;
-    height: 94px; flex-shrink: 0;
+    height: 78px; flex-shrink: 0;
     background: rgba(6,8,16,0.92);
     border-bottom: 1px solid var(--glass-border);
     position: relative; overflow: hidden;
@@ -1373,6 +1373,13 @@ img.piece-icon {
   }
   .mob-res-icon { font-size: .75rem; line-height: 1.1; }
   .mob-res-count { font-size: .68rem; font-weight: 800; color: var(--text); line-height: 1; }
+  .mob-card-summary {
+    display: flex; gap: 6px; align-items: center;
+    font-size: .68rem; color: var(--text-muted);
+    padding: 2px 0;
+  }
+  .mob-summary-item { display: flex; align-items: center; gap: 2px; }
+  .mob-summary-item b { color: var(--text); }
   .mob-card-bld {
     font-size: .58rem; color: var(--text-muted);
     display: flex; gap: 5px; align-items: center;
