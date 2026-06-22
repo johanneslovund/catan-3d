@@ -6309,19 +6309,19 @@ function animate() {
 
   // Port bobbing (includes rise-from-water offset during intro)
   const portGroups = boardGroup.userData.portGroups;
-  if (portGroups) {
+  if (!_is2D && portGroups) {
     const riseOff = boardGroup.userData._portRiseOff ?? 0;
     portGroups.forEach(pg => {
       pg.position.y = pg.userData.baseY + riseOff + Math.sin(t * 0.9 + pg.userData.bobPhase) * 0.011;
     });
   }
 
-  // Sheep/camel wandering — skip on mobile
-  if (!_isMobile) {
+  // Sheep/camel wandering — skip on mobile and in 2D
+  if (!_isMobile && !_is2D) {
   for (let i = 0; i < camelList.length; i++) wanderAnimal(camelList[i], delta, SCENE_PARAMS.camelY, 0.012);
   }
 
-  if (!_isMobile) sheepList.forEach(s => {
+  if (!_isMobile && !_is2D) sheepList.forEach(s => {
     const dx = s.tx - s.mesh.position.x;
     const dz = s.tz - s.mesh.position.z;
     const dist2 = dx*dx + dz*dz;
@@ -6747,9 +6747,9 @@ function animate() {
     }
   }
 
-  // Tile bobbing — independent per-hex sine wave (skip during intro sequences)
+  // Tile bobbing — independent per-hex sine wave (skip during intro sequences and in 2D)
   _bobFrame++;
-  if (BOB_PARAMS.enabled && (_bobFrame & 1) === 0 && !tileIntro.active && !tokenIntro.active && !robberDropIntro.active) {
+  if (!_is2D && BOB_PARAMS.enabled && (_bobFrame & 1) === 0 && !tileIntro.active && !tokenIntro.active && !robberDropIntro.active) {
     _animSeenHids.clear();
     boardGroup.children.forEach(child => {
       const hid = child.userData.hexId ?? child.userData.tokenHexId;
@@ -7730,6 +7730,11 @@ function _set2DVisibility(visible) {
   // Hide 3D port groups in 2D (drawn as colonist-style 2D instead)
   (boardGroup.userData.portGroups ?? []).forEach(pg => { pg.visible = visible; });
   (boardGroup.userData.portRoads  ?? []).forEach(r  => { r.visible  = visible; });
+  // Hide buildings and roads in 2D
+  buildGroup.visible = visible;
+  // Hide sheep and camels in 2D
+  sheepList.forEach(s => { s.mesh.visible = visible; });
+  camelList.forEach(s => { s.mesh.visible = visible; });
 }
 
 // ── 2D / 3D toggle ────────────────────────────────────────────────────────────
@@ -7781,6 +7786,7 @@ function toggle2D() {
     controls.target.set(_bcx2d, 0, _bcz2d);
     controls.update();
 
+    renderer.setPixelRatio(1);
     _2dDirty = true;
     _set2DVisibility(false);
     _portOutlinePass.enabled = false;
@@ -7803,6 +7809,7 @@ function toggle2D() {
     }
     controls.update();
 
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     _set2DVisibility(true);
     if (!_isMobile) {
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
