@@ -1,5 +1,6 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { touch-action: pan-x pan-y; }
+#c { touch-action: none; }
 
 :root {
   --bg: #0d1117;
@@ -1345,10 +1346,10 @@ img.piece-icon {
   /* ── Mobile top bar ── */
   #mobileTopBar {
     display: flex; align-items: center;
-    height: 44px; flex-shrink: 0;
+    height: calc(44px + env(safe-area-inset-top)); flex-shrink: 0;
     background: transparent;
     border-bottom: none;
-    padding: 0 6px; gap: 4px;
+    padding: env(safe-area-inset-top) 6px 0; gap: 4px;
     z-index: 20;
     position: relative;
   }
@@ -1361,12 +1362,12 @@ img.piece-icon {
   .mob-bank-bldg { font-size: 1.1rem; flex-shrink: 0; }
   .mob-top-right-icons { gap: 4px; flex-shrink: 0; }
   .mob-hdr-btn {
-    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+    background: transparent; border: none;
     border-radius: 8px; color: var(--text); cursor: pointer;
     font-size: .9rem; padding: 4px 7px; line-height: 1;
     display: flex; align-items: center; gap: 2px;
   }
-  .mob-hdr-btn:active { background: rgba(255,255,255,0.18); }
+  .mob-hdr-btn:active { background: rgba(255,255,255,0.12); }
   .mob-hdr-arr { font-size: .55rem; opacity: .7; }
   #mobileBankBar {
     display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; overflow: hidden;
@@ -1470,7 +1471,7 @@ img.piece-icon {
   /* ── Bottom-left corner: log + chat ── */
   #mobBtmLeft {
     display: flex; flex-direction: column; gap: 6px;
-    position: fixed; left: 10px; bottom: 86px; z-index: 30;
+    position: fixed; left: calc(10px + env(safe-area-inset-left)); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 30;
   }
   .mob-corner-btn {
     width: 40px; height: 40px; border-radius: 50%;
@@ -1486,7 +1487,7 @@ img.piece-icon {
   /* ── Bottom-right corner: 3 action buttons ── */
   #mobBtmRight {
     display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;
-    position: fixed; right: 10px; bottom: 86px; z-index: 30;
+    position: fixed; right: calc(10px + env(safe-area-inset-right)); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 30;
     width: calc(3 * 56px + 2 * 8px); /* fits 3 buttons */
   }
   #mobDice2D {
@@ -1517,7 +1518,9 @@ img.piece-icon {
   #mobResFooter {
     display: flex; gap: 6px; align-items: center; justify-content: flex-start;
     position: fixed; bottom: 0; left: 0; right: 0;
-    padding: 6px 10px 10px;
+    padding: 6px 10px calc(10px + env(safe-area-inset-bottom));
+    padding-left: calc(10px + env(safe-area-inset-left));
+    padding-right: calc(10px + env(safe-area-inset-right));
     background: rgba(0,0,0,0.55);
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
     z-index: 25;
@@ -1540,10 +1543,26 @@ img.piece-icon {
     line-height: 1;
   }
   .mob-res-card.empty { opacity: 0.35; }
+  .mob-footer-sep {
+    width: 1px; height: 44px; flex-shrink: 0;
+    background: rgba(255,255,255,0.2); margin: 0 4px;
+  }
+  .mob-dev-card {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 44px; border-radius: 8px;
+    background: rgba(80,60,20,0.5);
+    border: 1.5px solid rgba(255,200,80,0.3);
+    padding: 4px 4px 4px; flex-shrink: 0;
+    gap: 1px;
+  }
+  .mob-dev-label {
+    font-size: .6rem; font-weight: 700; color: rgba(255,220,120,0.9);
+    line-height: 1; letter-spacing: 0.03em;
+  }
 
   /* ── Bottom bar: only the main action button floats above corner buttons ── */
   #bottomBar {
-    position: fixed; bottom: 156px; left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: calc(156px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
     right: auto; width: auto; height: auto;
     flex-direction: column; align-items: center;
     padding: 0; gap: 4px;

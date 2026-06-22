@@ -3414,7 +3414,7 @@ function _bankCardHtml(r, count, label) {
   const depth = _bankStackDepth(count);
   if (depth === 0) return `<div class="bank-card-slot bank-card-empty"><img src="${RES_CARD_IMG[r]}" class="bank-card-img bank-card-img-empty" alt="${r}"><span class="bank-card-count bank-card-count-empty">✕</span></div>`;
   const low = count > 0 && count <= 3;
-  return `<div class="bank-card-slot bank-stack-${depth}${low?' bank-card-low':''}"><img src="${RES_CARD_IMG[r]}" class="bank-card-img" alt="${r}"><span class="bank-card-count">${label ?? count}</span></div>`;
+  return `<div class="bank-card-slot bank-stack-${depth}${low?' bank-card-low':''}"><img src="${RES_CARD_IMG[r]}" class="bank-card-img" alt="${r}"></div>`;
 }
 function _cardIconSrc(count) {
   if (count >= 12) return 'Icons/card-icon-3x.png';
@@ -4004,6 +4004,8 @@ class VoiceChat {
           if (!senders.find(s => s.track?.kind === t.kind)) pc.addTrack(t, this.localStream);
         });
       });
+      // Re-apply music volume in case iOS ducked it when mic opened
+      setTimeout(() => AUDIO.applyMusicVolume?.(), 300);
       socket.emit('voiceJoin');
     } catch(err) {
       console.warn('Mic error:', err);
@@ -4031,19 +4033,37 @@ class VoiceChat {
     if (this.localStream) this.localStream.getTracks().forEach(t => pc.addTrack(t, this.localStream));
 
     pc.ontrack = ev => {
-      const stream = ev.streams[0];
-      this.peers[peerId].stream = stream;
-      const ctx = this.audioCtx = this.audioCtx||new AudioContext();
+      // Use provided stream or build one from the track
+      const stream = (ev.streams && ev.streams[0]) || (() => {
+        const s = new MediaStream(); s.addTrack(ev.track); return s;
+      })();
+
+      // Destroy any previous audio element for this peer to avoid duplicates
+      const prev = this.peers[peerId];
+      if (prev?.audio) { prev.audio.pause(); prev.audio.srcObject = null; prev.audio.remove(); }
+
+      // AudioContext for volume analysis
+      const ctx = this.audioCtx = this.audioCtx || new AudioContext();
+      if (ctx.state === 'suspended') ctx.resume();
       const src = ctx.createMediaStreamSource(stream);
       const an  = ctx.createAnalyser(); an.fftSize = 256;
       src.connect(an);
-      this.peers[peerId].analyser = an;
-      const audio = new Audio();
+      if (this.peers[peerId]) {
+        this.peers[peerId].stream   = stream;
+        this.peers[peerId].analyser = an;
+      }
+
+      // HTML Audio element for actual playback — must be in DOM for Safari
+      const audio = document.createElement('audio');
+      audio.autoplay = true;
+      audio.playsInline = true;
       audio.srcObject = stream;
       audio.volume = AUDIO.vcMuted ? 0 : AUDIO.vcVolume;
       audio.muted = mutedPeers.has(peerId);
-      audio.play().catch(()=>{});
-      this.peers[peerId].audio = audio;
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
+      audio.play().catch(e => console.warn('VC play failed:', e));
+      if (this.peers[peerId]) this.peers[peerId].audio = audio;
     };
 
     pc.onicecandidate = ev => { if (ev.candidate) socket.emit('voiceIce',{to:peerId, candidate:ev.candidate}); };
@@ -4076,7 +4096,8 @@ class VoiceChat {
   removePeer(peerId) {
     const p = this.peers[peerId];
     if (!p) return;
-    p.pc.close(); p.audio?.pause();
+    p.pc.close();
+    if (p.audio) { p.audio.pause(); p.audio.srcObject = null; p.audio.remove(); }
     delete this.peers[peerId];
   }
 
@@ -5539,6 +5560,23 @@ function updateMyResourcesHand(state, me) {
     });
     footer.appendChild(card);
   });
+
+  const DEV_LABELS_SHORT = { knight:'KNT', roadBuilding:'RD', yearOfPlenty:'YOP', monopoly:'MON', vp:'VP' };
+  const devCards = (me.devCards || []).filter(c => !c.played && c.type !== 'hidden');
+  if (devCards.length > 0) {
+    const sep = document.createElement('div');
+    sep.className = 'mob-footer-sep';
+    footer.appendChild(sep);
+
+    const counts = {};
+    devCards.forEach(c => { counts[c.type] = (counts[c.type] || 0) + 1; });
+    Object.entries(counts).forEach(([type, cnt]) => {
+      const card = document.createElement('div');
+      card.className = 'mob-dev-card';
+      card.innerHTML = `<img src="Icons/Dev card icon.png" class="mob-res-card-img" alt="${type}"><span class="mob-res-card-count">${cnt > 1 ? cnt : ''}</span><span class="mob-dev-label">${DEV_LABELS_SHORT[type] ?? type}</span>`;
+      footer.appendChild(card);
+    });
+  }
 }
 
 function updateTradePanelIfOpen() {
@@ -5628,17 +5666,17 @@ function updateTradeIncoming(state) {
   const _tiAvEl = document.getElementById('tiProposerAvatarEl');
   if (_tiAvEl && _tiProposer) {
     _tiAvEl.style.background = _tiProposer.color || '#666';
-    _tiAvEl.textContent = (trade.fromName || '?')[0].toUpperCase();
+    _tiAvEl.innerHTML = avatarHtml(_tiProposer.avatar, _tiProposer.name, _tiProposer.isBot, _tiProposer.color);
   }
   const _tiThemDot = document.getElementById('tiThemAvatar');
   if (_tiThemDot && _tiProposer) {
     _tiThemDot.style.background = _tiProposer.color || 'rgba(100,100,120,0.8)';
-    _tiThemDot.textContent = (trade.fromName || '?')[0].toUpperCase();
+    _tiThemDot.innerHTML = avatarHtml(_tiProposer.avatar, _tiProposer.name, _tiProposer.isBot, _tiProposer.color);
   }
   const _tiMeDot = document.getElementById('tiMeAvatar');
   if (_tiMeDot && _tiMe) {
     _tiMeDot.style.background = _tiMe.color || 'rgba(200,60,60,0.8)';
-    _tiMeDot.textContent = ((_tiMe.name || myId) || '?')[0].toUpperCase();
+    _tiMeDot.innerHTML = avatarHtml(_tiMe.avatar, _tiMe.name, _tiMe.isBot, _tiMe.color);
   }
 
   function buildTiRow(containerId, counts) {
