@@ -1270,51 +1270,58 @@ img.piece-icon {
   /* Show mobile right side bar */
   #rightSideBar { display: flex; }
 
-  /* ── Mobile top bar: bank + icons ── */
+  /* ── Mobile top bar ── */
   #mobileTopBar {
     display: flex; align-items: center;
-    height: 40px; flex-shrink: 0;
-    background: rgba(8,10,18,0.95);
+    height: 44px; flex-shrink: 0;
+    background: rgba(8,10,18,0.97);
     border-bottom: 1px solid var(--glass-border);
-    padding: 0 10px; gap: 0;
+    padding: 0 6px; gap: 4px;
     z-index: 20;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
   }
-  .mob-top-left {
-    display: flex; align-items: center; gap: 5px; flex: 1;
-    min-width: 0; overflow: hidden;
+  .mob-top-section { display: flex; align-items: center; }
+  .mob-top-left-icons { gap: 2px; flex-shrink: 0; }
+  .mob-bank-center {
+    flex: 1; min-width: 0; overflow: hidden;
+    justify-content: center; gap: 4px;
   }
-  #mobBankLabel {
-    font-size: .55rem; font-weight: 700; color: var(--text-muted);
-    text-transform: uppercase; letter-spacing: .07em; flex-shrink: 0;
+  .mob-bank-bldg { font-size: 1.1rem; flex-shrink: 0; }
+  .mob-top-right-icons { gap: 4px; flex-shrink: 0; }
+  .mob-hdr-btn {
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px; color: var(--text); cursor: pointer;
+    font-size: .9rem; padding: 4px 7px; line-height: 1;
+    display: flex; align-items: center; gap: 2px;
   }
+  .mob-hdr-btn:active { background: rgba(255,255,255,0.18); }
+  .mob-hdr-arr { font-size: .55rem; opacity: .7; }
   #mobileBankBar {
-    display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; overflow: hidden;
+    display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; overflow: hidden;
   }
   #mobileBankBar .bank-chip {
-    display: flex; align-items: center; gap: 2px; flex-direction: row; flex-shrink: 0;
+    display: flex; align-items: center; gap: 2px; flex-shrink: 0;
   }
-  #mobileBankBar .bc-icon { font-size: .9rem; line-height: 1; }
-  #mobileBankBar .bc-stack-img { width: 18px; height: auto; }
-  #mobileBankBar .bc-count {
-    font-size: .75rem; font-weight: 800; color: var(--text);
-  }
+  #mobileBankBar .bc-icon { font-size: .85rem; line-height: 1; }
+  #mobileBankBar .bc-stack-img { width: 16px; height: auto; }
+  #mobileBankBar .bc-count { font-size: .72rem; font-weight: 800; color: var(--text); }
   #mobileBankBar .bank-chip-low .bc-count { color: #f08080; }
-  /* Right side bar positioning inside the canvas wrapper */
-  #canvasWrapper { padding-right: 50px; }
-  #rightSideBar { position: fixed; top: 50%; right: 0; transform: translateY(-50%); }
+
+  /* Hide old rightSideBar on mobile — replaced by bottom corner buttons */
+  #rightSideBar { display: none !important; }
+  #canvasWrapper { padding-right: 0; }
 
   /* ── Player cards row ── */
   #mobilePlayerCards {
     display: flex; align-items: stretch;
-    height: 86px; flex-shrink: 0;
-    background: rgba(6,8,16,0.90);
+    height: 94px; flex-shrink: 0;
+    background: rgba(6,8,16,0.92);
     border-bottom: 1px solid var(--glass-border);
     position: relative; overflow: hidden;
-    transition: height 0.25s ease;
+    transition: height 0.2s ease;
   }
-  #mobilePlayerCards.collapsed { height: 32px !important; }
+  #mobilePlayerCards.collapsed { height: 28px !important; }
   #mobilePlayerCards.collapsed #mobilePlayerCardsInner { display: none; }
   #mobilePlayerCards.collapsed #mobileScoreStrip { display: flex !important; }
   #mobileScoreStrip {
@@ -1328,56 +1335,96 @@ img.piece-icon {
   }
   #mobilePlayerCardsInner {
     display: flex; overflow-x: auto; overflow-y: hidden;
-    flex: 1; scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    padding-right: 28px;
+    flex: 1; -webkit-overflow-scrolling: touch;
   }
   #mobilePlayerCardsInner::-webkit-scrollbar { display: none; }
 
   .mob-player-card {
-    flex-shrink: 0; scroll-snap-align: start;
-    width: calc(25vw - 7px); min-width: 82px; max-width: 110px;
-    padding: 5px 6px;
+    flex: 1; min-width: 0;
+    padding: 5px 5px 4px;
     border-right: 1px solid var(--glass-border);
-    display: flex; flex-direction: column; gap: 3px;
+    display: flex; flex-direction: column; gap: 2px;
+    position: relative;
   }
-  .mob-player-card.active-turn { background: rgba(255,255,255,0.08); }
-  .mob-self-card { border-bottom: 2px solid rgba(255,255,255,0.25); }
+  .mob-player-card:last-child { border-right: none; }
+  .mob-player-card.active-turn { background: rgba(255,255,255,0.07); }
 
   .mob-card-top {
-    display: flex; align-items: center; gap: 4px;
-  }
-  .mob-vp-badge {
-    width: 22px; height: 22px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: .75rem; font-weight: 900; color: #fff;
-    flex-shrink: 0; border: 1.5px solid rgba(255,255,255,0.3);
-  }
-  .mob-card-name {
-    font-size: .68rem; font-weight: 700; color: var(--text);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
-  }
-  .mob-card-res {
-    font-size: .7rem; color: var(--text-muted);
     display: flex; align-items: center; gap: 3px;
   }
-  .mob-card-res-count {
-    font-size: .85rem; font-weight: 800; color: var(--text);
+  .mob-vp-badge {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .72rem; font-weight: 900; color: #fff;
+    flex-shrink: 0; border: 1.5px solid rgba(255,255,255,0.3);
   }
+  .mob-card-avatar { width: 18px; height: 18px; border-radius: 4px; flex-shrink: 0; }
+  .mob-card-name {
+    font-size: .62rem; font-weight: 700; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+  }
+  .mob-card-resources {
+    display: flex; gap: 1px; align-items: center;
+  }
+  .mob-card-res-cell {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0;
+    min-width: 0;
+  }
+  .mob-res-icon { font-size: .75rem; line-height: 1.1; }
+  .mob-res-count { font-size: .68rem; font-weight: 800; color: var(--text); line-height: 1; }
   .mob-card-bld {
-    font-size: .6rem; color: var(--text-muted);
-    display: flex; gap: 4px;
+    font-size: .58rem; color: var(--text-muted);
+    display: flex; gap: 5px; align-items: center;
+  }
+  .mob-card-bld img { width: 10px; height: auto; vertical-align: middle; }
+  .mob-card-action {
+    font-size: .58rem; font-weight: 700; color: #3498db;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.1; margin-top: 1px;
   }
   .mob-cards-toggle {
-    position: absolute; right: 0; top: 0; bottom: 0;
-    width: 28px;
-    background: rgba(14,16,26,0.85);
-    border: none; border-left: 1px solid var(--glass-border);
-    color: var(--text-muted); font-size: .65rem; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    writing-mode: vertical-rl; letter-spacing: .05em;
-    z-index: 2;
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 14px;
+    background: rgba(14,16,26,0.6);
+    border: none; border-top: 1px solid var(--glass-border);
+    color: var(--text-muted); font-size: .5rem; cursor: pointer;
+    display: none; align-items: center; justify-content: center;
+    z-index: 2; letter-spacing: .05em;
   }
+
+  /* ── Bottom-left corner: log + chat ── */
+  #mobBtmLeft {
+    display: flex; flex-direction: column; gap: 6px;
+    position: fixed; left: 10px; bottom: 14px; z-index: 30;
+  }
+  .mob-corner-btn {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(12,15,28,0.88);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--text); font-size: 1.1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .mob-corner-btn:active { background: rgba(40,50,90,0.9); }
+
+  /* ── Bottom-right corner: 3 action buttons ── */
+  #mobBtmRight {
+    display: flex; gap: 8px;
+    position: fixed; right: 10px; bottom: 14px; z-index: 30;
+  }
+  .mob-action-btn {
+    width: 56px; height: 56px; border-radius: 14px;
+    background: rgba(12,15,28,0.88);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--text); font-size: 1.2rem; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 4px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .mob-action-btn span { font-size: .55rem; color: var(--text-muted); }
+  .mob-action-btn:active { background: rgba(40,50,90,0.9); }
 
   /* ── Center area (board + bottom bar) fills rest ── */
   #centerArea { flex: 1; min-height: 0; position: relative; }
@@ -1509,23 +1556,18 @@ img.piece-icon {
   #canvasWrapper { overflow: hidden; }
   #canvasWrapper canvas { touch-action: none; }
 
-  /* ── FPS counter: top-left below mobileTopBar ── */
-  #fpsCounter { top: 134px !important; left: 10px !important; font-size: .65rem !important; }
+  /* ── FPS counter: top-left below player cards ── */
+  #fpsCounter { top: 142px !important; left: 10px !important; font-size: .65rem !important; }
 
-  /* ── Exit game button: tuck inside mobileTopBar area ── */
-  #btnExitGame {
-    top: 4px !important; left: 6px !important;
-    padding: 5px 10px !important; font-size: .72rem !important;
-    border-radius: 14px !important;
-    z-index: 30 !important;
-  }
+  /* ── Exit game button: hidden on mobile (use settings menu) ── */
+  #btnExitGame { display: none !important; }
 
-  /* ── 2D/3D toggle: top-right corner of canvas, left of sidebar ── */
+  /* ── 2D/3D toggle: top-center of canvas ── */
   .btn-2d-toggle {
-    top: 134px;
-    left: auto;
-    right: 48px;
-    transform: none;
+    top: 142px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
     font-size: .75rem;
     padding: 5px 13px;
   }
@@ -1537,9 +1579,9 @@ img.piece-icon {
     z-index: 200;
   }
 
-  /* ── Right side bar: no background, transparent ── */
-  #canvasWrapper { padding-right: 44px; }
+  /* ── Right side bar: hidden (replaced by bottom corner buttons) ── */
   #rightSideBar {
+    display: none !important;
     background: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -1557,14 +1599,14 @@ img.piece-icon {
 
   /* ── Log toasts: below top bar + player cards ── */
   #logToastArea {
-    top: 134px; /* 40px mobileTopBar + 86px player cards + 8px gap */
+    top: 142px; /* 40px mobileTopBar + 86px player cards + 8px gap */
     max-width: 88vw;
   }
   #logToastArea .log-toast { font-size: .78rem; padding: 5px 14px; }
 
   /* ── Trade incoming: centered card, avoid right sidebar ── */
   #tradeIncoming {
-    top: 134px; left: 8px; right: 50px; width: auto; max-width: none;
+    top: 142px; left: 8px; right: 8px; width: auto; max-width: none;
   }
   .trade-incoming-card { padding: 10px 12px; gap: 6px; }
   .ti-header { font-size: .82rem; }

@@ -146,9 +146,17 @@
 
   <!-- Mobile-only top bar (hidden on desktop) -->
   <div id="mobileTopBar">
-    <div class="mob-top-left">
-      <div id="mobBankLabel">BANK</div>
+    <div class="mob-top-section mob-top-left-icons">
+      <button class="mob-hdr-btn" id="mobHdrSettings">⚙</button>
+      <button class="mob-hdr-btn" id="mobHdrInfo">ℹ</button>
+    </div>
+    <div class="mob-top-section mob-bank-center">
+      <span class="mob-bank-bldg">🏛</span>
       <div id="mobileBankBar"></div>
+    </div>
+    <div class="mob-top-section mob-top-right-icons">
+      <button class="mob-hdr-btn mob-hdr-players" id="mobHdrPlayers">👥<span class="mob-hdr-arr">▼</span></button>
+      <button class="mob-hdr-btn mob-hdr-map" id="mobHdrMap">🗺<span class="mob-hdr-arr">▼</span></button>
     </div>
   </div>
 
@@ -158,6 +166,19 @@
     <button class="icon-btn rsb-btn" id="mBtnChat" title="Chat">💬</button>
     <button class="icon-btn rsb-btn" id="mBtnMic" title="Voice">🎤</button>
     <button class="icon-btn rsb-btn" id="mBtnCamera" title="Camera">🎥</button>
+  </div>
+
+  <!-- Mobile bottom-left corner: log + chat -->
+  <div id="mobBtmLeft">
+    <button class="mob-corner-btn" id="mobBtmLog">📋</button>
+    <button class="mob-corner-btn" id="mobBtmChat">💬</button>
+  </div>
+
+  <!-- Mobile bottom-right corner: trade + play card + volume -->
+  <div id="mobBtmRight">
+    <button class="mob-action-btn" id="mobBtmTrade">⟺<span>Trade</span></button>
+    <button class="mob-action-btn" id="mobBtmPlay">🎴<span>Card</span></button>
+    <button class="mob-action-btn" id="mobBtmVol">🔊<span>Vol</span></button>
   </div>
 
   <!-- Mic / voice overlay -->
@@ -1247,6 +1268,6 @@ window.addEventListener('unhandledrejection', e => {
   document.body.appendChild(d);
 });
 </script>
-<script type="module" src="game.js?v=50"></script>
+<script type="module" src="game.js?v=51"></script>
 </body>
 </html>

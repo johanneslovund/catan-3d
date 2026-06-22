@@ -3668,31 +3668,34 @@ function updateMobilePlayerCards(state) {
   const el = document.getElementById('mobilePlayerCardsInner');
   if (!el) return;
   el.innerHTML = '';
+  const RES_ORDER = ['wood','brick','sheep','wheat','ore'];
   state.players.forEach((p, i) => {
     const isActive = i === state.currentPlayerIndex;
     const isSelf = p.id === myId;
-    const totalRes = Object.values(p.resources||{}).reduce((a,b)=>a+b,0);
     const devCount = (p.devCards||[]).filter(c=>!c.played&&c.type!=='vp').length;
-    const avatarChar = avatarHtml(p.avatar, p.name, p.isBot, p.color);
     const card = document.createElement('div');
-    card.className = 'mob-player-card' + (isActive?' active-turn':'') + (isSelf?' mob-self-card':'');
+    card.className = 'mob-player-card' + (isActive?' active-turn':'');
     const tc = colorTextClass(p.color);
+    // Resources: show individual counts if visible, else total
+    const resHtml = RES_ORDER.map(r => {
+      const cnt = p.resources?.[r] ?? 0;
+      return `<div class="mob-card-res-cell"><span class="mob-res-icon">${RES_INFO[r].icon}</span><span class="mob-res-count">${cnt}</span></div>`;
+    }).join('');
+    // Active player action label
+    const actionLabel = isActive && state.phase ? `<div class="mob-card-action">${escapeHtml(state.phase.replace(/_/g,' '))}</div>` : '';
     card.innerHTML = `
       <div class="mob-card-top">
         <div class="mob-vp-badge ${tc}" style="background:${p.color}">${p.vp}</div>
-        <span class="mob-card-name">${escapeHtml(p.name)}${p.isBot?' 🤖':''}</span>
-        ${p.id===state.longestRoadPlayer?'<span title="Longest Road" style="font-size:.6rem">🛣</span>':''}
-        ${p.id===state.largestArmyPlayer?'<span title="Largest Army" style="font-size:.6rem">⚔</span>':''}
+        <span class="mob-card-name">${escapeHtml(p.name)}${p.isBot?' 🤖':''}${p.id===state.longestRoadPlayer?' 🛣':''}${p.id===state.largestArmyPlayer?' ⚔':''}</span>
       </div>
-      <div class="mob-card-res">
-        <span class="mob-card-res-count">${totalRes}</span><img src="Icons/Dev card icon.png?v=14" class="piece-icon" alt="card">
-        ${devCount>0?`<span style="margin-left:3px">${devCount}</span>📜`:''}
-      </div>
+      <div class="mob-card-resources">${resHtml}</div>
       <div class="mob-card-bld">
-        <span><img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="tower">${p.settlements||0}</span>
-        <span><img src="Icons/Castle Icon.png?v=14" class="piece-icon" alt="castle">${p.cities||0}</span>
+        <span><img src="Icons/Tower Icon.png?v=14" class="piece-icon" alt="🏠">${p.settlements||0}</span>
+        <span><img src="Icons/Castle Icon.png?v=14" class="piece-icon" alt="🏰">${p.cities||0}</span>
         <span>🛣${p.roads||0}</span>
-      </div>`;
+        ${devCount>0?`<span>🎴${devCount}</span>`:''}
+      </div>
+      ${actionLabel}`;
     el.appendChild(card);
   });
   // Update compact score strip (shown when collapsed)
@@ -4838,6 +4841,20 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
   document.getElementById('mobileChatText')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') sendMobileChat();
   });
+
+  // New bottom-corner buttons — delegate to existing handlers
+  document.getElementById('mobBtmLog')?.addEventListener('click', () => document.getElementById('mBtnLog')?.click());
+  document.getElementById('mobBtmChat')?.addEventListener('click', () => document.getElementById('mBtnChat')?.click());
+  document.getElementById('mobBtmTrade')?.addEventListener('click', () => document.getElementById('btnOpenTrade')?.click());
+  document.getElementById('mobBtmPlay')?.addEventListener('click', () => document.getElementById('btnDevPlay')?.click());
+  document.getElementById('mobBtmVol')?.addEventListener('click', () => { document.getElementById('mobileVolOverlay')?.classList.add('open'); });
+  // Top-bar settings/info buttons
+  document.getElementById('mobHdrSettings')?.addEventListener('click', () => document.getElementById('btnSettings')?.click());
+  document.getElementById('mobHdrPlayers')?.addEventListener('click', () => {
+    const pc = document.getElementById('mobilePlayerCards');
+    if (pc) pc.classList.toggle('collapsed');
+  });
+  document.getElementById('mobHdrMap')?.addEventListener('click', () => document.getElementById('btn2dToggle')?.click());
 
   // Mobile log overlay
   const logOverlay = document.getElementById('mobileLogOverlay');
@@ -7581,10 +7598,10 @@ function _draw2DBoard() {
         const v = gameState.board.vertices[m.userData.vertexId];
         if (!v) return;
         const [px,py] = _w2c(v.x, v.z);
-        const r = hexPxR * 0.12;
+        const r = hexPxR * 0.14;
         ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2);
-        ctx.fillStyle = 'rgba(255,215,0,0.92)'; ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5,r*0.25); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,215,0,0.32)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(255,215,0,0.70)'; ctx.lineWidth = Math.max(1.5,r*0.22); ctx.stroke();
       } else if (m.userData.edgeId !== undefined) {
         const e = gameState.board.edges[m.userData.edgeId];
         if (!e) return;
@@ -7595,8 +7612,8 @@ function _draw2DBoard() {
         const [x2,y2] = _w2c(v2.x, v2.z);
         const r = hexPxR * 0.16;
         ctx.beginPath(); ctx.arc((x1+x2)/2,(y1+y2)/2,r,0,Math.PI*2);
-        ctx.fillStyle = 'rgba(255,215,0,0.92)'; ctx.fill();
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5,r*0.2); ctx.stroke();
+        ctx.fillStyle = 'rgba(255,215,0,0.32)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(255,215,0,0.70)'; ctx.lineWidth = Math.max(1.5,r*0.18); ctx.stroke();
       }
     });
   }
