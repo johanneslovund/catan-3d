@@ -3404,6 +3404,18 @@ renderer.domElement.addEventListener('click', e => {
 });
 
 // ─── UI ───────────────────────────────────────────────────────────────────────
+function _bankStackDepth(count) {
+  if (count >= 10) return 3;
+  if (count >= 4)  return 2;
+  if (count >= 1)  return 1;
+  return 0;
+}
+function _bankCardHtml(r, count, label) {
+  const depth = _bankStackDepth(count);
+  if (depth === 0) return `<div class="bank-card-slot bank-card-empty"><img src="${RES_CARD_IMG[r]}" class="bank-card-img bank-card-img-empty" alt="${r}"><span class="bank-card-count bank-card-count-empty">✕</span></div>`;
+  const low = count > 0 && count <= 3;
+  return `<div class="bank-card-slot bank-stack-${depth}${low?' bank-card-low':''}"><img src="${RES_CARD_IMG[r]}" class="bank-card-img" alt="${r}"><span class="bank-card-count">${label ?? count}</span></div>`;
+}
 function _cardIconSrc(count) {
   if (count >= 12) return 'Icons/card-icon-3x.png';
   if (count >= 5)  return 'Icons/card-icon-2x.png';
@@ -3667,23 +3679,17 @@ function colorTextClass(hexColor) {
 function updateMobileBank(state) {
   const el = document.getElementById('mobileBankBar');
   if (!el) return;
-  const buildHtml = (r, info) => {
-    let countTxt = '?', low = false, imgSrc = 'Icons/card-icon-1x.png';
+  el.innerHTML = Object.keys(RES_INFO).map(r => {
     if (state.bankStockTiers) {
       const tier = state.bankStockTiers[r] ?? 0;
-      low = tier <= 1;
-      countTxt = tier === 0 ? '✕' : tier === 1 ? '≤8' : tier === 2 ? '≤14' : '15+';
-      imgSrc = tier === 0 ? null : _cardIconSrcTier(tier);
+      const count = tier === 0 ? 0 : tier === 1 ? 2 : tier === 2 ? 7 : 15;
+      const label = tier === 0 ? 0 : tier === 1 ? '1–8' : tier === 2 ? '9–14' : '15+';
+      return _bankCardHtml(r, count, label);
     } else if (state.bankStock) {
-      const n = state.bankStock[r] ?? 0;
-      low = n <= 3;
-      countTxt = n;
-      imgSrc = n === 0 ? null : _cardIconSrc(n);
+      return _bankCardHtml(r, state.bankStock[r] ?? 0);
     }
-    const stackImg = imgSrc ? `<img src="${imgSrc}" class="bc-stack-img" alt="">` : `<span class="bc-empty">✕</span>`;
-    return `<div class="bank-chip${low?' bank-chip-low':''}"><span class="bc-icon">${info.icon}</span>${stackImg}<span class="bc-count">${countTxt}</span></div>`;
-  };
-  el.innerHTML = Object.entries(RES_INFO).map(([r, info]) => buildHtml(r, info)).join('');
+    return _bankCardHtml(r, 15, '?');
+  }).join('');
 }
 
 function updateMobilePlayerCards(state) {
@@ -3742,39 +3748,19 @@ function updateMobilePlayerCards(state) {
 function updateBank(state) {
   const el = document.getElementById('bankResources');
   if (!el) return;
-
-  if (state.bankStockTiers) {
-    // Hidden mode — show card stack icons by tier
-    el.innerHTML = Object.entries(RES_INFO).map(([r,{icon}]) => {
+  el.innerHTML = Object.keys(RES_INFO).map(r => {
+    if (state.bankStockTiers) {
       const tier = state.bankStockTiers[r] ?? 0;
-      const label = tier === 0 ? 'empty' : tier === 1 ? '1–8' : tier === 2 ? '9–14' : '15+';
-      const imgSrc = tier > 0 ? _cardIconSrcTier(tier) : null;
-      const stackImg = imgSrc ? `<img src="${imgSrc}" class="bc-stack-img" alt="">` : `<span class="bc-empty">✕</span>`;
-      return `<div class="bank-chip${tier<=1?' bank-chip-low':''}"><span class="bc-icon">${icon}</span>${stackImg}<span class="bc-count" title="${label}">${label}</span></div>`;
-    }).join('');
-  } else if (state.bankStock) {
-    // Exact mode
-    el.innerHTML = Object.entries(RES_INFO).map(([r,{icon}]) => {
-      const inBank = state.bankStock[r] ?? 0;
-      const low = inBank <= 3;
-      const imgSrc = inBank > 0 ? _cardIconSrc(inBank) : null;
-      const stackImg = imgSrc ? `<img src="${imgSrc}" class="bc-stack-img" alt="">` : `<span class="bc-empty">✕</span>`;
-      return `<div class="bank-chip${low?' bank-chip-low':''}"><span class="bc-icon">${icon}</span>${stackImg}<span class="bc-count">${inBank}</span></div>`;
-    }).join('');
-  } else {
-    // Fallback: derive from player totals (old path)
+      const count = tier === 0 ? 0 : tier === 1 ? 2 : tier === 2 ? 7 : 15;
+      const label = tier === 0 ? 0 : tier === 1 ? '1–8' : tier === 2 ? '9–14' : '15+';
+      return _bankCardHtml(r, count, label);
+    } else if (state.bankStock) {
+      return _bankCardHtml(r, state.bankStock[r] ?? 0);
+    }
     const totals = {};
-    state.players.forEach(p => {
-      Object.entries(p.resources||{}).forEach(([r,n]) => { totals[r] = (totals[r]||0)+n; });
-    });
-    el.innerHTML = Object.entries(RES_INFO).map(([r,{icon}]) => {
-      const inBank = Math.max(0, 19 - (totals[r]||0));
-      const low = inBank <= 3;
-      const imgSrc = inBank > 0 ? _cardIconSrc(inBank) : null;
-      const stackImg = imgSrc ? `<img src="${imgSrc}" class="bc-stack-img" alt="">` : `<span class="bc-empty">✕</span>`;
-      return `<div class="bank-chip${low?' bank-chip-low':''}"><span class="bc-icon">${icon}</span>${stackImg}<span class="bc-count">${inBank}</span></div>`;
-    }).join('');
-  }
+    state.players.forEach(p => { Object.entries(p.resources||{}).forEach(([k,n]) => { totals[k]=(totals[k]||0)+n; }); });
+    return _bankCardHtml(r, Math.max(0, 19 - (totals[r]||0)));
+  }).join('');
 }
 
 function updatePlayersList(state) {
