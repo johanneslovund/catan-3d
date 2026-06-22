@@ -405,8 +405,8 @@ const ROBBER_PARAMS = {
 // ─── Three.js setup ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('c');
 const _isMobile = window.innerWidth <= 768;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_isMobile, powerPreference: 'high-performance' });
-renderer.setPixelRatio(_isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 1.5));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
 renderer.shadowMap.enabled = !_isMobile;
 renderer.shadowMap.autoUpdate = false;
@@ -438,6 +438,11 @@ controls.minDistance = 4;
 controls.maxDistance = 22;
 controls.maxPolarAngle = Math.PI / 2.15;
 controls.target.set(0, 0, 0);
+
+// On mobile: single-finger drag pans, two-finger pinch zooms/rotates
+if (_isMobile) {
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+}
 
 // Disable bloom and port outlines while camera is moving; restore 400ms after motion stops
 let _outlineRestoreTimer = null;
@@ -7722,22 +7727,35 @@ let _3dMaxDist   = controls.maxDistance;
 function toggle2D() {
   _is2D = !_is2D;
 
+  // Always terminate any in-progress intro so camera position isn't overridden
+  if (cameraIntro.active || cameraIntro.pending) {
+    cameraIntro.active = false;
+    cameraIntro.pending = false;
+    controls.enabled = true;
+  }
+
   if (_is2D) {
     _3dCamPos    = camera.position.clone();
     _3dCamTarget = controls.target.clone();
 
-    // Derive 2D height from current 3D distance so zoom level stays consistent
-    // On mobile use a fixed height that fills the screen nicely
-    const dist3d = _3dCamPos.distanceTo(_3dCamTarget);
-    const height2d = _isMobile ? 13.5 : Math.max(8, Math.min(35, dist3d * 0.72));
+    // Fit the entire board into view
+    const _landH = (gameState?.board?.hexes ?? []).filter(h => h.type !== 'water');
+    const _bcx2d = _landH.reduce((s,h) => s+h.x, 0) / (_landH.length||1);
+    const _bcz2d = _landH.reduce((s,h) => s+h.z, 0) / (_landH.length||1);
+    const _boardR = _landH.reduce((m,h) => Math.max(m, Math.hypot(h.x-_bcx2d, h.z-_bcz2d)), 0) + 2.5;
+    const _aspect = (canvas.clientWidth||390) / (canvas.clientHeight||600);
+    const _fovRad = camera.fov * Math.PI / 180;
+    const _visH = Math.tan(_fovRad / 2);
+    const _visW = _visH * _aspect;
+    const height2d = Math.max(10, (_boardR / Math.min(_visH, _visW)) * 1.08);
 
     camera.up.set(0, 0, -1);
     controls.enableRotate = false;
     controls.maxPolarAngle = 0.001;
     controls.minDistance = 5;
-    controls.maxDistance = 35;
-    camera.position.set(controls.target.x, height2d, controls.target.z);
-    controls.target.set(controls.target.x, 0, controls.target.z);
+    controls.maxDistance = Math.max(35, height2d + 5);
+    camera.position.set(_bcx2d, height2d, _bcz2d);
+    controls.target.set(_bcx2d, 0, _bcz2d);
     controls.update();
 
     _2dDirty = true;
