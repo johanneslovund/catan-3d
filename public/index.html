@@ -1026,24 +1026,40 @@
       <!-- Incoming trade notification (top-right, shown to non-proposer players) -->
       <div id="tradeIncoming" style="display:none">
         <div class="trade-incoming-card">
-          <div class="ti-header">🤝 <span id="tiProposerName"></span> offers a trade</div>
-          <div class="ti-body">
-            <div class="ti-side ti-side-you">
-              <div class="ti-label ti-label-you">You give</div>
-              <div id="tiWantRow" class="ti-res-row"></div>
+          <!-- Header: proposer avatar + name + collapse -->
+          <div class="ti-header">
+            <div id="tiProposerAvatarEl" class="ti-proposer-avatar"></div>
+            <span id="tiProposerName" class="ti-proposer-name"></span>
+            <button id="btnTiClose" class="ti-close-btn">∧</button>
+          </div>
+          <!-- Trade rows: [avatar+arrow] [cards] | [accept/reject] -->
+          <div class="ti-content">
+            <div class="ti-rows">
+              <div class="ti-row ti-row-them">
+                <div class="ti-row-left">
+                  <div id="tiThemAvatar" class="ti-person-dot ti-dot-them"></div>
+                  <span class="ti-row-arrow">↓</span>
+                </div>
+                <div id="tiOfferRow" class="ti-res-row"></div>
+              </div>
+              <div class="ti-row ti-row-you">
+                <div class="ti-row-left">
+                  <div id="tiMeAvatar" class="ti-person-dot ti-dot-me"></div>
+                  <span class="ti-row-arrow ti-arrow-up">↑</span>
+                </div>
+                <div id="tiWantRow" class="ti-res-row"></div>
+              </div>
             </div>
-            <div class="ti-arrow">⟺</div>
-            <div class="ti-side ti-side-them">
-              <div class="ti-label ti-label-them">They give</div>
-              <div id="tiOfferRow" class="ti-res-row"></div>
+            <div class="ti-action-col">
+              <button id="btnTradeReject" class="ti-btn-icon ti-btn-reject">✕</button>
+              <button id="btnTradeAccept" class="ti-btn-icon ti-btn-accept">✓</button>
             </div>
           </div>
-          <div id="tiOtherResponses" style="display:none;margin:6px 0;font-size:.78rem;color:rgba(255,255,255,0.55);"></div>
-          <div class="trade-btn-row">
-            <button id="btnTradeAccept" class="btn btn-primary">✓ Accept</button>
-            <button id="btnTradeReject" class="btn btn-secondary">✗ Decline</button>
+          <div id="tiOtherResponses" style="display:none;margin:4px 0;font-size:.75rem;color:rgba(255,255,255,0.5);"></div>
+          <!-- Bottom action row: counteroffer -->
+          <div class="ti-bottom-row">
+            <button id="btnCounteroffer" class="ti-bottom-btn">✏ Counteroffer</button>
           </div>
-          <button id="btnCounteroffer" class="btn btn-secondary" style="margin-top:6px;width:100%;font-size:.82rem;">⟺ Counteroffer</button>
         </div>
       </div>
 

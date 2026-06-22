@@ -5622,7 +5622,25 @@ function updateTradeIncoming(state) {
 
   const isEmbargoedProposer = embargoed.has(trade.fromId);
 
+  // Populate header: proposer name + avatar color
   document.getElementById('tiProposerName').textContent = trade.fromName || 'Someone';
+  const _tiProposer = state.players.find(p => p.id === trade.fromId);
+  const _tiMe = state.players.find(p => p.id === myId);
+  const _tiAvEl = document.getElementById('tiProposerAvatarEl');
+  if (_tiAvEl && _tiProposer) {
+    _tiAvEl.style.background = _tiProposer.color || '#666';
+    _tiAvEl.textContent = (trade.fromName || '?')[0].toUpperCase();
+  }
+  const _tiThemDot = document.getElementById('tiThemAvatar');
+  if (_tiThemDot && _tiProposer) {
+    _tiThemDot.style.background = _tiProposer.color || 'rgba(100,100,120,0.8)';
+    _tiThemDot.textContent = (trade.fromName || '?')[0].toUpperCase();
+  }
+  const _tiMeDot = document.getElementById('tiMeAvatar');
+  if (_tiMeDot && _tiMe) {
+    _tiMeDot.style.background = _tiMe.color || 'rgba(200,60,60,0.8)';
+    _tiMeDot.textContent = ((_tiMe.name || myId) || '?')[0].toUpperCase();
+  }
 
   function buildTiRow(containerId, counts) {
     const row = document.getElementById(containerId);
@@ -5718,6 +5736,10 @@ document.getElementById('btnOpenTrade').addEventListener('click', () => {
 document.getElementById('btnTradeClose').addEventListener('click', () => {
   const popup = document.getElementById('tradePanelPopup');
   if (popup) popup.style.display = 'none';
+});
+// Collapse incoming trade card
+document.getElementById('btnTiClose')?.addEventListener('click', () => {
+  document.getElementById('tradeIncoming').style.display = 'none';
 });
 
 // Also close via cancel button

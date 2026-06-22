@@ -748,30 +748,69 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   z-index: 60; width: min(300px, calc(100vw - 24px));
 }
 .trade-incoming-card {
-  background: rgba(15,20,35,0.8);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
+  background: rgba(15,20,35,0.92);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
   border: 1px solid rgba(200,140,60,.4);
-  border-radius: 14px; padding: 14px 16px;
+  border-radius: 16px; padding: 12px 14px;
   box-shadow: 0 8px 32px rgba(0,0,0,.6);
   display: flex; flex-direction: column; gap: 8px;
 }
-.ti-header { font-size: .88rem; font-weight: 700; color: var(--text); text-align: center; }
-.ti-body { display: flex; align-items: center; gap: 10px; justify-content: center; }
-.ti-side { display: flex; flex-direction: column; align-items: center; gap: 4px; border-radius: 8px; padding: 6px 10px; }
-.ti-side-you  { background: rgba(220, 60, 60, 0.10); }
-.ti-side-them { background: rgba(50, 200, 100, 0.10); }
-.ti-label { font-size: .65rem; font-weight: 700; letter-spacing: .06em; color: var(--text-muted); text-transform: uppercase; }
-.ti-label-you  { color: rgba(255, 110, 110, 0.85); }
-.ti-label-them { color: rgba(80, 220, 130, 0.85); }
-.ti-res-row { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+/* Header */
+.ti-header {
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.ti-proposer-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .75rem; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.ti-proposer-name { flex: 1; font-size: .82rem; font-weight: 700; color: var(--text); }
+.ti-close-btn {
+  background: none; border: none; color: var(--text-muted);
+  font-size: .9rem; cursor: pointer; padding: 2px 4px; line-height: 1;
+}
+/* Content: rows + action buttons */
+.ti-content { display: flex; align-items: center; gap: 8px; }
+.ti-rows { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.ti-row { display: flex; align-items: center; gap: 8px; }
+.ti-row-left { display: flex; align-items: center; gap: 4px; flex-shrink: 0; width: 44px; }
+.ti-person-dot {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .65rem; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.ti-dot-them { background: rgba(100,100,120,0.8); }
+.ti-dot-me   { background: rgba(200,60,60,0.8); }
+.ti-row-arrow { font-size: .95rem; font-weight: 700; }
+.ti-row-them .ti-row-arrow { color: #4caf50; }
+.ti-row-you  .ti-row-arrow, .ti-arrow-up { color: #ef5350; }
+.ti-res-row { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .ti-res-chip {
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   background: var(--glass-md); border: 1px solid var(--glass-border);
-  border-radius: 8px; padding: 5px 6px; min-width: 44px;
+  border-radius: 8px; padding: 4px 6px; min-width: 40px;
 }
-.ti-res-chip .trc-icon { font-size: 1.1rem; }
-.ti-res-chip .trc-count { font-size: .8rem; font-weight: 700; color: var(--text); }
+.ti-res-chip .trc-icon { font-size: 1rem; }
+.ti-res-chip .trc-count { font-size: .75rem; font-weight: 700; color: var(--text); }
+/* Action buttons column */
+.ti-action-col { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.ti-btn-icon {
+  width: 36px; height: 36px; border-radius: 50%; border: none;
+  font-size: 1rem; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.ti-btn-reject { background: #e53935; color: #fff; }
+.ti-btn-accept { background: #43a047; color: #fff; }
+.ti-btn-accept:disabled { background: rgba(80,80,80,0.4); color: rgba(255,255,255,0.3); cursor: not-allowed; }
+/* Bottom row */
+.ti-bottom-row { padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.08); }
+.ti-bottom-btn {
+  width: 100%; background: var(--glass-md); border: 1px solid var(--glass-border);
+  border-radius: 8px; color: var(--text); font-size: .8rem; padding: 7px;
+  cursor: pointer;
+}
+.ti-bottom-btn:hover { background: var(--glass-hi); }
 .ti-arrow { font-size: 1.4rem; color: var(--text-muted); flex-shrink: 0; }
 
 #devCardList { display: flex; flex-direction: column; gap: 6px; }
@@ -1643,22 +1682,13 @@ img.piece-icon {
   }
   #logToastArea .log-toast { font-size: .78rem; padding: 5px 14px; }
 
-  /* ── Trade incoming: centered card, avoid right sidebar ── */
+  /* ── Trade incoming: bottom sheet on mobile ── */
   #tradeIncoming {
-    top: 142px; left: 8px; right: 8px; width: auto; max-width: none;
+    position: fixed; top: auto; bottom: 80px; left: 8px; right: 8px;
+    width: auto; max-width: none; z-index: 65;
   }
-  .trade-incoming-card { padding: 10px 12px; gap: 6px; }
-  .ti-header { font-size: .82rem; }
-  .ti-body { gap: 6px; }
-  .ti-side { padding: 5px 8px; }
-  .ti-label { font-size: .6rem; }
-  .ti-res-chip { min-width: 38px; padding: 4px 5px; }
-  .ti-res-chip .trc-icon { font-size: 1rem; }
-  .ti-arrow { font-size: 1.2rem; }
-  .trade-btn-row { gap: 6px; }
-  .trade-btn-row .btn { padding: 9px 8px; font-size: .85rem; }
-  #btnCounteroffer { margin-top: 4px !important; font-size: .8rem !important; padding: 8px !important; }
-  #tiOtherResponses { font-size: .72rem !important; }
+  .trade-incoming-card { padding: 12px 14px; gap: 8px; border-radius: 18px; }
+  .ti-btn-icon { width: 42px; height: 42px; font-size: 1.1rem; }
 
   /* ── Build confirm: center vertically in canvas area ── */
   #buildConfirm { padding-top: 20vh; }
