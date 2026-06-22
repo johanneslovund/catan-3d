@@ -1429,30 +1429,25 @@ img.piece-icon {
   /* ── Center area (board + bottom bar) fills rest ── */
   #centerArea { flex: 1; min-height: 0; position: relative; }
 
-  /* ── Bottom bar: stacked rows ── */
+  /* ── Bottom bar: only the main action button floats above corner buttons ── */
   #bottomBar {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    height: auto; flex-direction: column;
-    padding: 6px 8px 8px; gap: 5px;
-    background: transparent;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border-top: none;
-    z-index: 10;
+    position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%);
+    right: auto; width: auto; height: auto;
+    flex-direction: column; align-items: center;
+    padding: 0; gap: 4px;
+    background: none; border-top: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    z-index: 20;
   }
 
-  /* Row 1: resource bar + trade button */
-  #myResourceBarWrap { order: 1; width: 100%; flex-direction: row; align-items: center; }
-  #myResourceBar { flex: 1; padding: 4px 8px; gap: 3px; }
-  .res-bar-chip { gap: 2px; }
-  .res-bar-chip .rbc-icon { font-size: 1.2rem; }
-  .res-bar-chip .rbc-count { font-size: .82rem; }
-  .res-bar-trade-btn { font-size: .78rem; padding: 5px 10px; white-space: nowrap; }
+  /* Hide resource bar and build shortcuts — covered by player cards + corner buttons */
+  #myResourceBarWrap { display: none !important; }
+  #buildShortcuts    { display: none !important; }
 
-  /* Row 2: main action button */
+  /* Main action button */
   #mainActionFloat {
     position: static; transform: none; order: 0;
-    width: 100%; align-items: center;
+    width: auto; align-items: center;
   }
   #mainActionBtn {
     width: auto; min-width: unset;
