@@ -442,7 +442,7 @@ const _steamCircleTex = (() => {
 
 const ROBBER_PARAMS = {
   animSpeed:  0.75,
-  scale:      1.20,
+  scale:      0.55,
   emissive:   0.0,
   roughness:  0.94,
   metalness: -1.0,
