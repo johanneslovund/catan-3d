@@ -1612,7 +1612,7 @@ img.piece-icon {
 
   /* ── Trade popup ── */
   #tradePanelPopup {
-    position: fixed; left: 4px; right: 4px; bottom: 90px; width: auto; max-width: none;
+    position: fixed; left: 4px; right: 4px; bottom: calc(152px + env(safe-area-inset-bottom)); width: auto; max-width: none;
     z-index: 200; max-height: 70vh; overflow-y: auto;
   }
   .trade-incoming-card { width: 90vw; max-width: 420px; }
@@ -1683,7 +1683,7 @@ img.piece-icon {
   #canvasWrapper canvas { touch-action: none; }
 
   /* ── FPS counter: top-left below player cards ── */
-  #fpsCounter { top: 142px !important; left: 10px !important; font-size: .65rem !important; }
+  #fpsCounter { top: calc(130px + env(safe-area-inset-top)) !important; left: 10px !important; font-size: .65rem !important; }
 
   /* ── Exit game button: hidden on mobile (use settings menu) ── */
   #btnExitGame { display: none !important; }
@@ -1732,7 +1732,7 @@ img.piece-icon {
 
   /* ── Trade incoming: bottom sheet on mobile ── */
   #tradeIncoming {
-    position: fixed; top: auto; bottom: 80px; left: 8px; right: 8px;
+    position: fixed; top: auto; bottom: calc(152px + env(safe-area-inset-bottom)); left: 8px; right: 8px;
     width: auto; max-width: none; z-index: 65;
   }
   .trade-incoming-card { padding: 12px 14px; gap: 8px; border-radius: 18px; }
@@ -1773,7 +1773,7 @@ img.piece-icon {
   .lobby-card { width: min(380px, calc(100vw - 16px)); }
 
   /* ── Trade panel popup: avoid edge clipping ── */
-  #tradePanelPopup { left: 4px; right: 4px; bottom: 100px; }
+  #tradePanelPopup { left: 4px; right: 4px; bottom: calc(152px + env(safe-area-inset-bottom)); }
 }
 
 /* ── Extra-small phones (max 480px) ───────────────────────────────────── */
