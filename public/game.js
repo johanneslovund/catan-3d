@@ -4899,8 +4899,8 @@ function _leaveWaiting() {
   document.getElementById('btnLeaveWaiting').style.display = 'none';
   document.getElementById('btnLeaveWaitingTop').style.display = 'none';
 }
-document.getElementById('btnLeaveWaiting').addEventListener('click', _leaveWaiting);
-document.getElementById('btnLeaveWaitingTop').addEventListener('click', _leaveWaiting);
+document.getElementById('btnLeaveWaiting')?.addEventListener('click', _leaveWaiting);
+document.getElementById('btnLeaveWaitingTop')?.addEventListener('click', _leaveWaiting);
 
 document.getElementById('btnExitGame')?.addEventListener('click', () => {
   if (!confirm('Exit to lobby?')) return;
