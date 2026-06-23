@@ -27,10 +27,10 @@
       <button class="lang-btn" id="langNO" onclick="setLang('no')" title="Norsk">🇳🇴</button>
     </div>
     <h1>Tantrum Island</h1>
-    <p class="subtitle">Multiplayer · 3D Board · 2–4 Players</p>
+    <p class="subtitle" data-i18n="subtitle">Multiplayer · 3D Board · 2–4 Players</p>
     <div class="form-group">
       <label data-i18n="yourName">Your Name</label>
-      <input id="playerName" type="text" maxlength="16" placeholder="Enter name…"/>
+      <input id="playerName" type="text" maxlength="16" placeholder="Enter name…" data-i18n="enterName"/>
     </div>
     <div class="form-group">
       <label data-i18n="avatar">Avatar</label>
@@ -50,8 +50,8 @@
     <div id="cameraModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:16px">
       <video id="cameraVideo" autoplay playsinline style="width:260px;height:260px;object-fit:cover;border-radius:50%;border:3px solid rgba(255,255,255,0.3)"></video>
       <div style="display:flex;gap:12px">
-        <button id="btnCameraCapture" class="btn btn-primary" style="padding:10px 28px">📸 Capture</button>
-        <button id="btnCameraCancel" class="btn btn-secondary" style="padding:10px 20px">Cancel</button>
+        <button id="btnCameraCapture" class="btn btn-primary" style="padding:10px 28px" data-i18n="capture">📸 Capture</button>
+        <button id="btnCameraCancel" class="btn btn-secondary" style="padding:10px 20px" data-i18n="cancel">Cancel</button>
       </div>
       <canvas id="cameraCanvas" style="display:none"></canvas>
     </div>
@@ -60,7 +60,7 @@
     <div id="emojiModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;align-items:center;justify-content:center">
       <div class="emoji-modal-card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <span style="color:#fff;font-weight:700;font-size:1rem">Choose Emoji</span>
+          <span style="color:#fff;font-weight:700;font-size:1rem" data-i18n="chooseEmoji">Choose Emoji</span>
           <button id="btnEmojiClose" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:1.3rem;cursor:pointer;line-height:1">✕</button>
         </div>
         <div id="emojiGrid"></div>
@@ -68,14 +68,14 @@
     </div>
 
     <div id="rejoinBanner" style="display:none;background:rgba(39,174,96,0.15);border:1px solid rgba(39,174,96,0.4);border-radius:12px;padding:10px 14px;text-align:center;font-size:.85rem">
-      <div style="font-weight:600;margin-bottom:6px">You were disconnected from a game</div>
-      <button id="btnRejoin" class="btn btn-primary" style="width:auto;padding:6px 20px">Rejoin Game</button>
+      <div style="font-weight:600;margin-bottom:6px" data-i18n="disconnectedMsg">You were disconnected from a game</div>
+      <button id="btnRejoin" class="btn btn-primary" style="width:auto;padding:6px 20px" data-i18n="rejoinGame">Rejoin Game</button>
     </div>
     <div class="divider" data-i18n="create">Create</div>
     <button id="btnCreate" class="btn btn-primary" data-i18n="createRoom">Create Room</button>
     <div class="divider" data-i18n="joinByCode">Join by Code</div>
     <div class="join-row">
-      <input id="roomCodeInput" type="text" maxlength="6" placeholder="Room code…" style="text-transform:uppercase"/>
+      <input id="roomCodeInput" type="text" maxlength="6" placeholder="Room code…" style="text-transform:uppercase" data-i18n="roomCodePlaceholder"/>
       <button id="btnJoin" class="btn btn-secondary" data-i18n="joinBtn">Join</button>
     </div>
     <div class="divider" data-i18n="openLobbies">Open Lobbies</div>
@@ -88,46 +88,54 @@
 
 <!-- ── WAITING ── -->
 <div id="waiting" style="display:none">
-  <div class="lobby-card">
-    <h2 data-i18n="waitingRoom">Waiting Room</h2>
-    <p><span data-i18n="shareCode">Share this code:</span> <span id="roomCodeDisplay" class="room-code"></span></p>
-    <button id="btnShareLink" class="btn btn-secondary" style="margin-top:6px;width:100%;font-size:.9rem">🔗 Copy invite link</button>
+  <div class="lobby-card" style="position:relative">
+    <div class="waiting-header">
+      <button id="btnLeaveWaitingTop" class="btn-back-top" style="display:none" data-i18n="back">Back</button>
+      <h2 data-i18n="waitingRoom">Waiting Room</h2>
+      <button id="btnShareLink" class="btn-share-inline" data-i18n="copyInviteLink">🔗 Invite</button>
+    </div>
+    <div class="share-row">
+      <span class="share-label" data-i18n="shareCode">Share this code:</span>
+      <span id="roomCodeDisplay" class="room-code"></span>
+    </div>
     <ul id="waitingPlayerList"></ul>
     <div id="botControls" style="display:none">
       <select id="botDifficulty" class="bot-diff-select">
-        <option value="easy">Easy</option>
-        <option value="medium" selected>Medium</option>
-        <option value="hard">Hard</option>
+        <option value="easy" data-i18n="easy">Easy</option>
+        <option value="medium" selected data-i18n="medium">Medium</option>
+        <option value="hard" data-i18n="hard">Hard</option>
       </select>
-      <button id="btnAddBot" class="btn btn-secondary">+ Add Bot</button>
-      <button id="btnRemoveBot" class="btn btn-secondary">− Remove Bot</button>
+      <button id="btnAddBot" class="btn btn-secondary" data-i18n="addBot">+ Add Bot</button>
+      <button id="btnRemoveBot" class="btn btn-secondary" data-i18n="removeBot">− Remove Bot</button>
     </div>
-    <div id="gameSettings" style="display:none;margin:10px 0;padding:8px 10px;background:rgba(255,255,255,0.06);border-radius:8px;font-size:.85rem">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-        <input type="checkbox" id="chkHideBankCards" style="width:16px;height:16px;cursor:pointer">
-        <span data-i18n="hideBankCards">Hide bank card counts</span>
+    <div id="gameSettings" style="display:none">
+      <label class="setting-toggle">
+        <input type="checkbox" id="chkHideBankCards">
+        <span class="setting-toggle-track"><span class="setting-toggle-thumb"></span></span>
+        <span class="setting-toggle-label" data-i18n="hideBankCards">Hide bank card counts</span>
       </label>
-      <label class="private-toggle" style="margin-top:8px">
-        <input type="checkbox" id="chkPrivate"/>
-        <span data-i18n="privateLobby">Private lobby</span>
+      <label class="setting-toggle">
+        <input type="checkbox" id="chkPrivate">
+        <span class="setting-toggle-track"><span class="setting-toggle-thumb"></span></span>
+        <span class="setting-toggle-label" data-i18n="privateLobby">Private lobby</span>
       </label>
     </div>
     <button id="btnStart" class="btn btn-primary" style="display:none" data-i18n="startGame">Start Game</button>
     <p id="waitingHint" class="hint" data-i18n="waitingForHost">Waiting for host to start…</p>
-    <button id="btnLeaveWaiting" class="btn btn-secondary" style="display:none;margin-top:8px" data-i18n="back">← Back</button>
+    <button id="btnLeaveWaiting" class="btn btn-secondary" style="display:none" data-i18n="back">Back</button>
 
     <!-- Lobby communication panel -->
     <div id="lobbyChatVoice">
       <!-- Voice row -->
       <div id="lobbyVoiceRow">
-        <button id="lobbyMicBtn" class="lobby-mic-btn muted" title="Unmute mic">🔇 Muted</button>
+        <button id="lobbyMicBtn" class="lobby-mic-btn muted" title="Unmute mic" data-i18n="mutedMic">🔇</button>
         <div id="lobbyVoiceUsers"></div>
       </div>
       <!-- Text chat -->
       <div id="lobbyChatBox">
         <div id="lobbyChatMessages"></div>
         <div id="lobbyChatInputRow">
-          <input id="lobbyChatInput" type="text" placeholder="Say something…" maxlength="200" autocomplete="off"/>
+          <input id="lobbyChatInput" type="text" placeholder="Say something…" maxlength="200" autocomplete="off" data-i18n="saySomething"/>
           <button id="lobbyChatSend">↑</button>
         </div>
       </div>
@@ -1137,7 +1145,7 @@
             </thead>
             <tbody id="gameOverStatsBody"></tbody>
           </table>
-          <button id="btnReload" class="btn btn-primary">Back to Lobby</button>
+          <button id="btnReload" class="btn btn-primary" data-i18n="backToLobby">Back to Lobby</button>
         </div>
       </div>
     </div><!-- /canvasWrapper -->

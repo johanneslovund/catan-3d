@@ -208,11 +208,11 @@ const STRINGS = {
     noLobbies: 'No open lobbies right now.',
     joinBtn: 'Join',
     // waiting
-    waitingRoom: 'Waiting Room',
+    waitingRoom: 'Lobby',
     shareCode: 'Share this code:',
     startGame: 'Start Game',
     waitingForHost: 'Waiting for host to start…',
-    back: '← Back',
+    back: 'Back',
     hideBankCards: 'Hide bank card counts',
     privateLobby: 'Private lobby',
     // build confirm
@@ -221,6 +221,24 @@ const STRINGS = {
     tradeBank: 'Trade with Bank',
     // dev cards
     knightLabel: '⚔ Knight', knightDesc: 'Move the robber & steal 1 resource',
+    // lobby extra
+    subtitle: 'Multiplayer · 3D Board · 2–4 Players',
+    enterName: 'Enter name…',
+    roomCodePlaceholder: 'Room code…',
+    copyInviteLink: '🔗 Invite',
+    addBot: '+ Add Bot',
+    removeBot: '− Remove Bot',
+    easy: 'Easy', medium: 'Medium', hard: 'Hard',
+    mutedMic: '🔇',
+    liveMic: '🎤',
+    connectingMic: '⏳',
+    saySomething: 'Say something…',
+    disconnectedMsg: 'You were disconnected from a game',
+    rejoinGame: 'Rejoin Game',
+    capture: '📸 Capture',
+    chooseEmoji: 'Choose Emoji',
+    backToLobby: 'Back to Lobby',
+    youJoinedVoice: 'You joined voice.',
   },
   no: {
     wood: 'Tre', brick: 'Leire', sheep: 'Saud', wheat: 'Kønnj', ore: 'Stein',
@@ -242,16 +260,34 @@ const STRINGS = {
     openLobbies: 'Åpne lobbyer',
     noLobbies: 'Ingen åpne lobbyer akkurat nå.',
     joinBtn: 'Bli med',
-    waitingRoom: 'Venteværelse',
+    waitingRoom: 'Lobby',
     shareCode: 'Del denne koden:',
     startGame: 'Start spill',
     waitingForHost: 'Venter på at verten starter…',
-    back: '← Tilbake',
+    back: 'Tilbake',
     hideBankCards: 'Skjul bankkortantall',
     privateLobby: 'Privat lobby',
     confirm: 'Bekreft', cancel: 'Avbryt',
     tradeBank: 'Handel med banken',
     knightLabel: '⚔ Ridder', knightDesc: 'Flytt tjuvradden og stjel 1 ressurs',
+    // lobby extra
+    subtitle: 'Flerspiller · 3D brett · 2–4 spillere',
+    enterName: 'Skriv inn navn…',
+    roomCodePlaceholder: 'Romkode…',
+    copyInviteLink: '🔗 Verv en kriger',
+    addBot: '+ Legg til bot',
+    removeBot: '− Fjern bot',
+    easy: 'Lett', medium: 'Middels', hard: 'Vanskelig',
+    mutedMic: '🔇',
+    liveMic: '🎤',
+    connectingMic: '⏳',
+    saySomething: 'Si noe…',
+    disconnectedMsg: 'Du ble koblet fra et spill',
+    rejoinGame: 'Gjenoppta spill',
+    capture: '📸 Ta bilde',
+    chooseEmoji: 'Velg emoji',
+    backToLobby: 'Tilbake til lobby',
+    youJoinedVoice: 'Du ble med i tale.',
   }
 };
 function tr(key) { return (STRINGS[_lang] || STRINGS.en)[key] ?? STRINGS.en[key] ?? key; }
@@ -4265,7 +4301,9 @@ socket.on('lobbyUpdate', data => {
   document.getElementById('botControls').style.display = isHost ? 'flex' : 'none';
   document.getElementById('waitingHint').style.display = isHost ? 'none' : 'block';
   const btnLeave = document.getElementById('btnLeaveWaiting');
-  if (btnLeave) btnLeave.style.display = 'block';
+  if (btnLeave) btnLeave.style.display = 'none';
+  const btnLeaveTop = document.getElementById('btnLeaveWaitingTop');
+  if (btnLeaveTop) btnLeaveTop.style.display = 'block';
   const settingsEl = document.getElementById('gameSettings');
   if (settingsEl) settingsEl.style.display = isHost ? 'block' : 'none';
   const hasBots = data.players.some(p => p.isBot);
@@ -4648,16 +4686,17 @@ function _lobbyRenderVoice() {
     const isSelf = p.id === myId;
     const peerMuted = !isSelf && (voiceChat.peers[p.id]?.muted ?? false);
     el.innerHTML = `
-      <span class="lv-ring" id="lv-ring-${p.id}" style="background:${p.color}"></span>
-      <span>${escapeHtml(p.name)}${isSelf ? ' (you)' : ''}</span>
-      ${!isSelf ? `<button class="lv-mute-btn" data-pid="${p.id}" title="${peerMuted ? 'Unmute' : 'Mute'}">${peerMuted ? '🔇' : '🔊'}</button>` : ''}
+      <div class="lv-avatar" id="lv-ring-${p.id}" style="border-color:${p.color}">${avatarHtml(p.avatar, p.name, p.isBot, p.color)}</div>
+      <span class="lv-name${!isSelf ? ' lv-name-clickable' : ''}" data-pid="${p.id}">${escapeHtml(p.name)}${isSelf ? ' (you)' : (peerMuted ? ' 🔇' : '')}</span>
     `;
-    el.querySelector('.lv-mute-btn')?.addEventListener('click', function() {
-      const pid = this.dataset.pid;
-      const nowMuted = !voiceChat.peers[pid]?.muted;
-      voiceChat.mutePeer(pid, nowMuted);
-      _lobbyRenderVoice();
-    });
+    if (!isSelf) {
+      el.querySelector('.lv-name-clickable').addEventListener('click', function() {
+        const pid = this.dataset.pid;
+        const nowMuted = !voiceChat.peers[pid]?.muted;
+        voiceChat.mutePeer(pid, nowMuted);
+        _lobbyRenderVoice();
+      });
+    }
     container.appendChild(el);
   });
 }
@@ -4687,7 +4726,7 @@ function _lobbyUpdateVoiceRings() {
 // Lobby mic button
 document.getElementById('lobbyMicBtn')?.addEventListener('click', async function() {
   if (!voiceChat.micOn) {
-    this.textContent = '⏳ Connecting…';
+    this.textContent = tr('connectingMic');
     this.disabled = true;
     await voiceChat.enableMic();
     this.disabled = false;
@@ -4695,22 +4734,22 @@ document.getElementById('lobbyMicBtn')?.addEventListener('click', async function
       voiceChat.selfMuted = false;
       voiceChat.localStream?.getAudioTracks().forEach(t => { t.enabled = true; });
       _lobbyVoiceActive = true;
-      this.textContent = '🎤 Live';
+      this.textContent = tr('liveMic');
       this.className = 'lobby-mic-btn active';
-      _lobbyAddChat({ system: true, text: 'You joined voice.' });
+      _lobbyAddChat({ system: true, text: tr('youJoinedVoice') });
     } else {
-      this.textContent = '🔇 Muted';
+      this.textContent = tr('mutedMic');
       this.className = 'lobby-mic-btn muted';
     }
   } else if (!voiceChat.selfMuted) {
     voiceChat.selfMuted = true;
     voiceChat.localStream?.getAudioTracks().forEach(t => { t.enabled = false; });
-    this.textContent = '🔇 Muted';
+    this.textContent = tr('mutedMic');
     this.className = 'lobby-mic-btn muted';
   } else {
     voiceChat.selfMuted = false;
     voiceChat.localStream?.getAudioTracks().forEach(t => { t.enabled = true; });
-    this.textContent = '🎤 Live';
+    this.textContent = tr('liveMic');
     this.className = 'lobby-mic-btn active';
   }
 });
@@ -4729,8 +4768,9 @@ document.getElementById('lobbyChatInput')?.addEventListener('keydown', e => {
 });
 
 socket.on('chatMessage', msg => {
-  // Render in lobby chat if we're still in the lobby
-  const inLobby = document.getElementById('lobby')?.style.display !== 'none';
+  // Render in lobby chat if we're in the lobby or waiting room
+  const inLobby = document.getElementById('lobby')?.style.display !== 'none'
+                || document.getElementById('waiting')?.style.display !== 'none';
   if (inLobby) _lobbyAddChat(msg);
 
   addChatMessage(msg);
@@ -4850,14 +4890,17 @@ document.getElementById('btnShareLink')?.addEventListener('click', () => {
   }
 })();
 
-document.getElementById('btnLeaveWaiting').addEventListener('click', () => {
+function _leaveWaiting() {
   socket.emit('leaveRoom');
   document.getElementById('waiting').style.display = 'none';
   document.getElementById('lobby').style.display = 'flex';
   document.getElementById('waitingHint').style.color = '';
-  document.getElementById('waitingHint').textContent = 'Waiting for host to start…';
+  document.getElementById('waitingHint').textContent = tr('waitingForHost');
   document.getElementById('btnLeaveWaiting').style.display = 'none';
-});
+  document.getElementById('btnLeaveWaitingTop').style.display = 'none';
+}
+document.getElementById('btnLeaveWaiting').addEventListener('click', _leaveWaiting);
+document.getElementById('btnLeaveWaitingTop').addEventListener('click', _leaveWaiting);
 
 document.getElementById('btnExitGame')?.addEventListener('click', () => {
   if (!confirm('Exit to lobby?')) return;
@@ -7483,8 +7526,14 @@ let _hexPxR = 50;
 
 function _resizeOverlay() {
   const _ow = document.getElementById('canvasWrapper');
-  _overlay2d.width  = (_ow ? _ow.clientWidth  : renderer.domElement.clientWidth)  || window.innerWidth;
-  _overlay2d.height = (_ow ? _ow.clientHeight : renderer.domElement.clientHeight) || window.innerHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const cssW = (_ow ? _ow.clientWidth  : renderer.domElement.clientWidth)  || window.innerWidth;
+  const cssH = (_ow ? _ow.clientHeight : renderer.domElement.clientHeight) || window.innerHeight;
+  _overlay2d.width  = Math.round(cssW * dpr);
+  _overlay2d.height = Math.round(cssH * dpr);
+  _overlay2d.style.width  = cssW + 'px';
+  _overlay2d.style.height = cssH + 'px';
+  _overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 const _2D_TILE_COLORS = {
@@ -7560,7 +7609,9 @@ const _2D_PAT_SRC = (() => {
 
 function _w2c(wx, wz) {
   const v = new THREE.Vector3(wx, 0, wz).project(camera);
-  return [(v.x*0.5+0.5)*_overlay2d.width, (v.y*-0.5+0.5)*_overlay2d.height];
+  const cssW = parseFloat(_overlay2d.style.width)  || _overlay2d.width;
+  const cssH = parseFloat(_overlay2d.style.height) || _overlay2d.height;
+  return [(v.x*0.5+0.5)*cssW, (v.y*-0.5+0.5)*cssH];
 }
 
 function _hexPts(hex) {
@@ -8024,6 +8075,6 @@ function toggle2D() {
 }
 
 _btn2d.addEventListener('click', toggle2D);
-window.addEventListener('resize', () => { if (_is2D) _resizeOverlay(); });
+window.addEventListener('resize', () => { if (_is2D) { _resizeOverlay(); _2dDirty = true; } });
 
 animate();

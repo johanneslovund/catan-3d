@@ -51,12 +51,12 @@ body {
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255,255,255,0.18);
   border-radius: 20px;
-  padding: 40px 48px;
-  width: 380px;
+  padding: 20px 28px;
+  width: 360px;
   max-height: 92vh;
   overflow-y: auto;
   box-shadow: 0 8px 64px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.10);
-  display: flex; flex-direction: column; gap: 14px;
+  display: flex; flex-direction: column; gap: 8px;
   color: #fff;
   align-items: center;
   opacity: 0;
@@ -64,9 +64,9 @@ body {
 }
 .lobby-card.visible { opacity: 1; }
 .lobby-card > * { width: 100%; }
-.lobby-card h1 { font-size: 2rem; text-align: center; text-shadow: 0 2px 12px rgba(0,0,0,0.8); }
-.lobby-card h2 { font-size: 1.4rem; text-align: center; }
-.subtitle { text-align: center; color: rgba(255,255,255,0.75); font-size: .85rem; margin-top: -10px; }
+.lobby-card h1 { font-size: 1.6rem; text-align: center; text-shadow: 0 2px 12px rgba(0,0,0,0.8); margin: 0; }
+.lobby-card h2 { font-size: 1.2rem; text-align: center; margin: 0; }
+.subtitle { text-align: center; color: rgba(255,255,255,0.75); font-size: .8rem; margin-top: -4px; }
 
 .form-group { display: flex; flex-direction: column; gap: 4px; }
 .form-group label { font-size: .8rem; color: rgba(255,255,255,0.75); text-transform: uppercase; letter-spacing: .05em; }
@@ -147,8 +147,71 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .bot-diff-select option { background: #1a2035; }
 .room-code { font-family: monospace; font-size: 1.3rem; font-weight: 700; letter-spacing: .12em; color: #f5c842; }
 
+.share-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.share-label { font-size: .82rem; color: rgba(255,255,255,0.65); white-space: nowrap; }
+.btn-share-inline {
+  margin-left: auto;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.8);
+  font-size: .75rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.btn-share-inline:hover { background: rgba(255,255,255,0.15); }
+
+.waiting-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.waiting-header h2 { margin: 0; flex: 1; text-align: center; }
+.waiting-header > span { flex: 0 0 auto; min-width: 60px; }
+.btn-back-top {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.75);
+  font-size: .78rem;
+  cursor: pointer;
+  padding: 4px 10px;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+  flex-shrink: 0;
+}
+.btn-back-top:hover { background: rgba(255,255,255,0.18); color: #fff; }
+
 .private-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: .85rem; color: rgba(255,255,255,0.75); margin-bottom: 2px; }
 .private-toggle input { width: 15px; height: 15px; cursor: pointer; accent-color: #f5c842; }
+
+/* Setting toggle rows */
+#gameSettings { display: flex; flex-direction: column; gap: 2px; }
+.setting-toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px 10px; border-radius: 10px; transition: background .15s; }
+.setting-toggle:hover { background: rgba(255,255,255,0.06); }
+.setting-toggle input { display: none; }
+.setting-toggle-track {
+  flex-shrink: 0;
+  width: 36px; height: 20px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
+  position: relative;
+  transition: background .2s;
+}
+.setting-toggle input:checked ~ .setting-toggle-track { background: #f5c842; }
+.setting-toggle-thumb {
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 14px; height: 14px;
+  background: #fff;
+  border-radius: 50%;
+  transition: left .2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.setting-toggle input:checked ~ .setting-toggle-track .setting-toggle-thumb { left: 19px; }
+.setting-toggle-label { font-size: .85rem; color: rgba(255,255,255,0.8); }
 
 .public-lobbies { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; }
 .lobby-entry {
@@ -221,38 +284,31 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .lobby-voice-user {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
-  border-radius: 14px;
+  gap: 7px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 20px;
   background: var(--glass);
   border: 1px solid var(--glass-border);
   font-size: .78rem;
   color: var(--text);
 }
-.lobby-voice-user .lv-dot {
-  width: 8px; height: 8px;
+.lv-avatar {
+  width: 28px; height: 28px;
   border-radius: 50%;
+  border: 2px solid transparent;
   flex-shrink: 0;
-}
-.lobby-voice-user .lv-ring {
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .85rem;
+  overflow: hidden;
+  background: rgba(255,255,255,0.1);
   transition: box-shadow .1s;
 }
-.lobby-voice-user .lv-ring.talking {
-  box-shadow: 0 0 0 3px rgba(100,230,140,0.7);
+.lv-avatar.talking {
+  box-shadow: 0 0 0 2px rgba(100,230,140,0.8);
 }
-.lobby-voice-user .lv-mute-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: .75rem;
-  padding: 0 2px;
-  line-height: 1;
-  opacity: .7;
-}
-.lobby-voice-user .lv-mute-btn:hover { opacity: 1; }
+.lv-name { flex: 1; white-space: nowrap; }
+.lv-name-clickable { cursor: pointer; }
+.lv-name-clickable:hover { text-decoration: underline; opacity: .8; }
 
 #lobbyChatBox {
   display: flex;
