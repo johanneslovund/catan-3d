@@ -4912,7 +4912,10 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
   document.getElementById('mobBtmChat')?.addEventListener('click', () => document.getElementById('mBtnChat')?.click());
   document.getElementById('mobBtmTrade')?.addEventListener('click', () => document.getElementById('btnOpenTrade')?.click());
   document.getElementById('mobBtmPlay')?.addEventListener('click', () => document.getElementById('btnDevPlay')?.click());
-  document.getElementById('mobBtmVol')?.addEventListener('click', () => { document.getElementById('mobileVolOverlay')?.classList.add('open'); });
+  document.getElementById('mobBtmVol')?.addEventListener('click', () => {
+    document.getElementById('mobileVolOverlay')?.classList.add('open');
+    _syncVolSliders();
+  });
   // Top-bar settings/info buttons
   document.getElementById('mobHdrSettings')?.addEventListener('click', () => document.getElementById('btnSettings')?.click());
   document.getElementById('mobHdrPlayers')?.addEventListener('click', () => {
@@ -4951,26 +4954,27 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
     if (e.target === volOverlay) volOverlay.classList.remove('open');
   });
 
-  // Mic row
+  // Mic / VC row — mute button toggles self-mute in voice chat
   const mVolMicMute = document.getElementById('mVolMicMute');
   mVolMicMute?.addEventListener('click', () => {
-    if (typeof voiceChat !== 'undefined') voiceChat.toggleMute?.();
-    const muted = voiceChat?.isMuted?.() ?? false;
-    mVolMicMute.textContent = muted ? '🔇' : '🎤';
-    mVolMicMute.classList.toggle('off', muted);
-    mVolMicMute.classList.toggle('on', !muted);
+    AUDIO.vcMuted = !AUDIO.vcMuted;
+    applyVcVolume();
+    mVolMicMute.textContent = AUDIO.vcMuted ? '🔇' : '🎤';
+    mVolMicMute.classList.toggle('off', AUDIO.vcMuted);
+    mVolMicMute.classList.toggle('on', !AUDIO.vcMuted);
   });
   const mVolMicVol = document.getElementById('mVolMicVol');
-  mVolMicVol?.addEventListener('input', () => {
-    if (typeof voiceChat !== 'undefined') voiceChat.setVolume?.(parseFloat(mVolMicVol.value));
-  });
+  function _applyMicVol() { AUDIO.vcVolume = parseFloat(mVolMicVol.value); applyVcVolume(); }
+  mVolMicVol?.addEventListener('input', _applyMicVol);
+  mVolMicVol?.addEventListener('change', _applyMicVol);
 
-  // Music row — mirrors the settings panel audio row
+  // Audio rows: wire mute button + slider, sync values lazily when overlay opens
   function wireMobAudioRow(muteId, volId, getMuted, setMuted, getVol, setVol, onApply) {
     const btn = document.getElementById(muteId);
     const sld = document.getElementById(volId);
     if (!btn || !sld) return;
-    sld.value = getVol();
+    function syncSlider() { const v = getVol(); if (v !== undefined && v !== null) sld.value = v; }
+    function applySlider() { setVol(parseFloat(sld.value)); onApply(); }
     btn.addEventListener('click', () => {
       setMuted(!getMuted());
       btn.textContent = getMuted() ? '🔇' : '🔊';
@@ -4978,29 +4982,35 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
       btn.classList.toggle('on', !getMuted());
       onApply();
     });
-    sld.addEventListener('input', () => {
-      setVol(parseFloat(sld.value));
-      onApply();
-    });
+    sld.addEventListener('input', applySlider);
+    sld.addEventListener('change', applySlider); // iOS fires change on release
+    return syncSlider;
   }
-  wireMobAudioRow(
+  const syncMusicSlider = wireMobAudioRow(
     'mVolMusicMute', 'mVolMusicVol',
     () => AUDIO.musicMuted,  v => { AUDIO.musicMuted = v; },
     () => AUDIO.musicVolume, v => { AUDIO.musicVolume = v; },
     () => AUDIO.applyMusicVolume?.()
   );
-  wireMobAudioRow(
+  const syncSfxSlider = wireMobAudioRow(
     'mVolSfxMute', 'mVolSfxVol',
     () => AUDIO.sfxMuted,  v => { AUDIO.sfxMuted = v; },
     () => AUDIO.sfxVolume, v => { AUDIO.sfxVolume = v; },
     applyAudioParams
   );
-  wireMobAudioRow(
+  const syncVoSlider = wireMobAudioRow(
     'mVolVoMute', 'mVolVoVol',
     () => AUDIO.voMuted,  v => { AUDIO.voMuted = v; },
     () => AUDIO.voVolume, v => { AUDIO.voVolume = v; },
     () => {}
   );
+  // Sync slider positions to current AUDIO state each time the overlay opens
+  function _syncVolSliders() {
+    syncMusicSlider?.();
+    syncSfxSlider?.();
+    syncVoSlider?.();
+    if (mVolMicVol) mVolMicVol.value = AUDIO.vcVolume ?? 1;
+  }
 
   // ── Camera preset popup (mobile button + desktop left-bar button) ──────────
   const cameraPopup = document.getElementById('cameraPresetPopup');
