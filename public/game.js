@@ -1096,11 +1096,13 @@ function stopAutoRoll() {
 const AUDIO = {
   sfxVolume: 0.5,   sfxMuted: false,
   voVolume:  0.20,  voMuted:  false,
+  rpVolume:  0.30,  rpMuted:  false,  // robber proximity voice (50% louder than voVol default)
   vcVolume:  1.0,   vcMuted:  false,
   // music volume + muted live in the music IIFE below and are wired via IDs
 };
 function sfxVol() { return AUDIO.sfxMuted ? 0 : AUDIO.sfxVolume; }
 function voVol()  { return AUDIO.voMuted  ? 0 : AUDIO.voVolume;  }
+function rpVol()  { return AUDIO.rpMuted  ? 0 : AUDIO.rpVolume;  }
 function applyAudioParams() {
   _diceSound.volume      = sfxVol();
   _vikingHorn.volume     = sfxVol();
@@ -3474,7 +3476,7 @@ const ROBBER_VO = [
 function playRobberVO() {
   const clip = ROBBER_VO[Math.floor(Math.random() * ROBBER_VO.length)];
   const a = new Audio('voice over/' + clip);
-  a.volume = voVol();
+  a.volume = rpVol();
   a.play().catch(() => {});
 }
 const PLAYER_CSS = ['#e74c3c','#3498db','#ffffff','#2ecc71'];
@@ -5004,11 +5006,18 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
     () => AUDIO.voVolume, v => { AUDIO.voVolume = v; },
     () => {}
   );
+  const syncRpSlider = wireMobAudioRow(
+    'mVolRpMute', 'mVolRpVol',
+    () => AUDIO.rpMuted,  v => { AUDIO.rpMuted = v; },
+    () => AUDIO.rpVolume, v => { AUDIO.rpVolume = v; },
+    () => {}
+  );
   // Sync slider positions to current AUDIO state each time the overlay opens
   function _syncVolSliders() {
     syncMusicSlider?.();
     syncSfxSlider?.();
     syncVoSlider?.();
+    syncRpSlider?.();
     if (mVolMicVol) mVolMicVol.value = AUDIO.vcVolume ?? 1;
   }
 
@@ -6268,7 +6277,13 @@ function updateSliderFill(el) {
     'audioVoMute', 'audioVoVol',
     () => AUDIO.voMuted,  v => { AUDIO.voMuted = v; },
     () => AUDIO.voVolume, v => { AUDIO.voVolume = v; },
-    () => {} // voice-over plays once; volume applied next time it plays
+    () => {}
+  );
+  wireAudioRow(
+    'audioRpMute', 'audioRpVol',
+    () => AUDIO.rpMuted,  v => { AUDIO.rpMuted = v; },
+    () => AUDIO.rpVolume, v => { AUDIO.rpVolume = v; },
+    () => {}
   );
   wireAudioRow(
     'audioVcMute', 'audioVcVol',
