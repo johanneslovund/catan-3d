@@ -416,7 +416,17 @@ function _stopLavaEruption(hexes) {
   _lavaEruption.nextIn = Math.random() * 240 + 480;
 }
 
-const LAVA_STEAM = [];   // { pos:{x,y,z}, vel:{x,y,z}, t, life, mat }
+const LAVA_STEAM = [];
+const _steamPool = []; // recycled steam sprites to avoid per-frame allocation
+function _acquireSteamSprite() {
+  if (_steamPool.length) return _steamPool.pop();
+  const mat = new THREE.SpriteMaterial({ map: null, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
+  return new THREE.Sprite(mat);
+}
+function _releaseSteamSprite(sprite) {
+  scene.remove(sprite);
+  _steamPool.push(sprite);
+}
 
 // Soft circle texture for round steam particles
 const _steamCircleTex = (() => {
@@ -657,7 +667,7 @@ const _portOutlinePasses = [{ pass: _portOutlinePass, type: '_all' }];
 
 
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LIGHT_PARAMS.bloomStr, 0.5, 0.85);
-if (_isMobile) bloom.enabled = false;
+bloom.enabled = false; // off by default for performance; enabled after intro
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -3440,7 +3450,7 @@ renderer.domElement.addEventListener('click', e => {
   const rect = canvas.getBoundingClientRect();
   const mx = ((e.clientX-rect.left)/rect.width)*2-1;
   const my = -((e.clientY-rect.top)/rect.height)*2+1;
-  raycaster.setFromCamera(new THREE.Vector2(mx, my), camera);
+  _raycastVec2.set(mx, my); raycaster.setFromCamera(_raycastVec2, camera);
   const hits = raycaster.intersectObjects(buildGroup.children, true);
   if (!hits.length) return;
   const hit = hits[0].object;
@@ -5342,7 +5352,7 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         return;
       } else if (param === 'graphics') {
         if (type === 'bloom') {
-          bloom.enabled = v > 0.5;
+          if (!_isMobile) bloom.enabled = v > 0.5;
         } else if (type === 'bloomStr') {
           LIGHT_PARAMS.bloomStr = v;
           bloom.strength = v;
@@ -6432,6 +6442,7 @@ function wanderAnimal(s, delta, baseYOffset, bobAmp) {
 const _animWorldPos = new THREE.Vector3();
 const _animToCam = new THREE.Vector3();
 const _animSeenHids = new Set();
+const _raycastVec2 = new THREE.Vector2();
 
 // FPS counter
 const _fpsEl = document.getElementById('fpsCounter');
@@ -6772,6 +6783,7 @@ function animate() {
       controls.update();
       controls.enableDamping = true;
       bloom.strength = LIGHT_PARAMS.bloomStr;
+      if (!_isMobile) bloom.enabled = true;
       const startUpSnd = new Audio('sound effects/Bjorn Lynne - Multimedia - Game Console Start Up.aac');
       startUpSnd.volume = sfxVol();
       startUpSnd.play().catch(() => {});
@@ -7187,8 +7199,8 @@ function animate() {
     }
   }
 
-  // Boats — arc routing around the outer water ring, parking spots per dock
-  if (boardGroup.userData.boats) {
+  // Boats — arc routing around the outer water ring, parking spots per dock (throttle: every 2nd frame)
+  if ((_bobFrame & 1) === 0 && boardGroup.userData.boats) {
     const DOCK_WAIT = 60;
     const BOAT_SPEED = Math.max(SCENE_PARAMS.boatSpeed ?? 0.05, 0.001);
     const TRAVEL_R_BASE = 6.2; // each boat gets its own lane to avoid collision
@@ -7284,8 +7296,8 @@ function animate() {
     });
   }
 
-  // Port icons — billboard toward camera + gentle float
-  if (boardGroup.userData.portIcons) {
+  // Port icons — billboard toward camera + gentle float (throttle: every 2nd frame)
+  if ((_bobFrame & 1) === 0 && boardGroup.userData.portIcons) {
     boardGroup.userData.portIcons.forEach((ig, i) => {
       ig.getWorldPosition(_animWorldPos);
       _animToCam.copy(camera.position).sub(_animWorldPos);
@@ -7297,8 +7309,8 @@ function animate() {
     });
   }
 
-  // Marker glow pulsation — skip on mobile
-  if (!_isMobile && markerGroup.children.length && !markerGroup.userData.pendingAppear) {
+  // Marker glow pulsation — skip on mobile, throttle to every 2nd frame
+  if (!_isMobile && (_bobFrame & 1) === 0 && markerGroup.children.length && !markerGroup.userData.pendingAppear) {
     const glowOpacity = 0.30 + Math.sin(t * 2.8) * 0.20;
     markerGroup.children.forEach(marker => {
       marker.children.forEach(child => {
@@ -7312,11 +7324,14 @@ function animate() {
     boardGroup.userData.lavaMeshes.forEach(m => {
       const phase = m.userData.lavaPhase ?? 0;
       const pulse = Math.sin(t * 3.1 + phase);
-      const intensity = 1.4 + 0.7 * pulse;
-      m.material.emissiveIntensity = intensity;
-      const g = 0.18 + 0.18 * Math.max(0, pulse);
-      m.material.color.setRGB(1.0, g, 0);
-      m.material.emissive.setRGB(0.9, g * 0.4, 0);
+      // Throttle color/emissive writes to every 2nd frame
+      if ((_bobFrame & 1) === 0) {
+        const intensity = 1.4 + 0.7 * pulse;
+        m.material.emissiveIntensity = intensity;
+        const g = 0.18 + 0.18 * Math.max(0, pulse);
+        m.material.color.setRGB(1.0, g, 0);
+        m.material.emissive.setRGB(0.9, g * 0.4, 0);
+      }
       if (BOB_PARAMS.enabled && !tileIntro.active && m.userData.hexId !== undefined && m.userData._lavaBaseY !== undefined) {
         const bobPhase = tileBobPhases.get(m.userData.hexId) ?? 0;
         m.position.y = m.userData._lavaBaseY + Math.sin(t * BOB_PARAMS.speed + bobPhase) * BOB_PARAMS.amp;
@@ -7341,14 +7356,9 @@ function animate() {
     if (origins.length && LAVA_PARAMS.steamAmount > 0) {
       for (const o of origins) {
         if (Math.random() < LAVA_PARAMS.steamAmount * delta) {
-          const spriteMat = new THREE.SpriteMaterial({
-            map: _steamCircleTex,
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0,
-            depthWrite: false,
-          });
-          const sprite = new THREE.Sprite(spriteMat);
+          const sprite = _acquireSteamSprite();
+          sprite.material.map = _steamCircleTex;
+          sprite.material.opacity = 0;
           const spread = 0.15;
           sprite.position.set(
             o.x + (Math.random() - 0.5) * spread,
@@ -7375,8 +7385,7 @@ function animate() {
     const p = LAVA_STEAM[i];
     p.t += delta;
     if (p.t >= p.life) {
-      scene.remove(p.sprite);
-      p.sprite.material.dispose();
+      _releaseSteamSprite(p.sprite);
       LAVA_STEAM.splice(i, 1);
       continue;
     }
@@ -7391,10 +7400,9 @@ function animate() {
     const fadeOut = Math.max(0, 1 - (prog - 0.6) / 0.4);
     p.sprite.material.opacity = LAVA_PARAMS.steamOpacity * fadeIn * fadeOut;
     p.sprite.scale.setScalar((0.18 + prog * 0.35));
-    p.sprite.material.needsUpdate = true;
   }
 
-  if (boardGroup.userData.mountainClouds) {
+  if ((_bobFrame & 1) === 0 && boardGroup.userData.mountainClouds) {
     boardGroup.userData.mountainClouds.forEach(cg => {
       const s = cg.userData.cloudSeed ?? 0;
       // Find the tile's current Y offset via the hex cylinder child
@@ -7405,12 +7413,17 @@ function animate() {
       }
       cg.position.y = cg.userData.cloudBase + tileYOff + Math.sin(t * 0.4 * CLOUD_PARAMS.speed + s) * 0.06;
       cg.position.x += Math.sin(t * 0.12 * CLOUD_PARAMS.speed + s * 0.7) * 0.0008;
-      cg.children.forEach(m => {
-        if (m.material) {
-          m.material.opacity = CLOUD_PARAMS.opacity;
-          m.material.emissiveIntensity = CLOUD_PARAMS.brightness;
-        }
-      });
+      // Only write material props when they've changed
+      if (cg.userData._lastOpacity !== CLOUD_PARAMS.opacity || cg.userData._lastBright !== CLOUD_PARAMS.brightness) {
+        cg.userData._lastOpacity = CLOUD_PARAMS.opacity;
+        cg.userData._lastBright  = CLOUD_PARAMS.brightness;
+        cg.children.forEach(m => {
+          if (m.material) {
+            m.material.opacity = CLOUD_PARAMS.opacity;
+            m.material.emissiveIntensity = CLOUD_PARAMS.brightness;
+          }
+        });
+      }
     });
   }
 
@@ -7423,7 +7436,6 @@ function animate() {
       if (robberAnim.currentAction) robberAnim.currentAction.fadeOut(0.4);
       next.reset().fadeIn(0.4).play();
       robberAnim.currentAction = next;
-      console.log(`[Robber] → ${name}`);
     };
 
     const available = Object.keys(robberAnim.actions);
@@ -7474,21 +7486,27 @@ function animate() {
       robberAnim.mesh.rotation.y += delta * spinSpd;
     }
 
-    // Emissive red pulse when active
-    robberAnim.mesh.traverse(c => {
-      if (!c.isMesh) return;
-      const mats = Array.isArray(c.material) ? c.material : [c.material];
-      mats.forEach(mat => {
-        if (!mat) return;
-        if (!mat._robberEmissiveSet) {
+    // Cache robber materials on first use to avoid traverse() every frame
+    if (!robberAnim._matCache) {
+      robberAnim._matCache = [];
+      robberAnim.mesh.traverse(c => {
+        if (!c.isMesh) return;
+        const mats = Array.isArray(c.material) ? c.material : [c.material];
+        mats.forEach(mat => {
+          if (!mat) return;
           mat.emissive = new THREE.Color(0xff2200);
-          mat._robberEmissiveSet = true;
-        }
-        mat.emissiveIntensity = robberAnim.active
-          ? 0.25 + 0.25 * Math.sin(t * 6)
-          : 0.0;
+          robberAnim._matCache.push(mat);
+        });
       });
-    });
+    }
+    // Emissive red pulse when active
+    if (robberAnim.active) {
+      const ei = 0.25 + 0.25 * Math.sin(t * 6);
+      for (const mat of robberAnim._matCache) mat.emissiveIntensity = ei;
+    } else if (robberAnim._wasActive) {
+      for (const mat of robberAnim._matCache) mat.emissiveIntensity = 0;
+    }
+    robberAnim._wasActive = robberAnim.active;
   }
 
   // ── Robber arc movement ──
@@ -7534,7 +7552,7 @@ function animate() {
     }
   }
   composer.render();
-  if (_is2D) _draw2DBoard();
+  if (_is2D && (_2dDirty || (diceAnim.active && !diceAnim.settled))) _draw2DBoard();
   _updateFPS();
 }
 // ─── 2D Mode: top-down camera + robber overlay ────────────────────────────────
