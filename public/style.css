@@ -1651,8 +1651,21 @@ img.piece-icon {
   }
   .mob-vol-label { font-size: .85rem; color: var(--text); min-width: 62px; }
   .mob-vol-row input[type=range] {
-    flex: 1; height: 4px; border-radius: 2px;
+    flex: 1; height: 6px; border-radius: 3px;
     background: rgba(255,255,255,.2);
+    touch-action: none; cursor: pointer;
+    -webkit-appearance: none; appearance: none;
+  }
+  .mob-vol-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #fff; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+  .mob-vol-row input[type=range]::-moz-range-thumb {
+    width: 26px; height: 26px; border-radius: 50%; border: none;
+    background: #fff; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
   }
   #mobileChatMessages, #mobileLogMessages {
     flex: 1; overflow-y: auto; padding: 10px 14px;

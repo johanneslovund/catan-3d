@@ -4825,6 +4825,29 @@ document.getElementById('btnJoin').addEventListener('click', () => {
   socket.emit('joinRoom', { roomId: code, name, avatar: _playerAvatar });
 });
 document.getElementById('btnStart').addEventListener('click', () => socket.emit('startGame'));
+document.getElementById('btnShareLink')?.addEventListener('click', () => {
+  const url = `${location.origin}${location.pathname}?room=${encodeURIComponent(roomId)}`;
+  if (navigator.share) {
+    navigator.share({ title: 'Join my Tantrum Island game', url }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(url).then(() => {
+      const btn = document.getElementById('btnShareLink');
+      if (btn) { btn.textContent = '✅ Link copied!'; setTimeout(() => { btn.textContent = '🔗 Copy invite link'; }, 2000); }
+    }).catch(() => {});
+  }
+});
+// Auto-fill room code from ?room= URL param
+(function () {
+  const params = new URLSearchParams(location.search);
+  const roomParam = params.get('room');
+  if (roomParam) {
+    const input = document.getElementById('roomCodeInput');
+    if (input) input.value = roomParam.toUpperCase();
+    // Clean URL without reloading
+    history.replaceState(null, '', location.pathname);
+  }
+})();
+
 document.getElementById('btnLeaveWaiting').addEventListener('click', () => {
   socket.emit('leaveRoom');
   document.getElementById('waiting').style.display = 'none';
