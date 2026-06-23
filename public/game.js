@@ -3307,11 +3307,9 @@ renderer.domElement.addEventListener('click', e => {
   let ud, hitMesh;
 
   if (_is2D) {
-    // 2D proximity detection — project markers to canvas space and find nearest
-    const scaleX = _overlay2d.width / rect.width;
-    const scaleY = _overlay2d.height / rect.height;
-    const cx = (e.clientX - rect.left) * scaleX;
-    const cy = (e.clientY - rect.top)  * scaleY;
+    // 2D proximity detection — use CSS coordinates (w2c already returns CSS coords)
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
     const hitR = _hexPxR * 0.5;
     let bestDist = Infinity, bestMesh = null;
     for (const m of markerGroup.children) {
@@ -4932,11 +4930,14 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
   document.getElementById('mBtnChat')?.addEventListener('click', () => {
     chatOverlay?.classList.add('open');
   });
-  document.getElementById('mBtnChatClose')?.addEventListener('click', () => {
+  function _closeChat() {
     chatOverlay?.classList.remove('open');
-  });
+    // iOS suspends AudioContext when text inputs are focused — resume after chat closes
+    if (voiceChat.audioCtx?.state === 'suspended') voiceChat.audioCtx.resume().catch(() => {});
+  }
+  document.getElementById('mBtnChatClose')?.addEventListener('click', _closeChat);
   chatOverlay?.addEventListener('click', e => {
-    if (e.target === chatOverlay) chatOverlay.classList.remove('open');
+    if (e.target === chatOverlay) _closeChat();
   });
 
   // Mobile chat send
@@ -5055,12 +5056,19 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
     () => AUDIO.rpVolume, v => { AUDIO.rpVolume = v; },
     () => {}
   );
+  const syncVcSlider = wireMobAudioRow(
+    'mVolVcMute', 'mVolVcVol',
+    () => AUDIO.vcMuted,  v => { AUDIO.vcMuted = v; },
+    () => AUDIO.vcVolume, v => { AUDIO.vcVolume = v; },
+    applyVcVolume
+  );
   // Sync slider positions to current AUDIO state each time the overlay opens
   function _syncVolSliders() {
     syncMusicSlider?.();
     syncSfxSlider?.();
     syncVoSlider?.();
     syncRpSlider?.();
+    syncVcSlider?.();
     if (mVolMicVol) mVolMicVol.value = AUDIO.vcVolume ?? 1;
   }
 

@@ -699,8 +699,12 @@ function maybeScheduleBot(roomId, delay = 1300) {
     return;
   }
   const cur = cp(game);
-  if (cur && isBotId(cur.id)) setTimeout(() => runBotTurn(roomId, 0), delay);
-  else if (game.status === 'robber' && isBotId(game.robbingPlayer))
+  const hasHuman = game.players.some(p => !p.isBot);
+  // When humans are present, bots wait for forceEndTurn (timer expiry) instead of auto-playing
+  if (cur && isBotId(cur.id)) {
+    if (!hasHuman) setTimeout(() => runBotTurn(roomId, 0), delay);
+    // else: bot waits — forceEndTurn from clients will trigger runBotTurn when timer expires
+  } else if (game.status === 'robber' && isBotId(game.robbingPlayer))
     setTimeout(() => runBotTurn(roomId, 0), delay);
 }
 
@@ -1842,6 +1846,11 @@ io.on('connection', socket => {
     const timerExpired = elapsed >= 85_000; // 85s server-side slack on 90s client timer
     // Current player can always force-advance; anyone can if timer truly expired server-side
     if (player.id !== socket.id && !isBotId(player.id) && !timerExpired) return;
+    // If it's a bot's turn, let the bot handle its own full turn (build + end)
+    if (isBotId(player.id)) {
+      runBotTurn(info.roomId, 0);
+      return;
+    }
     // Cancel any pending trade before force-ending
     if (game.pendingTrade) { game.pendingTrade = null; broadcastState(info.roomId); }
     if (!game.diceRolled) {
