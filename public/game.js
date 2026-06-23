@@ -924,14 +924,17 @@ function wiggleTokens(hexIds) {
 }
 
 function pulseTokensRed(hexIds) {
-  boardGroup.children.forEach(child => {
-    if (child.userData.tokenHexId === undefined || !hexIds.includes(child.userData.tokenHexId)) return;
-    const mat = child.material;
-    if (!mat) return;
-    const origE = mat.emissive ? mat.emissive.clone() : new THREE.Color(0x000000);
-    const origEI = mat.emissiveIntensity ?? 0;
-    mat.emissive = new THREE.Color(0xff0000);
-    tokenPulses.push({ mesh: child, origEmissive: origE, origEmissiveIntensity: origEI, t: 0, duration: 4.0 });
+  boardGroup.children.forEach(group => {
+    if (group.userData.tokenHexId === undefined || !hexIds.includes(group.userData.tokenHexId)) return;
+    group.traverse(child => {
+      if (!child.isMesh) return;
+      const mat = child.material;
+      if (!mat || !mat.emissive) return;
+      const origE = mat.emissive.clone();
+      const origEI = mat.emissiveIntensity ?? 0;
+      mat.emissive.set(0xff0000);
+      tokenPulses.push({ mesh: child, origEmissive: origE, origEmissiveIntensity: origEI, t: 0, duration: 4.0 });
+    });
   });
 }
 
@@ -1089,7 +1092,8 @@ function showDiceResult(d1, d2) {
   overlay._hideTimer = setTimeout(() => { overlay.style.display = 'none'; }, 3500);
 }
 
-const _waterIntroSound = new Audio('sound effects/water.mp3');
+const _waterIntroSound    = new Audio('sound effects/water.mp3');
+const _fallingTokensSound = new Audio('sound effects/falling tokens.mp3');
 const _diceSound       = new Audio('sound effects/Dice.aac');
 const _vikingHorn      = new Audio('sound effects/Viking Horn.aac');
 const _laughingSound   = new Audio('sound effects/Laughing.aac');
@@ -2141,6 +2145,12 @@ function renderBoard(state) {
       const tokenY = tileTopY(hex.type);
       const discBaseY = tokenY + 0.025 + (NUMBER_Y_OFFSET[hex.type] ?? 0);
 
+      // One Group per token — keeps boardGroup.children small (19 groups vs 150+ meshes)
+      // All children positioned relative to group origin at (hex.x, discBaseY, hex.z)
+      const tokenGroup = new THREE.Group();
+      tokenGroup.position.set(hex.x, discBaseY, hex.z);
+      tokenGroup.userData.tokenHexId = hex.id;
+
       // Gold coin disc
       const discGeo = new THREE.CylinderGeometry(HEX_R*0.27, HEX_R*0.265, 0.09, 28);
       const discMat = new THREE.MeshStandardMaterial({
@@ -2153,10 +2163,9 @@ function renderBoard(state) {
       });
       discMat.userData = { isTokenDisc: true };
       const disc = new THREE.Mesh(discGeo, discMat);
-      disc.position.set(hex.x, discBaseY, hex.z);
+      disc.position.set(0, 0, 0);
       disc.castShadow = true;
-      disc.userData.tokenHexId = hex.id;
-      boardGroup.add(disc);
+      tokenGroup.add(disc);
 
       // 3D extruded number on top of the coin
       if (_portFont) {
@@ -2188,10 +2197,10 @@ function renderBoard(state) {
 
         const numMesh = new THREE.Mesh(textGeo, numMat);
         numMesh.rotation.x = -Math.PI / 2;
-        numMesh.position.set(hex.x - cx, discBaseY + 0.048, hex.z + cz - groupShift);
+        // Position relative to group origin
+        numMesh.position.set(-cx, 0.048, cz - groupShift);
         numMesh.castShadow = false;
-        numMesh.userData.tokenHexId = hex.id;
-        boardGroup.add(numMesh);
+        tokenGroup.add(numMesh);
 
         // Beveled ring around coin edge
         const ringGeo = new THREE.TorusGeometry(HEX_R * 0.268, 0.018, 8, 36);
@@ -2203,9 +2212,8 @@ function renderBoard(state) {
         });
         const ringMesh = new THREE.Mesh(ringGeo, ringMat);
         ringMesh.rotation.x = Math.PI / 2;
-        ringMesh.position.set(hex.x, discBaseY + 0.052, hex.z);
-        ringMesh.userData.tokenHexId = hex.id;
-        boardGroup.add(ringMesh);
+        ringMesh.position.set(0, 0.052, 0);
+        tokenGroup.add(ringMesh);
 
         // Probability pips for 6 and 8
         if (isRed) {
@@ -2213,15 +2221,16 @@ function renderBoard(state) {
           const pipGeo = new THREE.CylinderGeometry(pipR, pipR, 0.012, 8);
           const spacing = HEX_R * 0.055;
           const totalW = (pipCount - 1) * spacing;
-          const pipZ = hex.z + groupShift; // symmetric with number shift
           for (let p = 0; p < pipCount; p++) {
             const pipMesh = new THREE.Mesh(pipGeo, numMat);
-            pipMesh.position.set(hex.x - totalW / 2 + p * spacing, discBaseY + 0.048, pipZ);
-            pipMesh.userData.tokenHexId = hex.id;
-            boardGroup.add(pipMesh);
+            // Relative position: pip row is at (pipX - hex.x, 0.048, groupShift)
+            pipMesh.position.set(-totalW / 2 + p * spacing, 0.048, groupShift);
+            tokenGroup.add(pipMesh);
           }
         }
       }
+
+      boardGroup.add(tokenGroup);
     }
   });
 
@@ -2874,31 +2883,55 @@ function renderBuildings(state) {
     buildGroup.add(mesh);
   });
 
-  edges.forEach(e => {
-    if (!e.road) return;
-    const player = state.players.find(p => p.id === e.road.playerId);
-    if (!player) return;
-    const v1 = vertices[e.vertices[0]], v2 = vertices[e.vertices[1]];
-    const col = colorHex(player.color);
-    const roadY = HEX_H / 2 + SCENE_PARAMS.roadY;
-    let road = cloneModel('road', col);
-    if (road) {
-      const dx = v2.x-v1.x, dz = v2.z-v1.z;
-      const len = Math.sqrt(dx*dx+dz*dz);
-      const box = new THREE.Box3().setFromObject(road);
-      const size = new THREE.Vector3(); box.getSize(size);
-      road.scale.set(len / (size.x || 1), 0.5 / (size.y || 1), 0.5 / (size.z || 1));
-      road.position.set((v1.x+v2.x)/2, roadY, (v1.z+v2.z)/2);
-      road.rotation.y = Math.atan2(-dz, dx);
-    } else {
-      road = makeRoad(v1, v2, col, roadY);
+  // ── Road InstancedMesh — one draw call per layer instead of N×3 ──────────────
+  const roadEdges = edges.filter(e => e.road && state.players.find(p => p.id === e.road.playerId));
+  if (roadEdges.length > 0) {
+    const roadGeo = new THREE.BoxGeometry(HEX_R * 0.88, 0.08, 0.18);
+    const roadMat = new THREE.MeshStandardMaterial({
+      vertexColors: true, map: cobbleTex, roughness: 0.85, metalness: 0.02,
+    });
+    _enableStencilWrite(roadMat);
+    const roadInst = new THREE.InstancedMesh(roadGeo, roadMat, roadEdges.length);
+    roadInst.castShadow = true;
+    roadInst.renderOrder = 1;
+
+    let rimInst = null, glowInst = null;
+    if (_outlineEnabled && !_isMobile) {
+      const t = _OUTLINE_PARAMS.thickness;
+      rimInst  = new THREE.InstancedMesh(roadGeo, _makeStencilOutlineMat('#ffffff', t, _OUTLINE_PARAMS.opacity), roadEdges.length);
+      rimInst.renderOrder = 3;
+      if (_OUTLINE_PARAMS.glowOpacity > 0) {
+        glowInst = new THREE.InstancedMesh(roadGeo, _makeStencilOutlineMat('#ffffff', t * _OUTLINE_PARAMS.glowSize, _OUTLINE_PARAMS.glowOpacity), roadEdges.length);
+        glowInst.renderOrder = 3;
+      }
     }
-    road.userData.edgeId = e.id;
-    road.renderOrder = 1;
-    road.traverse(c => { c.userData.edgeId = e.id; c.renderOrder = 1; });
-    addStencilOutline(road, col);
-    buildGroup.add(road);
-  });
+
+    const _rm4 = new THREE.Matrix4();
+    const _rq  = new THREE.Quaternion();
+    const _rsc = new THREE.Vector3(1, 1, 1);
+    const _rp  = new THREE.Vector3();
+    const _rax = new THREE.Vector3(0, 1, 0);
+    const roadY = HEX_H / 2 + SCENE_PARAMS.roadY;
+
+    roadEdges.forEach((e, i) => {
+      const player = state.players.find(p => p.id === e.road.playerId);
+      const col = new THREE.Color(colorHex(player.color));
+      const v1 = vertices[e.vertices[0]], v2 = vertices[e.vertices[1]];
+      const angle = Math.atan2(-(v2.z - v1.z), v2.x - v1.x);
+      _rp.set((v1.x + v2.x) / 2, roadY, (v1.z + v2.z) / 2);
+      _rq.setFromAxisAngle(_rax, angle);
+      _rm4.compose(_rp, _rq, _rsc);
+      roadInst.setMatrixAt(i, _rm4);
+      roadInst.setColorAt(i, col);
+      if (rimInst)  { rimInst.setMatrixAt(i, _rm4);  rimInst.setColorAt(i, col); }
+      if (glowInst) { glowInst.setMatrixAt(i, _rm4); glowInst.setColorAt(i, col); }
+    });
+    roadInst.instanceMatrix.needsUpdate = true;
+    if (roadInst.instanceColor) roadInst.instanceColor.needsUpdate = true;
+    if (rimInst)  { rimInst.instanceMatrix.needsUpdate  = true; if (rimInst.instanceColor)  rimInst.instanceColor.needsUpdate  = true; buildGroup.add(rimInst); }
+    if (glowInst) { glowInst.instanceMatrix.needsUpdate = true; if (glowInst.instanceColor) glowInst.instanceColor.needsUpdate = true; buildGroup.add(glowInst); }
+    buildGroup.add(roadInst);
+  }
 
   // Cache my settlement meshes for the pulse animation in animate()
   _mySettlements = buildGroup.children.filter(
@@ -6615,9 +6648,9 @@ function animate() {
         // First landing plays sound effect
         if (!tokenIntro._soundPlayed) {
           tokenIntro._soundPlayed = true;
-          const snd = new Audio('sound effects/falling tokens.mp3');
-          snd.volume = 0.7;
-          snd.play().catch(() => {});
+          _fallingTokensSound.currentTime = 0;
+          _fallingTokensSound.volume = 0.7;
+          _fallingTokensSound.play().catch(() => {});
         }
         // Debris particles from impact point
         if (entry.tokenMeshes.length > 0) {
