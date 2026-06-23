@@ -1081,7 +1081,7 @@ function showDiceResult(d1, d2) {
 const _waterIntroSound = new Audio('sound effects/water.mp3');
 const _diceSound       = new Audio('sound effects/Dice.aac');
 const _vikingHorn      = new Audio('sound effects/Viking Horn.aac');
-const _laughingSound   = new Audio('sound effects/laughing.aac');
+const _laughingSound   = new Audio('sound effects/Laughing.aac');
 const _tickSound       = new Audio('sound effects/Timer Clock Click Ticking .aac');
 const _logoutSound     = new Audio('sound effects/Log Out Operating System .aac');
 const _btnClickSound   = new Audio('sound effects/Interface Button Click.aac');
@@ -4408,7 +4408,7 @@ socket.on('gameUpdate', state => {
     s.volume = sfxVol(); s.play().catch(() => {});
   }
   if (cityUpgraded) {
-    const s = new Audio('sound effects/viking horn.aac');
+    const s = new Audio('sound effects/Viking Horn.aac');
     s.volume = sfxVol(); s.play().catch(() => {});
   }
   if (tradeSoundNeeded) {
