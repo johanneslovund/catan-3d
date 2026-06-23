@@ -1751,6 +1751,10 @@ io.on('connection', socket => {
     if (!info) return;
     const game = rooms[info.roomId];
     if (!game) return;
+    // Deduplicate: ignore duplicate calls within 3s to prevent multi-client simultaneous fires
+    const now = Date.now();
+    if (game.lastForceEndAt && now - game.lastForceEndAt < 3000) return;
+    game.lastForceEndAt = now;
 
     // Handle setup phase timer expiry: bot picks placement
     if (isSetupPhase(game)) {
@@ -1867,6 +1871,8 @@ io.on('connection', socket => {
         game.board.hexes[rh.id].hasRobber = true;
         addLog(game, `${player.name} moved the robber (auto)`);
         game.status = 'playing';
+        game.robbingPlayer = null;
+        game.discardingPlayers = {};
       } else {
         const gained = distributeResources(game, total);
         if (Object.keys(gained).length) io.to(info.roomId).emit('resourceGain', gained);

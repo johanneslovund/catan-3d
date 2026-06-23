@@ -3533,8 +3533,13 @@ function updateUI(state) {
   const isRobber = state.status==='robber';
   const isPlaying = state.status==='playing';
 
-  // Restart timer when turn changes
-  if (curr?.id !== lastTurnPlayer) { lastTurnPlayer = curr?.id; startTurnTimer(90); }
+  // Restart timer when turn changes, synced to server's turnStartedAt
+  if (curr?.id !== lastTurnPlayer) {
+    lastTurnPlayer = curr?.id;
+    const elapsed = state.turnStartedAt ? Math.max(0, Date.now() - state.turnStartedAt) : 0;
+    const remaining = Math.max(5, 90 - Math.floor(elapsed / 1000));
+    startTurnTimer(remaining);
+  }
 
   // Auto-roll countdown: start when it becomes our turn to roll, stop otherwise
   const needsRoll = isMyTurn && isPlaying && !state.diceRolled;
