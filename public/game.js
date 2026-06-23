@@ -460,7 +460,7 @@ renderer.shadowMap.autoUpdate = false;
 renderer.shadowMap.needsUpdate = true;
 renderer.shadowMap.type = THREE.BasicShadowMap;
 renderer.toneMapping = THREE.ReinhardToneMapping;
-renderer.toneMappingExposure = LIGHT_PARAMS.exposure * 0.38;
+renderer.toneMappingExposure = LIGHT_PARAMS.exposure * 0.40;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 // Environment (soft room lighting for PBR reflections)
@@ -729,7 +729,7 @@ const saturationPass = new ShaderPass({
       gl_FragColor = vec4(c, tex.a);
     }`,
 });
-composer.addPass(saturationPass);
+// saturationPass removed — adjustments baked into light intensities and toneMappingExposure
 
 // ── Sky dome ──
 {
@@ -1799,8 +1799,6 @@ function renderBoard(state) {
       uniform float uWaveScale;
       varying float vHeight;
       varying vec2  vWPos;
-      varying vec3  vNormal;
-      varying vec3  vViewDir;
       void main() {
         vec3 pos = position;
         vWPos = pos.xz;
@@ -1808,20 +1806,10 @@ function renderBoard(state) {
         float s = uWaveScale;
         float a = uWaveAmp;
         float x = pos.x, z = pos.z;
-        float r = max(length(vec2(x, z)), 0.001);
-        // Wave displacement (3 terms instead of 6)
         pos.y = sin(x*0.9*s + t*0.8)   * 0.018*a
               + sin(z*1.1*s + t*0.6)   * 0.015*a
               + sin((x-z)*1.4*s+t*0.9) * 0.012*a;
         vHeight = pos.y;
-        // Analytic normal (4 cos instead of 8)
-        float dydx = cos(x*0.9*s+t*0.8)*0.9*s*0.018*a
-                   + cos((x-z)*1.4*s+t*0.9)*1.4*s*0.012*a;
-        float dydz = cos(z*1.1*s+t*0.6)*1.1*s*0.015*a
-                   + cos((x-z)*1.4*s+t*0.9)*(-1.4*s)*0.012*a;
-        vNormal = normalize(vec3(-dydx, 1.0, -dydz));
-        vec4 worldPos = modelMatrix * vec4(pos, 1.0);
-        vViewDir = normalize(cameraPosition - worldPos.xyz);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
       }
     `,
@@ -1834,13 +1822,6 @@ function renderBoard(state) {
       uniform float uOpacity;
       varying float vHeight;
       varying vec2  vWPos;
-      varying vec3  vNormal;
-      varying vec3  vViewDir;
-
-      // Cheap 2D hash — no texture needed
-      float hash(vec2 p) {
-        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-      }
 
       void main() {
         float distFromIsland = length(vWPos);
@@ -1853,43 +1834,22 @@ function renderBoard(state) {
         vec3 deep    = vec3(0.02, 0.26, 0.46);
         vec3 col = mix(shallow, deep, depth * depth);
 
-        // ── Detail normal (micro-ripple, one layer) ──────────────────────────────
-        float nx = sin(vWPos.x*13.0 + vWPos.y*9.0 + uTime*1.9) * 0.11;
-        float nz = sin(vWPos.x*10.0 - vWPos.y*12.0 + uTime*1.5) * 0.11;
-        vec3 detailN = normalize(vNormal + vec3(nx, 0.0, nz));
+        // ── Wave crests (from vertex height) ────────────────────────────────────
+        float crest = smoothstep(0.022, 0.038, vHeight);
+        col = mix(col, uCrest, crest * 0.35);
 
-        // ── Subsurface scattering hint (wave peaks glow teal) ──────────────────
-        float sss = smoothstep(0.01, 0.038, vHeight);
-        col += vec3(0.0, 0.18, 0.14) * sss * 0.35;
-
-        // ── Textured foam band ──────────────────────────────────────────────────
+        // ── Foam band near shore ─────────────────────────────────────────────────
         float foamInner = shoreStart - 0.3;
         float foamOuter = shoreStart + 1.8;
         float foam = smoothstep(foamInner, foamInner + 0.8, distFromIsland)
                    * (1.0 - smoothstep(foamOuter - 0.6, foamOuter, distFromIsland));
         float foamTex = (sin(vWPos.x*14.0 + vWPos.y*12.0 + uTime*0.8) + 1.0) * 0.5;
-        foamTex = mix(0.65, 1.0, foamTex);
-        col = mix(col, vec3(0.94, 0.99, 1.0) * foamTex, foam * uFoamStr);
+        col = mix(col, vec3(0.94, 0.99, 1.0) * mix(0.65, 1.0, foamTex), foam * uFoamStr);
 
-        // ── Wave crests ─────────────────────────────────────────────────────────
-        float crest = smoothstep(0.022, 0.038, vHeight);
-        col = mix(col, uCrest, crest * 0.4);
-
-        // ── Fresnel (uses detail normal for fine-grain sky reflection) ──────────
-        float NdotV = max(dot(detailN, vViewDir), 0.0);
-        float fresnel = pow(1.0 - NdotV, 3.5);
-        col = mix(col, vec3(0.48, 0.76, 1.0), fresnel * 0.50);
-
-        // ── Specular sun glint (detail normal gives many small glints) ──────────
-        vec3 sunDir = normalize(vec3(2.0, 3.5, 1.5));
-        vec3 reflDir = reflect(-vViewDir, detailN);
-        float spec = pow(max(dot(reflDir, sunDir), 0.0), 140.0);
-        col += vec3(1.0, 0.97, 0.88) * spec * 0.85;
-
-// ── Horizon haze ────────────────────────────────────────────────────────
+        // ── Horizon haze ─────────────────────────────────────────────────────────
         col = mix(col, vec3(0.72, 0.92, 0.96), smoothstep(0.5, 1.0, dist));
 
-        // ── Alpha ───────────────────────────────────────────────────────────────
+        // ── Alpha ────────────────────────────────────────────────────────────────
         float shallowAlpha = smoothstep(shoreStart - 2.5, shoreStart + 3.5, distFromIsland);
         float horizonAlpha = mix(0.96, 0.0, smoothstep(0.78, 1.0, dist));
         gl_FragColor = vec4(col, min(shallowAlpha, horizonAlpha) * uOpacity);
@@ -2858,7 +2818,7 @@ function applyLightParams() {
   ambient.color.copy(ambNoon).lerp(ambWarm, t2 * 0.6);
   ambient.intensity = LIGHT_PARAMS.ambIntensity;
   fill.intensity = LIGHT_PARAMS.fillIntensity;
-  renderer.toneMappingExposure = LIGHT_PARAMS.exposure * 0.38;
+  renderer.toneMappingExposure = LIGHT_PARAMS.exposure * 0.40;
   // fog removed
   bloom.strength = LIGHT_PARAMS.bloomStr;
   bloom.radius = LIGHT_PARAMS.bloomRadius;
@@ -7551,7 +7511,11 @@ function animate() {
       _shadowsDirty = false;
     }
   }
-  composer.render();
+  if (bloom.enabled) {
+    composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
   if (_is2D && (_2dDirty || (diceAnim.active && !diceAnim.settled))) _draw2DBoard();
   _updateFPS();
 }
