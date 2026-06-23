@@ -453,13 +453,13 @@ const ROBBER_PARAMS = {
 const canvas = document.getElementById('c');
 const _isMobile = window.innerWidth <= 768;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 const MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
 renderer.shadowMap.enabled = !_isMobile;
 renderer.shadowMap.autoUpdate = false;
 renderer.shadowMap.needsUpdate = true;
 renderer.shadowMap.type = THREE.BasicShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = THREE.ReinhardToneMapping;
 renderer.toneMappingExposure = LIGHT_PARAMS.exposure * 0.38;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -1778,7 +1778,7 @@ function renderBoard(state) {
   const { hexes, vertices, edges, ports } = state.board;
 
   // Animated ocean — large plane surrounds the island
-  const oceanGeo = new THREE.PlaneGeometry(80, 80, 100, 100);
+  const oceanGeo = new THREE.PlaneGeometry(80, 80, 40, 40);
   oceanGeo.rotateX(-Math.PI / 2);
   const oceanMat = new THREE.ShaderMaterial({
     uniforms: {
@@ -8101,7 +8101,7 @@ function toggle2D() {
     }
     controls.update();
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     _set2DVisibility(true);
     if (!_isMobile) {
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
