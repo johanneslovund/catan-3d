@@ -8,6 +8,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutlinePass } from 'three/addons/postprocessing/OutlinePass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
@@ -951,9 +952,9 @@ function wiggleSheepNear(ix, iz, radius) {
     const now = Date.now();
     if (!wiggleSheepNear._lastPlayed || now - wiggleSheepNear._lastPlayed > 5000) {
       wiggleSheepNear._lastPlayed = now;
-      const sv = new Audio('sound effects/sheep.mp3');
-      sv.volume = Math.min(sfxVol() * 0.15, 0.1);
-      sv.play().catch(() => {});
+      _sheepSound.currentTime = 0;
+      _sheepSound.volume = Math.min(sfxVol() * 0.15, 0.1);
+      _sheepSound.play().catch(() => {});
     }
   }
 }
@@ -1086,6 +1087,18 @@ const _tickSound       = new Audio('sound effects/Timer Clock Click Ticking .aac
 const _logoutSound     = new Audio('sound effects/Log Out Operating System .aac');
 const _btnClickSound   = new Audio('sound effects/Interface Button Click.aac');
 const _gameStartSound  = new Audio('sound effects/Epic Stock Media - Vibrant Game - Positive Achievement.aac');
+const _menuClickSound  = new Audio('sound effects/Marcello Del Monaco - Sci Craft Game - Menu Button.aac');
+const _bubblyBtnSound  = new Audio('sound effects/Bubbly Button.aac');
+const _wrongAnsSound   = new Audio('sound effects/Wrong Answer.aac');
+const _coinJingleSound = new Audio('sound effects/Coins jingle.aac');
+const _coinPickupSound = new Audio('sound effects/Coins Pick Up.aac');
+const _largestArmySound= new Audio('sound effects/largest army.aac');
+const _forgeSound      = new Audio('sound effects/Forge Item.aac');
+const _rockImpactSound = new Audio('sound effects/Rocky Impact Pebbles Tumbling.aac');
+const _sadTrumpetSound = new Audio('sound effects/Ni Sound - Toon World - Cartoon Sad Trumpet.aac');
+const _winChimeSound   = new Audio('sound effects/Game Win Short Chime Sweep.aac');
+const _gameOverSound   = new Audio('sound effects/game over.mp3');
+const _sheepSound      = new Audio('sound effects/sheep.mp3');
 _tickSound.loop = true;
 
 let _autoRollTimeout = null;
@@ -1243,7 +1256,10 @@ function updateDiceAnim(delta) {
 }
 
 // ─── Model loader ─────────────────────────────────────────────────────────────
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
 const gltfLoader = new GLTFLoader();
+gltfLoader.setDRACOLoader(dracoLoader);
 // MeshoptDecoder must be ready before any compressed GLB loads
 MeshoptDecoder.ready.then(() => {
   gltfLoader.setMeshoptDecoder(MeshoptDecoder);
@@ -1326,6 +1342,7 @@ async function preloadModels() {
   if (loaded.length) console.log('[Models] Loaded:', loaded.join(', '));
   else console.log('[Models] No .glb files found in public/models/ — using procedural meshes');
   _modelsReady = true;
+  _invalidateLodCache();
   // Re-render board so models that weren't ready on first render (e.g. sheep) now appear
   if (gameState) {
     renderBoard(gameState);
@@ -3697,8 +3714,7 @@ function updateMainAction(state, isMyTurn, isSetup, isRobber, isPlaying, me) {
       btn.style.background = '#2980b9';
       btn.onclick = () => {
         exitBuildMode();
-        const s = new Audio('sound effects/Marcello Del Monaco - Sci Craft Game - Menu Button.aac');
-        s.volume = sfxVol(); s.play().catch(() => {});
+        _menuClickSound.currentTime = 0; _menuClickSound.volume = sfxVol(); _menuClickSound.play().catch(() => {});
         socket.emit('endTurn');
       };
     }
@@ -4288,9 +4304,9 @@ socket.on('lobbyUpdate', data => {
     `<li><span class="player-dot" style="background:${p.color}"></span>${p.isBot ? `🤖 ${diffLabel[p.difficulty]||''} ` : ''}${p.name}</li>`).join('');
   if (_lobbyPlayerCount > 0) {
     if (data.players.length > _lobbyPlayerCount) {
-      const s = new Audio('sound effects/Bubbly Button.aac'); s.volume = sfxVol(); s.play().catch(() => {});
+      _bubblyBtnSound.currentTime = 0; _bubblyBtnSound.volume = sfxVol(); _bubblyBtnSound.play().catch(() => {});
     } else if (data.players.length < _lobbyPlayerCount) {
-      const s = new Audio('sound effects/Wrong Answer.aac'); s.volume = sfxVol(); s.play().catch(() => {});
+      _wrongAnsSound.currentTime = 0; _wrongAnsSound.volume = sfxVol(); _wrongAnsSound.play().catch(() => {});
     }
   }
   _lobbyPlayerCount = data.players.length;
@@ -4344,9 +4360,9 @@ socket.on('gameUpdate', state => {
   // Coin jingle when receiving resources — plays after dice sound finishes
   if (totalGained > 0) {
     const playCoinJingle = () => {
-      const _coinJingle = new Audio('sound effects/Coins jingle.aac');
-      _coinJingle.volume = sfxVol();
-      _coinJingle.play().catch(() => {});
+      _coinJingleSound.currentTime = 0;
+      _coinJingleSound.volume = sfxVol();
+      _coinJingleSound.play().catch(() => {});
     };
     if (_diceSound.ended || _diceSound.paused) {
       playCoinJingle();
@@ -4363,9 +4379,9 @@ socket.on('gameUpdate', state => {
   }
   // Largest army sound
   if (!wasNull && gameState?.largestArmyHolder !== state.largestArmyHolder && state.largestArmyHolder === myId) {
-    const _armySound = new Audio('sound effects/largest army.aac');
-    _armySound.volume = sfxVol();
-    _armySound.play().catch(() => {});
+    _largestArmySound.currentTime = 0;
+    _largestArmySound.volume = sfxVol();
+    _largestArmySound.play().catch(() => {});
   }
   // Detect newly placed buildings and roads for sounds + drop animations
   const newlyPlacedBuildings = [];
@@ -4398,20 +4414,16 @@ socket.on('gameUpdate', state => {
   }
   // Play build sounds
   if (newlyPlacedRoads.length) {
-    const s = new Audio('sound effects/Forge Item.aac');
-    s.volume = sfxVol(); s.play().catch(() => {});
+    _forgeSound.currentTime = 0; _forgeSound.volume = sfxVol(); _forgeSound.play().catch(() => {});
   }
   if (newlyPlacedBuildings.length) {
-    const s = new Audio('sound effects/Rocky Impact Pebbles Tumbling.aac');
-    s.volume = sfxVol(); s.play().catch(() => {});
+    _rockImpactSound.currentTime = 0; _rockImpactSound.volume = sfxVol(); _rockImpactSound.play().catch(() => {});
   }
   if (cityUpgraded) {
-    const s = new Audio('sound effects/Viking Horn.aac');
-    s.volume = sfxVol(); s.play().catch(() => {});
+    _vikingHorn.currentTime = 0; _vikingHorn.volume = sfxVol(); _vikingHorn.play().catch(() => {});
   }
   if (tradeSoundNeeded) {
-    const s = new Audio('sound effects/Coins Pick Up.aac');
-    s.volume = sfxVol(); s.play().catch(() => {});
+    _coinPickupSound.currentTime = 0; _coinPickupSound.volume = sfxVol(); _coinPickupSound.play().catch(() => {});
   }
 
   // Game start fanfare + board render — first time status leaves lobby
@@ -4518,8 +4530,7 @@ socket.on('gameUpdate', state => {
     if (modal.style.display !== 'flex') {
       const me = state.players.find(p => p.id === myId);
       openDiscardModal(state.discardingPlayers[myId], me?.resources || {});
-      const dmg = new Audio('sound effects/Ni Sound - Toon World - Cartoon Sad Trumpet.aac');
-      dmg.volume = sfxVol(); dmg.play().catch(() => {});
+      _sadTrumpetSound.currentTime = 0; _sadTrumpetSound.volume = sfxVol(); _sadTrumpetSound.play().catch(() => {});
     }
   }
 
@@ -4554,11 +4565,9 @@ socket.on('gameUpdate', state => {
     }
     document.getElementById('gameOverBanner').style.display='flex';
     if (isWinner) {
-      const win = new Audio('sound effects/Game Win Short Chime Sweep.aac');
-      win.volume = sfxVol(); win.play().catch(() => {});
+      _winChimeSound.currentTime = 0; _winChimeSound.volume = sfxVol(); _winChimeSound.play().catch(() => {});
     } else {
-      const lose = new Audio('sound effects/game over.mp3');
-      lose.volume = sfxVol(); lose.play().catch(() => {});
+      _gameOverSound.currentTime = 0; _gameOverSound.volume = sfxVol(); _gameOverSound.play().catch(() => {});
     }
   }
 
@@ -6442,20 +6451,29 @@ let _shadowsDirty = true;
 let _skyDirty = true;
 let _bobFrame = 0;
 let _lodLevel = -1; // forces update on first frame; 0=near 1=mid 2=far
+let _lodMeshCache = null; // cached list of LOD-relevant meshes, built on first use
 
 function _applyLOD(dist) {
   const level = dist < 10 ? 0 : 1;
   if (level === _lodLevel) return;
   _lodLevel = level;
-  scene.traverse(obj => {
-    if (!obj.isMesh) return;
-    if (obj.userData._skipLOD) { obj.visible = true; return; }
-    if (obj.userData._lodRadius === undefined) return;
+  // Build cache on first LOD change instead of traversing every time
+  if (!_lodMeshCache) {
+    _lodMeshCache = [];
+    scene.traverse(obj => {
+      if (!obj.isMesh) return;
+      if (obj.userData._skipLOD || obj.userData._lodRadius === undefined) return;
+      _lodMeshCache.push(obj);
+    });
+  }
+  for (const obj of _lodMeshCache) {
     obj.visible = level === 0 || obj.userData._lodRadius > 0.08;
-  });
+  }
   // Clouds are above/behind camera when zoomed in — only show at mid/far
   if (scene.userData.cloudGroup) scene.userData.cloudGroup.visible = level >= 1;
 }
+// Invalidate LOD cache when new models are added to the scene
+function _invalidateLodCache() { _lodMeshCache = null; _lodLevel = -1; }
 let _fpsCapMs = 0; // 0 = uncapped; set via graphics settings
 let _fpsCapLast = 0;
 function animate() {
@@ -7504,8 +7522,8 @@ function animate() {
   }
 
   updateDiceAnim(delta);
-  updateVoicePlayers();
-  _lobbyUpdateVoiceRings();
+  if (voiceChat.micOn || Object.keys(voiceChat.peers).length > 0) updateVoicePlayers();
+  if (_lobbyVoiceActive) _lobbyUpdateVoiceRings();
 
   // Shadow map: only recompute when scene actually changed
   if (!_isMobile) {
@@ -7515,8 +7533,6 @@ function animate() {
       _shadowsDirty = false;
     }
   }
-
-  bloom.enabled = bloom.strength > 0.05;
   composer.render();
   if (_is2D) _draw2DBoard();
   _updateFPS();
