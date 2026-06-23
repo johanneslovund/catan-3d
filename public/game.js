@@ -6680,7 +6680,6 @@ function animate() {
     camera.lookAt(bcx, 0, bcz);
     if (cp >= 1) {
       cameraIntro.active = false;
-      controls.enabled = true;
       camera.position.set(bcx, _introEndY, bcz + _introEndZ);
       camera.up.set(0, 1, 0);
       camera.lookAt(bcx, 0, bcz);
@@ -6693,6 +6692,47 @@ function animate() {
       startUpSnd.volume = sfxVol();
       startUpSnd.play().catch(() => {});
       socket.emit('introFinished');
+      // Fade to black → switch to 2D → fade back in
+      const _introFadeEl = document.getElementById('introFade');
+      if (_introFadeEl && !_is2D) {
+        // Capture the exact end camera state to reuse in 2D
+        const _fadeY   = _introEndY;
+        const _fadeBcx = bcx, _fadeBcz = bcz;
+        _introFadeEl.style.display = 'block';
+        requestAnimationFrame(() => {
+          _introFadeEl.style.opacity = '1';
+          setTimeout(() => {
+            // Enter 2D at exact intro camera height so board doesn't shift
+            _is2D = true;
+            _3dCamPos    = camera.position.clone();
+            _3dCamTarget = controls.target.clone();
+            camera.up.set(0, 0, -1);
+            controls.enableRotate = false;
+            controls.maxPolarAngle = 0.001;
+            controls.minDistance = 5;
+            controls.maxDistance = Math.max(35, _fadeY + 5);
+            camera.position.set(_fadeBcx, _fadeY, _fadeBcz);
+            controls.target.set(_fadeBcx, 0, _fadeBcz);
+            controls.update();
+            controls.enabled = true;
+            renderer.setPixelRatio(1);
+            _2dDirty = true;
+            _set2DVisibility(false);
+            _portOutlinePass.enabled = false;
+            _resizeOverlay();
+            _overlay2d.style.display = 'block';
+            _btn2d.textContent = '3D';
+            _btn2d.classList.add('active');
+            const _dd2on = document.getElementById('mobDice2D');
+            if (_dd2on) _dd2on.style.display = '';
+            // Fade back in
+            _introFadeEl.style.opacity = '0';
+            setTimeout(() => { _introFadeEl.style.display = 'none'; }, 450);
+          }, 450);
+        });
+      } else {
+        controls.enabled = true;
+      }
     }
   }
 

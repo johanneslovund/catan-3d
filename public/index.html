@@ -997,6 +997,8 @@
       <canvas id="c"></canvas>
       <!-- 2D tile overlay — sits above Three.js canvas, below all UI (z-index 5 < buildMode 10 < logToasts 25) -->
       <canvas id="overlay2d" style="display:none;position:absolute;inset:0;pointer-events:none;z-index:5;"></canvas>
+      <!-- Intro-to-2D fade overlay -->
+      <div id="introFade" style="display:none;position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;z-index:50;transition:opacity 0.4s ease;"></div>
 
       <!-- Floating game log toasts -->
       <div id="logToastArea"></div>
