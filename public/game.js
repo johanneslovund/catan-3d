@@ -428,6 +428,47 @@ function _releaseSteamSprite(sprite) {
   _steamPool.push(sprite);
 }
 
+// ── Particle pools ─────────────────────────────────────────────────────────────
+// Geometry is shared (one GPU buffer upload total); each mesh gets its own
+// material so per-instance opacity animation works correctly.
+
+const _DUST_GEO   = new THREE.SphereGeometry(0.04, 4, 4);
+const _dustMeshPool = [];
+function _acquireDustMesh() {
+  let m = _dustMeshPool.pop();
+  if (!m) m = new THREE.Mesh(_DUST_GEO, new THREE.MeshBasicMaterial({ color: 0xc8a97a, transparent: true, opacity: 0.85 }));
+  else m.material.opacity = 0.85;
+  return m;
+}
+function _releaseDustMesh(m, group) { group.remove(m); _dustMeshPool.push(m); }
+
+const _DEBRIS_GEO = new THREE.BoxGeometry(0.07, 0.04, 0.07);
+const _DEBRIS_COLOR_HEX = [0xf5c842, 0xfde68a, 0xd4a000, 0xffffff, 0xe0c060];
+const _debrisMeshPool = [];
+function _acquireDebrisMesh() {
+  let m = _debrisMeshPool.pop();
+  const col = _DEBRIS_COLOR_HEX[Math.floor(Math.random() * _DEBRIS_COLOR_HEX.length)];
+  if (!m) m = new THREE.Mesh(_DEBRIS_GEO, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 1 }));
+  else { m.material.color.setHex(col); m.material.opacity = 1; }
+  return m;
+}
+function _releaseDebrisMesh(m) { scene.remove(m); _debrisMeshPool.push(m); }
+
+const _WATER_RING_GEO = (() => { const s = 1; return new THREE.RingGeometry(s * 0.25, s, 16); })();
+const _waterRingPool = [];
+function _acquireWaterRingMesh(x, z, color) {
+  let m = _waterRingPool.pop();
+  if (!m) {
+    m = new THREE.Mesh(_WATER_RING_GEO, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    m.rotation.x = -Math.PI / 2;
+  }
+  m.material.color.set(color);
+  m.material.opacity = WATER_SPRITE_PARAMS.opacity;
+  m.position.set(x, SCENE_PARAMS.oceanY + 0.03, z);
+  return m;
+}
+function _releaseWaterRingMesh(m) { scene.remove(m); _waterRingPool.push(m); }
+
 // Soft circle texture for round steam particles
 const _steamCircleTex = (() => {
   const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
@@ -892,9 +933,7 @@ scene.add(dustGroup);
 function spawnDust(x, y, z) {
   const count = 90;
   for (let i = 0; i < count; i++) {
-    const geo = new THREE.SphereGeometry(0.025 + Math.random() * 0.035, 4, 4);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xc8a97a, transparent: true, opacity: 0.85 });
-    const m = new THREE.Mesh(geo, mat);
+    const m = _acquireDustMesh();
     m.position.set(x, y, z);
     dustGroup.add(m);
     const angle = Math.random() * Math.PI * 2;
@@ -1803,6 +1842,8 @@ function renderBoard(state) {
       uniform float uWaveScale;
       varying float vHeight;
       varying vec2  vWPos;
+      varying float vDist;      // length(xz) — computed once per vertex, not per fragment
+      varying float vNormDist;  // vDist / 22.0
       void main() {
         vec3 pos = position;
         vWPos = pos.xz;
@@ -1814,6 +1855,8 @@ function renderBoard(state) {
               + sin(z*1.1*s + t*0.6)   * 0.015*a
               + sin((x-z)*1.4*s+t*0.9) * 0.012*a;
         vHeight = pos.y;
+        vDist = length(pos.xz);
+        vNormDist = vDist / 22.0;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
       }
     `,
@@ -1826,11 +1869,13 @@ function renderBoard(state) {
       uniform float uOpacity;
       varying float vHeight;
       varying vec2  vWPos;
+      varying float vDist;
+      varying float vNormDist;
 
       void main() {
-        float distFromIsland = length(vWPos);
+        float distFromIsland = vDist;   // free — interpolated from vertex shader
+        float dist = vNormDist;
         float shoreStart = 3.6;
-        float dist = length(vWPos) / 22.0;
 
         // ── Depth colour ────────────────────────────────────────────────────────
         float depth = clamp((distFromIsland - shoreStart) / 14.0, 0.0, 1.0);
@@ -2265,7 +2310,7 @@ function renderBoard(state) {
           const jy = (rng(seed + ci * 17 + pi * 5 + 1) - 0.5) * 0.3;
           const jz = (rng(seed + ci * 17 + pi * 5 + 2) - 0.5) * 0.7;
           const js = 0.65 + rng(seed + ci * 17 + pi * 5 + 3) * 0.7;
-          const m = new THREE.Mesh(new THREE.SphereGeometry(0.9 * bs * js, 7, 5), cloudMat.clone());
+          const m = new THREE.Mesh(new THREE.SphereGeometry(0.9 * bs * js, 7, 5), cloudMat);
           m.position.set(bx + jx, by + jy, bz + jz); m.scale.set(1.6, 0.9, 1.0); cg.add(m);
         });
         cg.position.set(cx, cy, cz);
@@ -2655,11 +2700,8 @@ function playRobberVoLoop() {
 }
 
 function spawnTokenDebris(x, baseY, z) {
-  const colors = [0xf5c842, 0xfde68a, 0xd4a000, 0xffffff, 0xe0c060];
   for (let i = 0; i < 14; i++) {
-    const geo = new THREE.BoxGeometry(0.05 + Math.random() * 0.05, 0.04, 0.05 + Math.random() * 0.05);
-    const mat = new THREE.MeshBasicMaterial({ color: colors[Math.floor(Math.random() * colors.length)] });
-    const mesh = new THREE.Mesh(geo, mat);
+    const mesh = _acquireDebrisMesh();
     mesh.position.set(x + (Math.random() - 0.5) * 0.3, baseY + 0.15, z + (Math.random() - 0.5) * 0.3);
     mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
     scene.add(mesh);
@@ -2763,14 +2805,7 @@ function buildLava(hexes) {
 }
 
 function spawnWaterRing(x, z, color = 0x90ecff) {
-  const s = WATER_SPRITE_PARAMS.size;
-  const geo = new THREE.RingGeometry(s * 0.25, s, 16);
-  const mat = new THREE.MeshBasicMaterial({
-    color, transparent: true, opacity: WATER_SPRITE_PARAMS.opacity, depthWrite: false, side: THREE.DoubleSide,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(x, SCENE_PARAMS.oceanY + 0.03, z);
+  const mesh = _acquireWaterRingMesh(x, z, color);
   scene.add(mesh);
   waterRings.push({ mesh, t: 0, duration: 0.9 });
 }
@@ -6551,49 +6586,55 @@ function animate() {
   for (let i = 0; i < camelList.length; i++) wanderAnimal(camelList[i], delta, SCENE_PARAMS.camelY, 0.012);
   }
 
-  if (!_isMobile && !_is2D) sheepList.forEach(s => {
-    const dx = s.tx - s.mesh.position.x;
-    const dz = s.tz - s.mesh.position.z;
-    const dist2 = dx*dx + dz*dz;
-    if (dist2 < _ARRIVE_SQ) {
-      // Pick new target in annular zone between token radius and hex boundary
-      const a = Math.random() * Math.PI * 2;
-      const r = _HEX_WANDER_MIN + Math.random() * _HEX_WANDER_RANGE;
-      s.tx = s.cx + Math.cos(a) * r;
-      s.tz = s.cz + Math.sin(a) * r;
-    } else {
-      // Face and walk toward target
-      const dist = Math.sqrt(dist2);
-      s.mesh.rotation.y = Math.atan2(dx, dz);
-      s.mesh.position.x += (dx / dist) * s.speed * delta;
-      s.mesh.position.z += (dz / dist) * s.speed * delta;
-      // Clamp position to hex boundary and push out of token inner zone
-      const pdx = s.mesh.position.x - s.cx;
-      const pdz = s.mesh.position.z - s.cz;
-      const pd2 = pdx*pdx + pdz*pdz;
-      const maxR2 = _HEX_WANDER_MAX * _HEX_WANDER_MAX;
-      const minR2 = _HEX_WANDER_MIN * _HEX_WANDER_MIN;
-      if (pd2 > maxR2) {
-        const pd = Math.sqrt(pd2);
-        s.mesh.position.x = s.cx + (pdx / pd) * _HEX_WANDER_MAX;
-        s.mesh.position.z = s.cz + (pdz / pd) * _HEX_WANDER_MAX;
-      } else if (pd2 < minR2) {
-        const pd = pd2 < 0.000001 ? _HEX_WANDER_MIN : Math.sqrt(pd2);
-        const nx = pd2 < 0.000001 ? 1 : pdx / pd;
-        const nz = pd2 < 0.000001 ? 0 : pdz / pd;
-        s.mesh.position.x = s.cx + nx * _HEX_WANDER_MIN;
-        s.mesh.position.z = s.cz + nz * _HEX_WANDER_MIN;
-        // Redirect wander target outward too
-        const ta = Math.atan2(nz, nx);
-        const tr = _HEX_WANDER_MIN + Math.random() * _HEX_WANDER_RANGE;
-        s.tx = s.cx + Math.cos(ta) * tr;
-        s.tz = s.cz + Math.sin(ta) * tr;
+  if (!_isMobile && !_is2D) {
+    // Steering AI runs every 4th frame (sheep move slowly — imperceptible at 15fps update)
+    // Bob runs every frame for smooth vertical movement
+    const _doSheepSteer = (_bobFrame & 3) === 0;
+    const _steerDelta = delta * 4; // compensate for skipped frames
+    sheepList.forEach(s => {
+      s.bobT += s.bobSpeed * delta;
+      s.mesh.position.y = s.surfaceY + SCENE_PARAMS.sheepY + Math.abs(Math.sin(s.bobT)) * 0.015;
+      if (!_doSheepSteer) return;
+      const dx = s.tx - s.mesh.position.x;
+      const dz = s.tz - s.mesh.position.z;
+      const dist2 = dx*dx + dz*dz;
+      if (dist2 < _ARRIVE_SQ) {
+        // Pick new target in annular zone between token radius and hex boundary
+        const a = Math.random() * Math.PI * 2;
+        const r = _HEX_WANDER_MIN + Math.random() * _HEX_WANDER_RANGE;
+        s.tx = s.cx + Math.cos(a) * r;
+        s.tz = s.cz + Math.sin(a) * r;
+      } else {
+        // Face and walk toward target
+        const dist = Math.sqrt(dist2);
+        s.mesh.rotation.y = Math.atan2(dx, dz);
+        s.mesh.position.x += (dx / dist) * s.speed * _steerDelta;
+        s.mesh.position.z += (dz / dist) * s.speed * _steerDelta;
+        // Clamp position to hex boundary and push out of token inner zone
+        const pdx = s.mesh.position.x - s.cx;
+        const pdz = s.mesh.position.z - s.cz;
+        const pd2 = pdx*pdx + pdz*pdz;
+        const maxR2 = _HEX_WANDER_MAX * _HEX_WANDER_MAX;
+        const minR2 = _HEX_WANDER_MIN * _HEX_WANDER_MIN;
+        if (pd2 > maxR2) {
+          const pd = Math.sqrt(pd2);
+          s.mesh.position.x = s.cx + (pdx / pd) * _HEX_WANDER_MAX;
+          s.mesh.position.z = s.cz + (pdz / pd) * _HEX_WANDER_MAX;
+        } else if (pd2 < minR2) {
+          const pd = pd2 < 0.000001 ? _HEX_WANDER_MIN : Math.sqrt(pd2);
+          const nx = pd2 < 0.000001 ? 1 : pdx / pd;
+          const nz = pd2 < 0.000001 ? 0 : pdz / pd;
+          s.mesh.position.x = s.cx + nx * _HEX_WANDER_MIN;
+          s.mesh.position.z = s.cz + nz * _HEX_WANDER_MIN;
+          // Redirect wander target outward too
+          const ta = Math.atan2(nz, nx);
+          const tr = _HEX_WANDER_MIN + Math.random() * _HEX_WANDER_RANGE;
+          s.tx = s.cx + Math.cos(ta) * tr;
+          s.tz = s.cz + Math.sin(ta) * tr;
+        }
       }
-    }
-    // Bob up and down slightly while walking
-    s.bobT += s.bobSpeed * delta;
-    s.mesh.position.y = s.surfaceY + SCENE_PARAMS.sheepY + Math.abs(Math.sin(s.bobT)) * 0.015;
-  });
+    });
+  }
 
   // Dust particles update
   for (let i = dustParticles.length - 1; i >= 0; i--) {
@@ -6601,8 +6642,7 @@ function animate() {
     dp.t += delta;
     const progress = dp.t / dp.duration;
     if (progress >= 1) {
-      dustGroup.remove(dp.mesh);
-      dp.mesh.geometry.dispose(); dp.mesh.material.dispose();
+      _releaseDustMesh(dp.mesh, dustGroup);
       dustParticles.splice(i, 1);
     } else {
       dp.mesh.position.x += dp.vx * delta;
@@ -6618,11 +6658,10 @@ function animate() {
     wr.t += delta;
     const p = wr.t / wr.duration;
     if (p >= 1) {
-      scene.remove(wr.mesh);
-      wr.mesh.geometry.dispose(); wr.mesh.material.dispose();
+      _releaseWaterRingMesh(wr.mesh);
       waterRings.splice(i, 1);
     } else {
-      wr.mesh.scale.setScalar(1 + p * 5);
+      wr.mesh.scale.setScalar(WATER_SPRITE_PARAMS.size * (1 + p * 5));
       wr.mesh.material.opacity = WATER_SPRITE_PARAMS.opacity * (1 - p);
     }
   }
@@ -6718,9 +6757,7 @@ function animate() {
     const p = debrisParticles[i];
     p.t += delta;
     if (p.t >= p.lifetime) {
-      scene.remove(p.mesh);
-      p.mesh.geometry.dispose();
-      p.mesh.material.dispose();
+      _releaseDebrisMesh(p.mesh);
       debrisParticles.splice(i, 1);
       continue;
     }
@@ -6840,61 +6877,62 @@ function animate() {
     // Y rise: tiles emerge from below water over the first 25% of the anim
     const yRise = rawP < 0.25 ? (rawP / 0.25) - 1 : 0;
 
-    // -- COLLISION RESPONSE: build current XZ for each hex --
-    const hexPositions = new Map();
-    tileIntro.hexes.forEach(hex => {
-      const off = tileIntro.hexOffsets.get(hex.id);
-      const coff = tileIntro.hexCollOff.get(hex.id) ?? { x: 0, z: 0 };
-      if (!off) return;
-      hexPositions.set(hex.id, {
-        x: hex.x + off.x0 * (1 - finalP) + coff.x,
-        z: hex.z + off.z0 * (1 - finalP) + coff.z,
+    // -- COLLISION RESPONSE: skip in final phase when hexes are near resting positions --
+    const TOUCH_DIST    = HEX_R * 1.92;
+    const TOUCH_DIST_SQ = TOUCH_DIST * TOUCH_DIST;
+    if (rawP < 0.85) {
+      const hexPositions = new Map();
+      tileIntro.hexes.forEach(hex => {
+        const off = tileIntro.hexOffsets.get(hex.id);
+        const coff = tileIntro.hexCollOff.get(hex.id) ?? { x: 0, z: 0 };
+        if (!off) return;
+        hexPositions.set(hex.id, {
+          x: hex.x + off.x0 * (1 - finalP) + coff.x,
+          z: hex.z + off.z0 * (1 - finalP) + coff.z,
+        });
       });
-    });
 
-    // Check all pairs for proximity, apply push impulse
-    const TOUCH_DIST = HEX_R * 1.92;
-    const hexIds = tileIntro.hexes.map(h => h.id);
-    for (let i = 0; i < hexIds.length; i++) {
-      for (let j = i + 1; j < hexIds.length; j++) {
-        const posA = hexPositions.get(hexIds[i]);
-        const posB = hexPositions.get(hexIds[j]);
-        if (!posA || !posB) continue;
-        const dx = posB.x - posA.x;
-        const dz = posB.z - posA.z;
-        const d2 = dx * dx + dz * dz;
-        if (d2 < TOUCH_DIST * TOUCH_DIST && d2 > 0.001) {
-          const d = Math.sqrt(d2);
-          const nx = dx / d, nz = dz / d;
-          const impulse = (TOUCH_DIST - d) * 0.025;
-          const coffA = tileIntro.hexCollOff.get(hexIds[i]);
-          const coffB = tileIntro.hexCollOff.get(hexIds[j]);
-          if (coffA) { coffA.x -= nx * impulse; coffA.z -= nz * impulse; }
-          if (coffB) { coffB.x += nx * impulse; coffB.z += nz * impulse; }
-          // Water splash at collision midpoint (throttled)
-          if (Math.random() < delta * 30) {
-            spawnWaterRing((posA.x + posB.x) * 0.5, (posA.z + posB.z) * 0.5, 0xffffff);
+      const hexIds = tileIntro._hexIds ?? (tileIntro._hexIds = tileIntro.hexes.map(h => h.id));
+      for (let i = 0; i < hexIds.length; i++) {
+        for (let j = i + 1; j < hexIds.length; j++) {
+          const posA = hexPositions.get(hexIds[i]);
+          const posB = hexPositions.get(hexIds[j]);
+          if (!posA || !posB) continue;
+          const dx = posB.x - posA.x;
+          const dz = posB.z - posA.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < TOUCH_DIST_SQ && d2 > 0.001) {
+            const d = Math.sqrt(d2);
+            const nx = dx / d, nz = dz / d;
+            const impulse = (TOUCH_DIST - d) * 0.025;
+            const coffA = tileIntro.hexCollOff.get(hexIds[i]);
+            const coffB = tileIntro.hexCollOff.get(hexIds[j]);
+            if (coffA) { coffA.x -= nx * impulse; coffA.z -= nz * impulse; }
+            if (coffB) { coffB.x += nx * impulse; coffB.z += nz * impulse; }
+            // Water splash at collision midpoint (throttled)
+            if (Math.random() < delta * 30) {
+              spawnWaterRing((posA.x + posB.x) * 0.5, (posA.z + posB.z) * 0.5, 0xffffff);
+            }
           }
         }
       }
-    }
-
-    // Bank island avoidance — push tiles away from the bank island
-    const bank = boardGroup.userData.bankIsland;
-    if (bank) {
-      const bankClearR = bank.r + HEX_R * 1.1;
-      hexIds.forEach(hid => {
-        const pos = hexPositions.get(hid);
-        if (!pos) return;
-        const bdx = pos.x - bank.x, bdz = pos.z - bank.z;
-        const bd2 = bdx * bdx + bdz * bdz;
-        if (bd2 < bankClearR * bankClearR && bd2 > 0.001) {
-          const bd = Math.sqrt(bd2);
-          const impulse = (bankClearR - bd) * 0.06;
-          const coff = tileIntro.hexCollOff.get(hid);
-          if (coff) { coff.x += (bdx / bd) * impulse; coff.z += (bdz / bd) * impulse; }
-        }
-      });
+      // Bank island avoidance — push tiles away from the bank island
+      const bank = boardGroup.userData.bankIsland;
+      if (bank) {
+        const bankClearR = bank.r + HEX_R * 1.1;
+        hexIds.forEach(hid => {
+          const pos = hexPositions.get(hid);
+          if (!pos) return;
+          const bdx = pos.x - bank.x, bdz = pos.z - bank.z;
+          const bd2 = bdx * bdx + bdz * bdz;
+          if (bd2 < bankClearR * bankClearR && bd2 > 0.001) {
+            const bd = Math.sqrt(bd2);
+            const impulse = (bankClearR - bd) * 0.06;
+            const coff = tileIntro.hexCollOff.get(hid);
+            if (coff) { coff.x += (bdx / bd) * impulse; coff.z += (bdz / bd) * impulse; }
+          }
+        });
+      }
     }
 
     // Decay collision offsets toward zero
