@@ -6877,6 +6877,9 @@ function animate() {
     // Y rise: tiles emerge from below water over the first 25% of the anim
     const yRise = rawP < 0.25 ? (rawP / 0.25) - 1 : 0;
 
+    // hexIds cached on tileIntro to avoid recreating the array every frame
+    const hexIds = tileIntro._hexIds ?? (tileIntro._hexIds = tileIntro.hexes.map(h => h.id));
+
     // -- COLLISION RESPONSE: skip in final phase when hexes are near resting positions --
     const TOUCH_DIST    = HEX_R * 1.92;
     const TOUCH_DIST_SQ = TOUCH_DIST * TOUCH_DIST;
@@ -6892,7 +6895,6 @@ function animate() {
         });
       });
 
-      const hexIds = tileIntro._hexIds ?? (tileIntro._hexIds = tileIntro.hexes.map(h => h.id));
       for (let i = 0; i < hexIds.length; i++) {
         for (let j = i + 1; j < hexIds.length; j++) {
           const posA = hexPositions.get(hexIds[i]);
@@ -6932,6 +6934,11 @@ function animate() {
             if (coff) { coff.x += (bdx / bd) * impulse; coff.z += (bdz / bd) * impulse; }
           }
         });
+      }
+      // Random ambient splashes while tiles are in motion (rawP<0.80 ⊂ rawP<0.85)
+      if (rawP < 0.80 && Math.random() < delta * 60) {
+        const pos = hexPositions.get(hexIds[Math.floor(Math.random() * hexIds.length)]);
+        if (pos) spawnWaterRing(pos.x, pos.z, 0xffffff);
       }
     }
 
