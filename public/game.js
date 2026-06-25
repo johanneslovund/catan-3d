@@ -2888,7 +2888,7 @@ function renderBuildings(state) {
   if (roadEdges.length > 0) {
     const roadGeo = new THREE.BoxGeometry(HEX_R * 0.88, 0.08, 0.18);
     const roadMat = new THREE.MeshStandardMaterial({
-      vertexColors: true, map: cobbleTex, roughness: 0.85, metalness: 0.02,
+      color: 0xffffff, map: cobbleTex, roughness: 0.85, metalness: 0.02,
     });
     _enableStencilWrite(roadMat);
     const roadInst = new THREE.InstancedMesh(roadGeo, roadMat, roadEdges.length);
