@@ -536,13 +536,13 @@ if (_isMobile) {
 let _outlineRestoreTimer = null;
 controls.addEventListener('change', () => { _2dDirty = true; });
 controls.addEventListener('start', () => {
-  _portOutlinePass.enabled = false;
+  if (_portOutlinePass) _portOutlinePass.enabled = false;
   if (_outlineRestoreTimer) { clearTimeout(_outlineRestoreTimer); _outlineRestoreTimer = null; }
 });
 controls.addEventListener('end', () => {
   if (_outlineRestoreTimer) clearTimeout(_outlineRestoreTimer);
   _outlineRestoreTimer = setTimeout(() => {
-    if (!_isMobile && !_is2D) {
+    if (!_isMobile && !_is2D && _portOutlinePass) {
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
     }
   }, 400);
@@ -692,25 +692,30 @@ const _PORT_OUTLINE_COLORS = {
   wheat:    '#f5c842',
   any:      '#ffffff',
 };
-const _portOutlinePass = new OutlinePass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera
-);
-_portOutlinePass.edgeStrength  = 10.0;
-_portOutlinePass.edgeGlow      = 0.8;
-_portOutlinePass.edgeThickness = 2.5;
-_portOutlinePass.pulsePeriod   = 0;
-_portOutlinePass.visibleEdgeColor.set('#ffffff');
-_portOutlinePass.hiddenEdgeColor.set('#ffffff');
-_portOutlinePass.selectedObjects = [];
-_portOutlinePass.enabled = false; // replaced by stencil outlines on port icons
-// Keep _portOutlinePasses as a shim so existing callers work unchanged
-const _portOutlinePasses = [{ pass: _portOutlinePass, type: '_all' }];
+// OutlinePass and UnrealBloomPass each allocate 10+ full-screen render targets.
+// On mobile they are never used, but their constructors still allocate ~50 MB of GPU
+// memory — enough to OOM-crash iOS WebKit. Skip them entirely on mobile.
+let _portOutlinePass = null;
+let _portOutlinePasses = [];
+let bloom = null;
+if (!_isMobile) {
+  _portOutlinePass = new OutlinePass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight), scene, camera
+  );
+  _portOutlinePass.edgeStrength  = 10.0;
+  _portOutlinePass.edgeGlow      = 0.8;
+  _portOutlinePass.edgeThickness = 2.5;
+  _portOutlinePass.pulsePeriod   = 0;
+  _portOutlinePass.visibleEdgeColor.set('#ffffff');
+  _portOutlinePass.hiddenEdgeColor.set('#ffffff');
+  _portOutlinePass.selectedObjects = [];
+  _portOutlinePass.enabled = false; // replaced by stencil outlines on port icons
+  _portOutlinePasses = [{ pass: _portOutlinePass, type: '_all' }];
 
-
-
-const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LIGHT_PARAMS.bloomStr, 0.5, 0.85);
-bloom.enabled = false; // off by default for performance; enabled after intro
-composer.addPass(bloom);
+  bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), LIGHT_PARAMS.bloomStr, 0.5, 0.85);
+  bloom.enabled = false; // off by default for performance; enabled after intro
+  composer.addPass(bloom);
+}
 composer.addPass(new OutputPass());
 
 const saturationPass = new ShaderPass({
@@ -1521,7 +1526,7 @@ function applyCameraPreset(name) {
   camera.position.set(...p.pos);
   controls.target.set(...p.target);
   controls.update();
-  bloom.strength = name === 'Top-Down' ? 0.0 : LIGHT_PARAMS.bloomStr;
+  if (bloom) bloom.strength = name === 'Top-Down' ? 0.0 : LIGHT_PARAMS.bloomStr;
   // Reset zoom slider and camera zoom so preset distances are accurate
   const zoomInput = document.querySelector('[data-param="cameraZoom"] input[type=range]');
   if (zoomInput) { zoomInput.value = 1; zoomInput.dispatchEvent(new Event('input')); }
@@ -2865,8 +2870,7 @@ function applyLightParams() {
   fill.intensity = LIGHT_PARAMS.fillIntensity;
   renderer.toneMappingExposure = LIGHT_PARAMS.exposure * 0.40;
   // fog removed
-  bloom.strength = LIGHT_PARAMS.bloomStr;
-  bloom.radius = LIGHT_PARAMS.bloomRadius;
+  if (bloom) { bloom.strength = LIGHT_PARAMS.bloomStr; bloom.radius = LIGHT_PARAMS.bloomRadius; }
   saturationPass.uniforms.uSaturation.value = LIGHT_PARAMS.saturation;
   saturationPass.uniforms.uBrightness.value = LIGHT_PARAMS.brightness;
   saturationPass.uniforms.uContrast.value   = LIGHT_PARAMS.contrast;
@@ -5381,10 +5385,10 @@ document.getElementById('btnCancel').addEventListener('click', () => exitBuildMo
         return;
       } else if (param === 'graphics') {
         if (type === 'bloom') {
-          if (!_isMobile) bloom.enabled = v > 0.5;
+          if (!_isMobile && bloom) bloom.enabled = v > 0.5;
         } else if (type === 'bloomStr') {
           LIGHT_PARAMS.bloomStr = v;
-          bloom.strength = v;
+          if (bloom) bloom.strength = v;
         } else if (type === 'shadows') {
           renderer.shadowMap.enabled = v > 0.5;
           scene.traverse(o => { if (o.material) o.material.needsUpdate = true; });
@@ -6415,8 +6419,8 @@ function resize() {
   const pw = Math.round(w * pr), ph = Math.round(h * pr);
   // Pass physical pixel dimensions so composer RT matches renderer output resolution
   composer.setSize(pw, ph);
-  bloom.resolution.set(pw, ph);
-  _portOutlinePass.resolution.set(pw, ph);
+  if (bloom) bloom.resolution.set(pw, ph);
+  if (_portOutlinePass) _portOutlinePass.resolution.set(pw, ph);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
@@ -6813,8 +6817,7 @@ function animate() {
       controls.enableDamping = false;
       controls.update();
       controls.enableDamping = true;
-      bloom.strength = LIGHT_PARAMS.bloomStr;
-      if (!_isMobile) bloom.enabled = true;
+      if (bloom) { bloom.strength = LIGHT_PARAMS.bloomStr; if (!_isMobile) bloom.enabled = true; }
       const startUpSnd = new Audio('sound effects/Bjorn Lynne - Multimedia - Game Console Start Up.aac');
       startUpSnd.volume = sfxVol();
       startUpSnd.play().catch(() => {});
@@ -6845,7 +6848,7 @@ function animate() {
             renderer.setPixelRatio(1);
             _2dDirty = true;
             _set2DVisibility(false);
-            _portOutlinePass.enabled = false;
+            if (_portOutlinePass) _portOutlinePass.enabled = false;
             _resizeOverlay();
             _overlay2d.style.display = 'block';
             _btn2d.textContent = '3D';
@@ -6992,7 +6995,7 @@ function animate() {
   const portRise = boardGroup.userData.portRise;
   if (portRise && portRise.t === 0) {
     // Hide port outlines until ports have fully surfaced
-    _portOutlinePass.selectedObjects = [];
+    if (_portOutlinePass) _portOutlinePass.selectedObjects = [];
   }
   if (portRise) {
     portRise.t += delta;
@@ -7056,7 +7059,7 @@ function animate() {
       (boardGroup.userData.portIcons ?? []).forEach(ig => {
         ig.traverse(m => { if (m.isMesh) _risenPortMeshes.push(m); });
       });
-      _portOutlinePass.selectedObjects = _risenPortMeshes;
+      if (_portOutlinePass) _portOutlinePass.selectedObjects = _risenPortMeshes;
     }
   }
 
@@ -7586,7 +7589,7 @@ function animate() {
       _shadowsDirty = false;
     }
   }
-  if (bloom.enabled) {
+  if (bloom?.enabled) {
     composer.render();
   } else {
     renderer.render(scene, camera);
@@ -8118,7 +8121,7 @@ function toggle2D() {
     renderer.setPixelRatio(1);
     _2dDirty = true;
     _set2DVisibility(false);
-    _portOutlinePass.enabled = false;
+    if (_portOutlinePass) _portOutlinePass.enabled = false;
     _resizeOverlay();
     _overlay2d.style.display = 'block';
 
@@ -8142,7 +8145,7 @@ function toggle2D() {
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     _set2DVisibility(true);
-    if (!_isMobile) {
+    if (!_isMobile && _portOutlinePass) {
       _portOutlinePass.enabled = _portOutlinePass.selectedObjects.length > 0;
     }
     _overlayCtx.clearRect(0, 0, _overlay2d.width, _overlay2d.height);
