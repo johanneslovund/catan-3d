@@ -17,7 +17,7 @@ html, body { touch-action: pan-x pan-y; }
 }
 
 body {
-  background: #000;
+  background: #0d1117;
   font-family: 'Segoe UI', system-ui, sans-serif;
   height: 100vh;
   overflow: hidden;
@@ -428,9 +428,9 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   flex-direction: column; align-items: center;
   gap: 4px; padding: 8px 4px;
   z-index: 50;
-  background: rgba(0,0,0,0.45);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
   border-left: 1px solid var(--glass-border);
   border-radius: 12px 0 0 12px;
 }
@@ -962,7 +962,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 /* Build shortcuts */
 #myResourceBarWrap {
   display: flex; flex-direction: column; align-items: stretch; gap: 4px;
-  flex-shrink: 0;
+  position: fixed; bottom: 84px; left: 14px; z-index: 11;
 }
 #myResourceBar {
   display: flex; gap: 5px; align-items: center;
@@ -1048,7 +1048,9 @@ img.piece-icon {
 /* ── RIGHT PANEL ──────────────────────────────────────────────────────────── */
 #rightPanel {
   width: 300px; flex-shrink: 0;
-  background: none;
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-left: 1px solid var(--glass-border);
   display: flex; flex-direction: column;
   overflow: hidden;
