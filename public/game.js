@@ -6973,11 +6973,7 @@ function animate() {
       });
     }
 
-    // Random ambient splashes while tiles are in motion (white during intro)
-    if (rawP < 0.80 && Math.random() < delta * 60) {
-      const pos = hexPositions.get(hexIds[Math.floor(Math.random() * hexIds.length)]);
-      if (pos) spawnWaterRing(pos.x, pos.z, 0xffffff);
-    }
+
 
     if (tileIntro.t >= tileIntro.duration) {
       tileIntro.active = false;
