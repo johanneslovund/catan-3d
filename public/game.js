@@ -630,6 +630,7 @@ function _makeStencilOutlineMat(colorHex, thickness, opacity) {
 }
 
 function _enableStencilWrite(material) {
+  if (_isMobile) return; // no stencil buffer on main canvas — would crash iOS WebGL
   material.stencilWrite = true;
   material.stencilRef   = _STENCIL_REF;
   material.stencilFunc  = THREE.AlwaysStencilFunc;
