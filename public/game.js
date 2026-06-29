@@ -493,7 +493,8 @@ const ROBBER_PARAMS = {
 // ─── Three.js setup ───────────────────────────────────────────────────────────
 const canvas = document.getElementById('c');
 const _isMobile = window.innerWidth <= 768;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+// antialias uses MSAA which multiplies framebuffer memory; skip on mobile to avoid GPU OOM
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_isMobile, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 const MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
 renderer.shadowMap.enabled = !_isMobile;
@@ -505,13 +506,18 @@ renderer.toneMappingExposure = LIGHT_PARAMS.exposure * 0.40;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 // Environment (soft room lighting for PBR reflections)
-const pmrem = new THREE.PMREMGenerator(renderer);
-pmrem.compileEquirectangularShader();
-const roomEnv = new RoomEnvironment(renderer);
-const envMap = pmrem.fromScene(roomEnv).texture;
+// Skip on mobile: PMREMGenerator.fromScene() does 6 render passes and allocates cube-map
+// framebuffers at init time — a common GPU OOM trigger on iOS WebKit.
+let envMap = null;
+if (!_isMobile) {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  const roomEnv = new RoomEnvironment(renderer);
+  envMap = pmrem.fromScene(roomEnv).texture;
+}
 
 const scene = new THREE.Scene();
-scene.environment = envMap;
+scene.environment = envMap; // null on mobile — PBR materials render without reflections
 scene.background = new THREE.Color(0xa8c8d8);
 scene.fog = null;
 
@@ -574,9 +580,10 @@ ground.position.set(0, -4, 0);
 scene.add(ground);
 
 // ── Post-processing ──
-// Custom render target with stencil buffer so outline stencil masking works
+// On mobile the composer is never used for rendering (bloom/outlines are desktop-only).
+// Skip the custom stencil render target to avoid allocating two extra full-screen FBOs.
 const _pr = renderer.getPixelRatio();
-const _composerRT = new THREE.WebGLRenderTarget(
+const _composerRT = _isMobile ? undefined : new THREE.WebGLRenderTarget(
   Math.round(window.innerWidth * _pr), Math.round(window.innerHeight * _pr),
   { stencilBuffer: true, depthBuffer: true, samples: 0 }
 );
