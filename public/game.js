@@ -14,6 +14,27 @@ import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
+// ─── Crash checkpoint logging ──────────────────────────────────────────────
+// iOS Safari's "A problem repeatedly occurred" is a native WebKit crash — it
+// kills the page before any JS error handler can run, so we can't see what
+// happened. Instead, write a breadcrumb to localStorage before every risky
+// step; after a crash + reload we show the last breadcrumb that was reached.
+function _checkpoint(label) {
+  try { localStorage.setItem('_crashCheckpoint', label + ' @ ' + new Date().toISOString()); } catch (e) {}
+}
+(function showLastCheckpoint() {
+  try {
+    const last = localStorage.getItem('_crashCheckpoint');
+    if (last) {
+      const d = document.createElement('div');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#063;color:#fff;padding:10px;z-index:99999;font:12px monospace;white-space:pre-wrap';
+      d.textContent = 'Last checkpoint before reload: ' + last;
+      document.addEventListener('DOMContentLoaded', () => document.body.appendChild(d));
+    }
+  } catch (e) {}
+})();
+_checkpoint('module-start');
+
 // ─── Intro fade-in: background shows for 4s, then lobby-card fades in over 3s ─
 setTimeout(() => {
   document.querySelectorAll('.lobby-card').forEach(el => el.classList.add('visible'));
@@ -495,6 +516,11 @@ const canvas = document.getElementById('c');
 const _isMobile = window.innerWidth <= 768;
 // antialias uses MSAA which multiplies framebuffer memory; skip on mobile to avoid GPU OOM
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !_isMobile, powerPreference: 'high-performance' });
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  _checkpoint('WEBGL-CONTEXT-LOST');
+});
+canvas.addEventListener('webglcontextrestored', () => { _checkpoint('webgl-context-restored'); });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 const MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
 renderer.shadowMap.enabled = !_isMobile;
@@ -724,6 +750,7 @@ if (!_isMobile) {
   composer.addPass(bloom);
 }
 composer.addPass(new OutputPass());
+_checkpoint('threejs-setup-done');
 
 const saturationPass = new ShaderPass({
   uniforms: {
@@ -1822,6 +1849,7 @@ function numberTokenTex(num) {
 
 // ─── Board rendering ──────────────────────────────────────────────────────────
 function renderBoard(state) {
+  _checkpoint('renderBoard-start');
   _shadowsDirty = true;
   _lodLevel = -1;
   clearGroup(boardGroup);
@@ -2045,6 +2073,7 @@ function renderBoard(state) {
     boardGroup.userData.bankBaseScale = targetScale;
   }
 
+  _checkpoint('renderBoard-before-hexes');
   // Hex tiles
   hexes.forEach(hex => {
     // Use GLB replacement when available for this tile type
@@ -2335,6 +2364,7 @@ function renderBoard(state) {
     });
   }
 
+  _checkpoint('renderBoard-after-hexes');
   // ── Lava flows on mountain tiles ──────────────────────────────────────────────
   buildLava(hexes);
 
@@ -2450,6 +2480,7 @@ function renderBoard(state) {
     });
   });
 
+  _checkpoint('renderBoard-after-ports');
   // ── Boats: 6 boats roaming between docks via the outer water ring ────────
   if (dockPositions.length >= 2 && MODELS['boat']) {
     const SPOT_TAN = [-0.28, 0, 0.28]; // tangential offsets for the 3 side-by-side spots
@@ -2522,6 +2553,7 @@ function renderBoard(state) {
   }
 
   // Keep selectedObjects empty — portRise completion will populate it after icons surface
+  _checkpoint('renderBoard-end');
 }
 
 // ─── Tile intro fly-in animation ──────────────────────────────────────────────
@@ -6527,8 +6559,11 @@ function _applyLOD(dist) {
 function _invalidateLodCache() { _lodMeshCache = null; _lodLevel = -1; }
 let _fpsCapMs = 0; // 0 = uncapped; set via graphics settings
 let _fpsCapLast = 0;
+let _animateFrameCount = 0;
 function animate() {
   requestAnimationFrame(animate);
+  _animateFrameCount++;
+  if (_animateFrameCount % 30 === 0) _checkpoint('animate-frame-' + _animateFrameCount);
   if (_fpsCapMs > 0) {
     const now = performance.now();
     if (now - _fpsCapLast < _fpsCapMs) return;
@@ -7596,11 +7631,13 @@ function animate() {
       _shadowsDirty = false;
     }
   }
+  if (_animateFrameCount % 30 === 0) _checkpoint('before-render-frame-' + _animateFrameCount);
   if (bloom?.enabled) {
     composer.render();
   } else {
     renderer.render(scene, camera);
   }
+  if (_animateFrameCount % 30 === 0) _checkpoint('after-render-frame-' + _animateFrameCount);
   if (_is2D && (_2dDirty || (diceAnim.active && !diceAnim.settled))) _draw2DBoard();
   _updateFPS();
 }
