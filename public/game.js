@@ -6563,7 +6563,7 @@ let _animateFrameCount = 0;
 function animate() {
   requestAnimationFrame(animate);
   _animateFrameCount++;
-  if (_animateFrameCount % 30 === 0) _checkpoint('animate-frame-' + _animateFrameCount);
+  if (_animateFrameCount <= 5 || _animateFrameCount % 30 === 0) _checkpoint('animate-frame-' + _animateFrameCount);
   if (_fpsCapMs > 0) {
     const now = performance.now();
     if (now - _fpsCapLast < _fpsCapMs) return;
@@ -7631,13 +7631,13 @@ function animate() {
       _shadowsDirty = false;
     }
   }
-  if (_animateFrameCount % 30 === 0) _checkpoint('before-render-frame-' + _animateFrameCount);
+  if (_animateFrameCount <= 5 || _animateFrameCount % 30 === 0) _checkpoint('before-render-frame-' + _animateFrameCount);
   if (bloom?.enabled) {
     composer.render();
   } else {
     renderer.render(scene, camera);
   }
-  if (_animateFrameCount % 30 === 0) _checkpoint('after-render-frame-' + _animateFrameCount);
+  if (_animateFrameCount <= 5 || _animateFrameCount % 30 === 0) _checkpoint('after-render-frame-' + _animateFrameCount);
   if (_is2D && (_2dDirty || (diceAnim.active && !diceAnim.settled))) _draw2DBoard();
   _updateFPS();
 }
