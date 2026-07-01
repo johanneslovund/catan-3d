@@ -1354,10 +1354,17 @@ dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5
 const gltfLoader = new GLTFLoader();
 gltfLoader.setDRACOLoader(dracoLoader);
 // MeshoptDecoder must be ready before any compressed GLB loads
-MeshoptDecoder.ready.then(() => {
-  gltfLoader.setMeshoptDecoder(MeshoptDecoder);
-  preloadModels(); // move initial load to after decoder is ready
-});
+// On mobile: skip all GLB model loading. When models finish loading they trigger
+// 30+ simultaneous WebGL shader compilations on the next frame, which crashes
+// iOS WebKit. Procedural meshes handle mobile rendering without any GLBs.
+if (!_isMobile) {
+  MeshoptDecoder.ready.then(() => {
+    gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+    preloadModels();
+  });
+} else {
+  _modelsReady = true; // no models to wait for
+}
 
 // Font for 3D port labels and token numbers — loaded once at startup
 let _portFont = null;
