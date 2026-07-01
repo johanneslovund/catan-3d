@@ -4546,6 +4546,10 @@ socket.on('gameUpdate', state => {
       // Pre-render board silently in the background while players wait in lobby.
       // _introDone stays true so renderBoard builds the scene without scheduling intro.
       _introDone = true;
+      // On mobile, skip the lobby pre-render: building all hex/port/token materials at
+      // once triggers a burst of WebGL shader compilations that crashes iOS WebKit (~90
+      // frames in). On desktop the pre-render is fine; on mobile we wait for game start.
+      if (_isMobile) return;
     } else if (state.status === 'playing' || state.status === 'game_over' || state.status === 'robber' || state.status === 'discarding') {
       _introDone = true; // rejoining a game already in progress — skip intro
       controls.enabled = true;
